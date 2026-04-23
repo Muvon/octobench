@@ -16,6 +16,7 @@ models:
       cached_input: 0.50
       output: 25.00
     providers:
+      claude: claude-opus-4-5
       octomind: anthropic:claude-opus-4-5
 
   claude-opus-4:
@@ -24,6 +25,7 @@ models:
       cached_input: 1.50
       output: 75.00
     providers:
+      claude: claude-opus-4
       octomind: anthropic:claude-opus-4
 
   claude-sonnet-4:
@@ -32,7 +34,8 @@ models:
       cached_input: 0.30
       output: 15.00
     providers:
-      octomind: anthropic:claude-sonnet-4
+      claude: claude-sonnet-4-6
+      octomind: anthropic:claude-sonnet-4-6
 
   claude-sonnet-3.7:
     pricing:
@@ -40,6 +43,7 @@ models:
       cached_input: 0.30
       output: 15.00
     providers:
+      claude: claude-3-7-sonnet
       octomind: anthropic:claude-3-7-sonnet
 
   # ===================== Google Gemini Models =====================

@@ -25,9 +25,18 @@ log_level = "none"
 # Examples: "openrouter:anthropic/claude-3.5-sonnet", "openai:gpt-4o", "deepseek:deepseek-chat"
 model = "minimax:minimax-m2.1"
 
+# Default tag used when no TAG is passed to `octomind run`
+default = "developer"
+
 # Default max_tokens for all operations
 # This is the fallback max_tokens when role/layer-specific max_tokens aren't specified
 max_tokens = 16384
+
+# Sandbox mode: restrict all filesystem writes to the current working directory
+sandbox = false
+
+# Per-request HTTP timeout in seconds
+request_timeout_seconds = 300
 
 # Custom instructions file name (relative to project root)
 # This file will be automatically loaded as a user message in new sessions
@@ -426,7 +435,7 @@ tools = []
 
 [[mcp.servers]]
 name = "octocode"
-type = "stdin"
+type = "stdio"
 command = "octocode"
 args = ["mcp", "--path=."]
 timeout_seconds = 240
@@ -861,51 +870,6 @@ allowed_tools = []
 # server_refs = ["developer", "filesystem"]
 # allowed_tools = ["text_editor", "list_files"]
 
-# Built-in context gatherer agent
-[[agents]]
-name = "context_gatherer"
-description = "Gather detailed context from files and codebase. Reads files, searches code patterns, and provides comprehensive information about specific areas of the codebase for development tasks."
-model = "openrouter:google/gemini-2.5-flash-preview"
-max_tokens = 16384
-system_prompt = """You are a comprehensive context gatherer and code analyst for development tasks. Your role is to thoroughly examine codebases, understand patterns, and provide detailed information about specific areas.
-
-Your capabilities:
-- Read and analyze multiple files simultaneously
-- Search for code patterns semantically across the codebase
-- Understand file structures and relationships
-- Extract function signatures and code structure
-- Provide comprehensive context for development decisions
-
-Research Process:
-1. **Parallel Discovery**: Execute multiple tools simultaneously for maximum efficiency
-2. **Comprehensive Analysis**: Read relevant files, search patterns, examine structures
-3. **Contextual Understanding**: Connect different parts of the codebase
-4. **Detailed Reporting**: Provide thorough information for informed development
-
-Tools Strategy:
-- Use semantic_search() for finding related code patterns and functionality
-- Use text_editor to read and examine specific files in detail
-- Use view_signatures to understand code structure and interfaces
-- Use list_files to discover relevant files and understand project structure
-- Execute tools in parallel whenever possible for efficiency
-
-Always provide comprehensive, detailed analysis that helps developers understand the codebase and make informed decisions.
-
-%{SYSTEM}
-
-%{CONTEXT}"""
-temperature = 0.3
-# Default top_p for context_gatherer agent (0.0 to 1.0, nucleus sampling)
-top_p = 0.7
-# Default top_k for context_gatherer agent (1 to 200, limits token choices)
-top_k = 20
-input_mode = "last"
-output_mode = "none"  # Return only the gathered context (cleanest for tool use)
-output_role = "assistant"
-
-[agents.mcp]
-server_refs = ["filesystem", "octocode"]
-allowed_tools = ["text_editor", "batch_edit", "list_files", "semantic_search", "view_signatures"]
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PROMPT TEMPLATES
@@ -1008,3 +972,21 @@ top_k = 0
 max_retries = 1
 retry_timeout = 30
 ignore_cost = false  # When true, compression decision API cost is not tracked (free)
+
+[capabilities]
+
+[taps]
+
+[skills]
+auto_activation = false
+auto_validation = false
+activation_timeout = 3
+validation_timeout = 60
+max_retries = 3
+
+[learning]
+enabled = false
+model = "anthropic:claude-haiku-4-5"
+backend = "file"
+min_messages_for_intermediate = 3
+max_inject = 5

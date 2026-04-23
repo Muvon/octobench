@@ -77,32 +77,25 @@ def _extract_from_jsonl(
             msg = _compact_text(content, limit=360)
             if msg:
                 assistant_messages.append(msg)
-        elif typ in ("tool_call", "tool_intent", "tool_use"):
-            meta = obj.get("meta") if isinstance(obj.get("meta"), dict) else {}
-            tool_name = meta.get("tool") or obj.get("tool") or obj.get("name") or typ
-            args = meta.get("args") or obj.get("input") or obj.get("arguments")
-            if args is not None:
-                tool_intents.append(f"{_compact_text(tool_name, 80)}: {_compact_text(args, 180)}")
+        elif typ == "tool_use":
+            tool_name = obj.get("tool") or typ
+            params = obj.get("params")
+            if params is not None:
+                tool_intents.append(f"{_compact_text(tool_name, 80)}: {_compact_text(params, 180)}")
             else:
                 tool_intents.append(_compact_text(tool_name, 120))
         elif typ == "tool_result":
-            meta = obj.get("meta") if isinstance(obj.get("meta"), dict) else {}
-            tool_name = meta.get("tool") or obj.get("tool") or "unknown"
-            server = meta.get("server")
-            success = meta.get("success")
-            duration_ms = meta.get("duration_ms")
+            tool_name = obj.get("tool") or "unknown"
+            server = obj.get("server")
+            success = obj.get("success")
             parts = [f"tool={_compact_text(tool_name, 80)}"]
             if server is not None:
                 parts.append(f"server={_compact_text(server, 80)}")
             if success is not None:
                 parts.append(f"success={success}")
-            if duration_ms is not None:
-                parts.append(f"duration_ms={duration_ms}")
             tool_results.append(", ".join(parts))
         elif typ == "cost":
-            # Keep the latest cost message; it contains final session usage.
-            if isinstance(obj.get("meta"), dict):
-                last_cost_meta = obj.get("meta")
+            last_cost_meta = obj
 
     if last_cost_meta is not None:
         raw_in = last_cost_meta.get("input_tokens")
@@ -160,15 +153,12 @@ class OctomindProvider(Provider):
         main_cmd = [
             "octomind",
             "run",
+            "developer",
             "--name",
             session_name,
-            "--role",
-            "developer",
             "--model",
             provider_model,
-            "--format",
-            "jsonl",
-            prompt,
+            "--format=jsonl",
         ]
 
         start = time.time()
@@ -178,6 +168,7 @@ class OctomindProvider(Provider):
             capture_output=True,
             text=True,
             env=env,
+            input=prompt,
         )
         elapsed_ms = int((time.time() - start) * 1000)
 

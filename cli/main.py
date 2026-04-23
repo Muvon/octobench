@@ -377,7 +377,7 @@ def default_judge_cfg(repo_root: Path) -> Dict:
         "runner": "cli",
         "model": "openrouter:anthropic/claude-sonnet-4",
         "stdin_prompt": True,
-        "command": ["octomind", "run", "--role", "judge", "--format", "jsonl"],
+        "command": ["octomind", "run", "judge", "--format=jsonl"],
         "json_events": True,
         "env": {
             "OCTOMIND_CONFIG_PATH": f"{repo_root}/configs/octomind/octomind.toml",
@@ -625,8 +625,8 @@ def main() -> None:
             before = snapshot_files(workdir_abs)
 
             session_name = (
-                f"octobench-{case_id}-{provider_name}-"
-                f"{safe_id(benchmark_model)}-{int(time.time() * 1000)}"
+                f"ob-{safe_id(case_id)[:20]}-{provider_name[:8]}-"
+                f"{safe_id(benchmark_model)[:12]}-{int(time.time())}"
             )
             provider_result = provider_impl.run_task(
                 prompt=prompt,

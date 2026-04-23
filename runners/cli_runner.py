@@ -139,13 +139,12 @@ def run_cli(prompt: str, workdir: str, meta: Dict) -> RunResult:
                 if input_tokens is not None and output_tokens is not None:
                     total_tokens = input_tokens + output_tokens
 
-            # Octomind JSONL cost message metadata.
-            if obj.get("type") == "cost" and isinstance(obj.get("meta"), dict):
-                meta_cost = obj.get("meta", {})
-                raw_in = meta_cost.get("input_tokens")
-                raw_out = meta_cost.get("output_tokens")
-                raw_cached = meta_cost.get("cache_read_tokens", meta_cost.get("cached_tokens"))
-                raw_total = meta_cost.get("session_tokens")
+            # Octomind JSONL cost message.
+            if obj.get("type") == "cost":
+                raw_in = obj.get("input_tokens")
+                raw_out = obj.get("output_tokens")
+                raw_cached = obj.get("cache_read_tokens", obj.get("cached_tokens"))
+                raw_total = obj.get("session_tokens")
                 try:
                     if raw_in is not None:
                         input_tokens = int(raw_in)
