@@ -37,8 +37,6 @@ class ClaudeProvider(Provider):
             "--model",
             provider_model,
             "--dangerously-skip-permissions",
-            "--bare",
-            "--no-session-persistence",
         ]
 
         start = time.time()
