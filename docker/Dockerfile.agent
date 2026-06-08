@@ -1,0 +1,66 @@
+# octobench agent image — runs the framework CLIs inside a container so every
+# case executes in a consistent, reproducible environment. Agents are installed
+# as PINNED prebuilt binaries (no compiling). Host auth is injected at `docker run`
+# time via env vars (+ optional mounted credential files), never baked in.
+#
+# Build (arch matches host automatically via buildkit TARGETARCH):
+#   docker build -f docker/Dockerfile.agent -t octobench-agent:latest docker
+FROM node:22-bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl ca-certificates git xz-utils unzip python3 \
+      build-essential pkg-config libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Rust toolchain — required by rust cases' cargo check/quality/validate steps.
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:/root/.local/bin:/usr/local/bin:$PATH
+RUN curl --retry 5 --retry-all-errors --retry-delay 3 --connect-timeout 30 -fsSL https://sh.rustup.rs -o /tmp/rustup-init.sh \
+    && sh /tmp/rustup-init.sh -y --default-toolchain stable --profile minimal \
+    && rm -f /tmp/rustup-init.sh \
+    && rustc --version
+
+# ── Pinned agent CLIs (prebuilt, no source builds) ───────────────────────────
+ARG TARGETARCH
+ARG OCTOMIND_VERSION=0.30.0
+ARG OCTOCODE_VERSION=0.15.0
+ARG OCTOFS_VERSION=0.4.3
+ARG CODEX_VERSION=0.137.0
+ARG CLAUDE_VERSION=2.1.168
+
+# octomind + octofs + octocode: static musl binaries straight from GitHub releases.
+# octofs powers developer:general's shell/text_editor tools; octocode is codesearch.
+RUN set -eux; \
+    case "${TARGETARCH:-arm64}" in \
+      arm64) TRIPLE=aarch64-unknown-linux-musl; CLAUDE_PLAT=linux-arm64 ;; \
+      amd64) TRIPLE=x86_64-unknown-linux-musl;  CLAUDE_PLAT=linux-x64  ;; \
+      *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    DL="curl --retry 5 --retry-all-errors --retry-delay 3 --connect-timeout 30 -fsSL"; \
+    $DL "https://github.com/Muvon/octomind/releases/download/${OCTOMIND_VERSION}/octomind-${OCTOMIND_VERSION}-${TRIPLE}.tar.gz" | tar -xz -C /usr/local/bin; \
+    $DL "https://github.com/Muvon/octofs/releases/download/${OCTOFS_VERSION}/octofs-${OCTOFS_VERSION}-${TRIPLE}.tar.gz" | tar -xz -C /usr/local/bin; \
+    $DL "https://github.com/Muvon/octocode/releases/download/${OCTOCODE_VERSION}/octocode-${OCTOCODE_VERSION}-${TRIPLE}.tar.gz" | tar -xz -C /usr/local/bin; \
+    chmod +x /usr/local/bin/octomind /usr/local/bin/octofs /usr/local/bin/octocode; \
+    octomind --version; octofs --version; octocode --version; \
+    # claude code: pinned native binary (standalone, self-contained). \
+    $DL -o /usr/local/bin/claude "https://downloads.claude.ai/claude-code-releases/${CLAUDE_VERSION}/${CLAUDE_PLAT}/claude"; \
+    chmod +x /usr/local/bin/claude; \
+    (claude --version || echo "WARN: claude --version failed")
+
+# codex: npm ships a per-arch prebuilt binary as an optional dependency.
+RUN npm install -g "@openai/codex@${CODEX_VERSION}" \
+    && (codex --version || echo "WARN: codex --version failed")
+
+# Tools print their versions for build-log traceability.
+RUN echo "=== installed agents ===" \
+    && (octomind --version || true) \
+    && (octofs --version || true) \
+    && (octocode --version || true) \
+    && (claude --version || true) \
+    && (codex --version || true) \
+    && (rustc --version || true) \
+    && (node --version || true)
+
+WORKDIR /workspace

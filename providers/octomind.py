@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
-import os
 import re
-import subprocess
 import time
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from providers.base import Provider, ProviderRunResult
+
+if TYPE_CHECKING:
+    from runners.executor import Executor
 
 ANSI_ESCAPE_RE = re.compile(r"\x1B[@-_][0-?]*[ -/]*[@-~]")
 
@@ -137,23 +138,19 @@ def _extract_from_jsonl(
 class OctomindProvider(Provider):
     name = "octomind"
 
-    def __init__(self, config_path: str):
-        self.config_path = config_path
-
     def run_task(
         self,
         prompt: str,
         workdir: str,
         provider_model: str,
         session_name: str,
+        executor: "Executor",
     ) -> ProviderRunResult:
-        env = os.environ.copy()
-        env["OCTOMIND_CONFIG_PATH"] = self.config_path
-
         # Run octomind's stock coding agent (`developer:general`) exactly as a real
-        # user would. The config at OCTOMIND_CONFIG_PATH is the upstream baseline
-        # default.toml plus a `judge` role; the baseline is untouched, so this is a
-        # fair, like-for-like coding run vs `claude -p` / `codex exec`.
+        # user would. OCTOMIND_CONFIG_PATH (from the executor: host path or the
+        # container's /cfg/octomind.toml) is the upstream baseline default.toml plus
+        # a `judge` role; the baseline is untouched, so this is a fair, like-for-like
+        # coding run vs `claude -p` / `codex exec`.
         main_cmd = [
             "octomind",
             "run",
@@ -166,13 +163,10 @@ class OctomindProvider(Provider):
         ]
 
         start = time.time()
-        main = subprocess.run(
+        main = executor.run(
             main_cmd,
-            cwd=workdir,
-            capture_output=True,
-            text=True,
-            env=env,
-            input=prompt,
+            env_overrides={"OCTOMIND_CONFIG_PATH": executor.octomind_config_path()},
+            input_text=prompt,
         )
         elapsed_ms = int((time.time() - start) * 1000)
 
@@ -197,7 +191,7 @@ class OctomindProvider(Provider):
         return ProviderRunResult(
             stdout=final_text,
             stderr=(main.stderr or "").strip(),
-            exit_code=main.returncode,
+            exit_code=main.exit_code,
             elapsed_ms=elapsed_ms,
             input_tokens=input_tokens,
             cached_input_tokens=cached_input_tokens,

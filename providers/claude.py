@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
 import time
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from providers.base import Provider, ProviderRunResult
+
+if TYPE_CHECKING:
+    from runners.executor import Executor
 
 
 def _compact_text(value: Any, limit: int = 360) -> str:
@@ -28,6 +29,7 @@ class ClaudeProvider(Provider):
         workdir: str,
         provider_model: str,
         session_name: str,
+        executor: "Executor",
     ) -> ProviderRunResult:
         cmd = [
             "claude",
@@ -40,14 +42,7 @@ class ClaudeProvider(Provider):
         ]
 
         start = time.time()
-        proc = subprocess.run(
-            cmd,
-            cwd=workdir,
-            capture_output=True,
-            text=True,
-            input=prompt,
-            env=os.environ.copy(),
-        )
+        proc = executor.run(cmd, input_text=prompt)
         elapsed_ms = int((time.time() - start) * 1000)
 
         result_text = ""
@@ -100,7 +95,7 @@ class ClaudeProvider(Provider):
         return ProviderRunResult(
             stdout=result_text,
             stderr=(proc.stderr or "").strip(),
-            exit_code=proc.returncode,
+            exit_code=proc.exit_code,
             elapsed_ms=elapsed_ms,
             input_tokens=input_tokens,
             cached_input_tokens=cached_input_tokens,

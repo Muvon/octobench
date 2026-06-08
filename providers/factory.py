@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from providers.base import Provider
 from providers.claude import ClaudeProvider
 from providers.codex import CodexProvider
@@ -12,12 +10,13 @@ def available_providers() -> list[str]:
     return ["claude", "codex", "octomind"]
 
 
-def get_provider(name: str, repo_root: Path) -> Provider:
+def get_provider(name: str) -> Provider:
     if name == "claude":
         return ClaudeProvider()
     if name == "codex":
         return CodexProvider()
     if name == "octomind":
-        cfg = repo_root / "configs" / "octomind" / "octomind.toml"
-        return OctomindProvider(str(cfg))
+        # OCTOMIND_CONFIG_PATH is supplied at run time by the executor
+        # (host path or the container's /cfg/octomind.toml).
+        return OctomindProvider()
     raise RuntimeError(f"Unsupported provider: {name}")

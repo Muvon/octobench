@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    from runners.executor import Executor
 
 
 @dataclass
@@ -29,6 +32,7 @@ class Provider(ABC):
         workdir: str,
         provider_model: str,
         session_name: str,
+        executor: "Executor",
     ) -> ProviderRunResult:
         raise NotImplementedError
 

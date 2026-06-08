@@ -1,0 +1,11 @@
+id: smoke_python_add_bug_fix
+name: Python add() bug fix (docker smoke)
+category: dev
+difficulty: simple
+system_prompt: |
+  You are a coding assistant working in a small Python project.
+  Make a minimal, targeted edit.
+instruction: |
+  add.py has a bug: the function add(a, b) returns the wrong result.
+  Fix add.py so that all assertions in test_add.py pass.
+  Change only what is necessary; do not edit test_add.py.

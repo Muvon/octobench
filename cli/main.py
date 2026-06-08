@@ -8,9 +8,7 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import sys
-import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +18,7 @@ import yaml
 
 from judges.llm_judge import run_judge
 from providers.factory import available_providers, get_provider
+from runners.executor import DockerExecutor, Executor, HostExecutor
 from scoring.aggregate import compute_cost, compute_efficiency_score, compute_final_score
 
 
@@ -175,64 +174,39 @@ def find_case_files(root: Path) -> List[Path]:
     return list(root.rglob("case.yaml"))
 
 
-def run_script(
-    script_path: Path,
-    workdir: Path,
-    env: Dict[str, str] | None = None,
-    verbosity: str = "normal",
-) -> Dict:
-    script_path = script_path.resolve()
-    script_name = script_path.name
-    if not script_path.exists():
-        return {"exit_code": 0, "stdout": "", "stderr": "", "elapsed_ms": 0}
-    log(f"[octobench] script={script_name} start cwd={workdir}", verbosity, "normal")
-    start = time.time()
-    proc = subprocess.Popen(
-        ["bash", str(script_path)],
-        cwd=str(workdir),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        bufsize=1,
-        env={**os.environ, **(env or {})},
-    )
+def run_case_script(executor: Executor, name: str, verbosity: str) -> Dict:
+    """Run a case script (setup/quality/validate) via the executor, streaming logs."""
+    log(f"[octobench] script={name} start", verbosity, "normal")
 
-    stdout_lines: List[str] = []
-    stderr_lines: List[str] = []
+    def cb(script: str, label: str, line: str) -> None:
+        log(f"[octobench] script={script} {label}: {line}", verbosity, "normal")
 
-    def pump(stream, target: List[str], stream_label: str) -> None:
-        for raw in iter(stream.readline, ""):
-            target.append(raw)
-            if verbosity != "quiet":
-                line = raw.rstrip("\n")
-                if line:
-                    log(
-                        f"[octobench] script={script_name} {stream_label}: {line}",
-                        verbosity,
-                        "normal",
-                    )
-        stream.close()
-
-    t_out = threading.Thread(target=pump, args=(proc.stdout, stdout_lines, "stdout"), daemon=True)
-    t_err = threading.Thread(target=pump, args=(proc.stderr, stderr_lines, "stderr"), daemon=True)
-    t_out.start()
-    t_err.start()
-    return_code = proc.wait()
-    t_out.join()
-    t_err.join()
-
-    elapsed_ms = int((time.time() - start) * 1000)
+    res = executor.bash_script(name, verbosity, cb)
     log(
-        f"[octobench] script={script_name} end exit={return_code} elapsed_ms={elapsed_ms}",
+        f"[octobench] script={name} end exit={res['exit_code']} elapsed_ms={res['elapsed_ms']}",
         verbosity,
         "normal",
     )
-    return {
-        "exit_code": return_code,
-        "stdout": "".join(stdout_lines),
-        "stderr": "".join(stderr_lines),
-        "elapsed_ms": elapsed_ms,
-    }
+    return res
+
+
+def make_executor(
+    args,
+    workdir_abs: Path,
+    case_dir: Path,
+    octomind_config: Path,
+    case_id: str,
+    provider_name: str,
+) -> Executor:
+    """Build the per-run executor: local subprocesses (host) or a fresh container (docker)."""
+    if getattr(args, "executor", "host") == "docker":
+        container_name = (
+            f"ob-{safe_id(case_id)[:24]}-{provider_name[:8]}-{int(time.time() * 1000)}"
+        )
+        return DockerExecutor(
+            args.image, workdir_abs, case_dir, octomind_config, container_name
+        )
+    return HostExecutor(workdir_abs, case_dir, octomind_config)
 
 
 def ensure_workspace(case_dir: Path, run_dir: Path) -> Path:
@@ -410,6 +384,17 @@ def main() -> None:
     run_p.add_argument("--scoring", default="configs/scoring.yaml")
     run_p.add_argument("--efficiency", default="configs/efficiency.yaml")
     run_p.add_argument("--verbosity", choices=["quiet", "normal", "debug"], default="normal")
+    run_p.add_argument(
+        "--executor",
+        choices=["host", "docker"],
+        default="host",
+        help="Where to run cases: local subprocesses (host) or a per-case container (docker)",
+    )
+    run_p.add_argument(
+        "--image",
+        default="octobench-agent:latest",
+        help="Docker image for --executor docker (must contain the agent CLIs)",
+    )
 
     args = parser.parse_args()
 
@@ -492,7 +477,8 @@ def main() -> None:
 
     all_results = []
 
-    provider_impls = {name: get_provider(name, repo_root) for name in selected_providers}
+    provider_impls = {name: get_provider(name) for name in selected_providers}
+    repo_config = repo_root / "configs" / "octomind" / "octomind.toml"
 
     if use_run_matrix:
         log(
@@ -550,45 +536,157 @@ def main() -> None:
 
             workdir = ensure_workspace(case_dir, setup_run_dir)
             workdir_abs = workdir.resolve()
+            executor = make_executor(
+                args, workdir_abs, case_dir, repo_config, case_id, provider_name
+            )
 
-            env = {
-                "CASE_DIR": str(case_dir.resolve()),
-                "WORKDIR": str(workdir_abs),
-            }
-            setup_log = run_script(case_dir / "setup.sh", workdir_abs, env=env, verbosity=verbosity)
-            if setup_log["exit_code"] != 0:
-                quality_log = run_script(
-                    case_dir / "quality.sh", workdir_abs, env=env, verbosity=verbosity
+            try:
+                setup_log = run_case_script(executor, "setup.sh", verbosity)
+                if setup_log["exit_code"] != 0:
+                    quality_log = run_case_script(executor, "quality.sh", verbosity)
+                    validation_log = run_case_script(executor, "validate.sh", verbosity)
+                    write_text(logs_dir / "setup.stdout.log", setup_log["stdout"])
+                    write_text(logs_dir / "setup.stderr.log", setup_log["stderr"])
+                    write_text(logs_dir / "quality.stdout.log", quality_log["stdout"])
+                    write_text(logs_dir / "quality.stderr.log", quality_log["stderr"])
+                    write_text(logs_dir / "validate.stdout.log", validation_log["stdout"])
+                    write_text(logs_dir / "validate.stderr.log", validation_log["stderr"])
+                    setup_err = (setup_log["stderr"] or "").strip()
+                    setup_out = (setup_log["stdout"] or "").strip()
+                    detail = setup_err if setup_err else setup_out
+                    if detail:
+                        detail = detail[-1200:]
+                        setup_failed_msg = f"setup failed (exit={setup_log['exit_code']}): {detail}"
+                    else:
+                        setup_failed_msg = f"setup failed (exit={setup_log['exit_code']})"
+                    judge_payload = {
+                        "task": "",
+                        "prep_log": setup_log["stdout"] + setup_log["stderr"],
+                        "quality_log": quality_log["stdout"] + quality_log["stderr"],
+                        "validation_log": validation_log["stdout"] + validation_log["stderr"],
+                        "evidence_log": "",
+                    }
+                    judge_meta = dict(judge_cfg)
+                    judge_meta["io_dir"] = str(logs_dir.resolve())
+                    judge_meta["repo_root"] = str(repo_root)
+                    judge_out = run_judge(judge_payload, judge_meta, str(workdir_abs))
+                    write_text(logs_dir / "judge.raw.log", str(judge_out.get("_judge_raw", "")))
+                    record = {
+                        "case_id": case_id,
+                        "setup": setup_name,
+                        "provider": provider_name,
+                        "model": benchmark_model,
+                        "provider_model": provider_model,
+                        "runner": "provider",
+                        "executor": args.executor,
+                        "result": {
+                            "stdout": "",
+                            "stderr": setup_failed_msg,
+                            "exit_code": 1,
+                            "elapsed_ms": 0,
+                        },
+                        "tokens": {
+                            "input": None,
+                            "cached_input": None,
+                            "output": None,
+                            "reasoning": None,
+                            "total": None,
+                        },
+                        "cost_usd": None,
+                        "scripts": {
+                            "setup": setup_log,
+                            "quality": quality_log,
+                            "validate": validation_log,
+                        },
+                        "evidence": "",
+                        "evidence_diff": "",
+                        "provider_evidence": "",
+                        "workdir": str(workdir_abs),
+                        "judge": judge_out,
+                        "scoring": {},
+                    }
+                    all_results.append(record)
+                    continue
+
+                prompt = build_task_prompt(case)
+                before = snapshot_files(executor.workspace_host_path())
+
+                session_name = (
+                    f"ob-{safe_id(case_id)[:20]}-{provider_name[:8]}-"
+                    f"{safe_id(benchmark_model)[:12]}-{int(time.time())}"
                 )
-                validation_log = run_script(
-                    case_dir / "validate.sh", workdir_abs, env=env, verbosity=verbosity
+                provider_result = provider_impl.run_task(
+                    prompt=prompt,
+                    workdir=executor.container_workspace(),
+                    provider_model=provider_model,
+                    session_name=session_name,
+                    executor=executor,
                 )
+                if provider_result.exit_code != 0:
+                    err_tail = (provider_result.stderr or "").strip() or (
+                        provider_result.stdout or ""
+                    ).strip()
+                    if err_tail:
+                        err_tail = err_tail[-1200:]
+                    raise RuntimeError(
+                        f"Provider failed: case={case_id} provider={provider_name} "
+                        f"model={benchmark_model} "
+                        f"exit={provider_result.exit_code}"
+                        + (f" details={err_tail}" if err_tail else "")
+                    )
+
+                after = snapshot_files(executor.workspace_host_path())
+                diff = diff_snapshots(before, after)
+                evidence_log_diff = build_evidence(before, after, diff)
+                provider_evidence = provider_impl.build_provider_evidence(provider_result)
+                evidence_parts = []
+                if provider_evidence:
+                    evidence_parts.append(
+                        "<provider_evidence>\n"
+                        + provider_evidence.strip()
+                        + "\n</provider_evidence>"
+                    )
+                if evidence_log_diff:
+                    evidence_parts.append(
+                        "<evidence_diff>\n" + evidence_log_diff.strip() + "\n</evidence_diff>"
+                    )
+                evidence_log = "\n\n".join(p for p in evidence_parts if p)
+
+                quality_log = run_case_script(executor, "quality.sh", verbosity)
+                validation_log = run_case_script(executor, "validate.sh", verbosity)
                 write_text(logs_dir / "setup.stdout.log", setup_log["stdout"])
                 write_text(logs_dir / "setup.stderr.log", setup_log["stderr"])
                 write_text(logs_dir / "quality.stdout.log", quality_log["stdout"])
                 write_text(logs_dir / "quality.stderr.log", quality_log["stderr"])
                 write_text(logs_dir / "validate.stdout.log", validation_log["stdout"])
                 write_text(logs_dir / "validate.stderr.log", validation_log["stderr"])
-                setup_err = (setup_log["stderr"] or "").strip()
-                setup_out = (setup_log["stdout"] or "").strip()
-                detail = setup_err if setup_err else setup_out
-                if detail:
-                    detail = detail[-1200:]
-                    setup_failed_msg = f"setup failed (exit={setup_log['exit_code']}): {detail}"
-                else:
-                    setup_failed_msg = f"setup failed (exit={setup_log['exit_code']})"
+                write_text(logs_dir / "provider.stdout.log", provider_result.stdout or "")
+                write_text(logs_dir / "provider.stderr.log", provider_result.stderr or "")
+
                 judge_payload = {
-                    "task": "",
+                    "task": prompt,
                     "prep_log": setup_log["stdout"] + setup_log["stderr"],
                     "quality_log": quality_log["stdout"] + quality_log["stderr"],
                     "validation_log": validation_log["stdout"] + validation_log["stderr"],
-                    "evidence_log": "",
+                    "evidence_log": evidence_log,
                 }
                 judge_meta = dict(judge_cfg)
                 judge_meta["io_dir"] = str(logs_dir.resolve())
                 judge_meta["repo_root"] = str(repo_root)
                 judge_out = run_judge(judge_payload, judge_meta, str(workdir_abs))
                 write_text(logs_dir / "judge.raw.log", str(judge_out.get("_judge_raw", "")))
+
+                pricing = models_cfg.get("models", {}).get(benchmark_model, {}).get("pricing")
+                if not pricing:
+                    raise RuntimeError(f"Missing pricing for benchmark model: {benchmark_model}")
+
+                eval_cost = compute_cost(
+                    provider_result.input_tokens,
+                    provider_result.cached_input_tokens,
+                    provider_result.output_tokens,
+                    pricing,
+                )
+
                 record = {
                     "case_id": case_id,
                     "setup": setup_name,
@@ -596,159 +694,44 @@ def main() -> None:
                     "model": benchmark_model,
                     "provider_model": provider_model,
                     "runner": "provider",
+                    "executor": args.executor,
                     "result": {
-                        "stdout": "",
-                        "stderr": setup_failed_msg,
-                        "exit_code": 1,
-                        "elapsed_ms": 0,
+                        "stdout": provider_result.stdout,
+                        "stderr": provider_result.stderr,
+                        "exit_code": provider_result.exit_code,
+                        "elapsed_ms": provider_result.elapsed_ms,
                     },
                     "tokens": {
-                        "input": None,
-                        "cached_input": None,
-                        "output": None,
-                        "reasoning": None,
-                        "total": None,
+                        "input": provider_result.input_tokens,
+                        "cached_input": provider_result.cached_input_tokens,
+                        "output": provider_result.output_tokens,
+                        "reasoning": provider_result.reasoning_tokens,
+                        "total": provider_result.total_tokens,
                     },
-                    "cost_usd": None,
+                    "cost_usd": eval_cost,
                     "scripts": {
                         "setup": setup_log,
                         "quality": quality_log,
                         "validate": validation_log,
                     },
-                    "evidence": "",
-                    "evidence_diff": "",
-                    "provider_evidence": "",
+                    "evidence": evidence_log,
+                    "evidence_diff": evidence_log_diff,
+                    "provider_evidence": provider_evidence,
                     "workdir": str(workdir_abs),
                     "judge": judge_out,
                     "scoring": {},
                 }
                 all_results.append(record)
-                continue
-
-            prompt = build_task_prompt(case)
-            before = snapshot_files(workdir_abs)
-
-            session_name = (
-                f"ob-{safe_id(case_id)[:20]}-{provider_name[:8]}-"
-                f"{safe_id(benchmark_model)[:12]}-{int(time.time())}"
-            )
-            provider_result = provider_impl.run_task(
-                prompt=prompt,
-                workdir=str(workdir_abs),
-                provider_model=provider_model,
-                session_name=session_name,
-            )
-            if provider_result.exit_code != 0:
-                err_tail = (provider_result.stderr or "").strip() or (
-                    provider_result.stdout or ""
-                ).strip()
-                if err_tail:
-                    err_tail = err_tail[-1200:]
-                raise RuntimeError(
-                    f"Provider failed: case={case_id} provider={provider_name} "
-                    f"model={benchmark_model} "
-                    f"exit={provider_result.exit_code}"
-                    + (f" details={err_tail}" if err_tail else "")
+                log(
+                    (
+                        f"[octobench] completed case={case_id} "
+                        f"setup={setup_name} exit={provider_result.exit_code}"
+                    ),
+                    verbosity,
+                    "normal",
                 )
-
-            after = snapshot_files(workdir_abs)
-            diff = diff_snapshots(before, after)
-            evidence_log_diff = build_evidence(before, after, diff)
-            provider_evidence = provider_impl.build_provider_evidence(provider_result)
-            evidence_parts = []
-            if provider_evidence:
-                evidence_parts.append(
-                    "<provider_evidence>\n"
-                    + provider_evidence.strip()
-                    + "\n</provider_evidence>"
-                )
-            if evidence_log_diff:
-                evidence_parts.append(
-                    "<evidence_diff>\n" + evidence_log_diff.strip() + "\n</evidence_diff>"
-                )
-            evidence_log = "\n\n".join(p for p in evidence_parts if p)
-
-            quality_log = run_script(
-                case_dir / "quality.sh", workdir_abs, env=env, verbosity=verbosity
-            )
-            validation_log = run_script(
-                case_dir / "validate.sh", workdir_abs, env=env, verbosity=verbosity
-            )
-            write_text(logs_dir / "setup.stdout.log", setup_log["stdout"])
-            write_text(logs_dir / "setup.stderr.log", setup_log["stderr"])
-            write_text(logs_dir / "quality.stdout.log", quality_log["stdout"])
-            write_text(logs_dir / "quality.stderr.log", quality_log["stderr"])
-            write_text(logs_dir / "validate.stdout.log", validation_log["stdout"])
-            write_text(logs_dir / "validate.stderr.log", validation_log["stderr"])
-            write_text(logs_dir / "provider.stdout.log", provider_result.stdout or "")
-            write_text(logs_dir / "provider.stderr.log", provider_result.stderr or "")
-
-            judge_payload = {
-                "task": prompt,
-                "prep_log": setup_log["stdout"] + setup_log["stderr"],
-                "quality_log": quality_log["stdout"] + quality_log["stderr"],
-                "validation_log": validation_log["stdout"] + validation_log["stderr"],
-                "evidence_log": evidence_log,
-            }
-            judge_meta = dict(judge_cfg)
-            judge_meta["io_dir"] = str(logs_dir.resolve())
-            judge_meta["repo_root"] = str(repo_root)
-            judge_out = run_judge(judge_payload, judge_meta, str(workdir_abs))
-            write_text(logs_dir / "judge.raw.log", str(judge_out.get("_judge_raw", "")))
-
-            pricing = models_cfg.get("models", {}).get(benchmark_model, {}).get("pricing")
-            if not pricing:
-                raise RuntimeError(f"Missing pricing for benchmark model: {benchmark_model}")
-
-            eval_cost = compute_cost(
-                provider_result.input_tokens,
-                provider_result.cached_input_tokens,
-                provider_result.output_tokens,
-                pricing,
-            )
-
-            record = {
-                "case_id": case_id,
-                "setup": setup_name,
-                "provider": provider_name,
-                "model": benchmark_model,
-                "provider_model": provider_model,
-                "runner": "provider",
-                "result": {
-                    "stdout": provider_result.stdout,
-                    "stderr": provider_result.stderr,
-                    "exit_code": provider_result.exit_code,
-                    "elapsed_ms": provider_result.elapsed_ms,
-                },
-                "tokens": {
-                    "input": provider_result.input_tokens,
-                    "cached_input": provider_result.cached_input_tokens,
-                    "output": provider_result.output_tokens,
-                    "reasoning": provider_result.reasoning_tokens,
-                    "total": provider_result.total_tokens,
-                },
-                "cost_usd": eval_cost,
-                "scripts": {
-                    "setup": setup_log,
-                    "quality": quality_log,
-                    "validate": validation_log,
-                },
-                "evidence": evidence_log,
-                "evidence_diff": evidence_log_diff,
-                "provider_evidence": provider_evidence,
-                "workdir": str(workdir_abs),
-                "judge": judge_out,
-                "scoring": {},
-            }
-            all_results.append(record)
-            log(
-                (
-                    f"[octobench] completed case={case_id} "
-                    f"setup={setup_name} exit={provider_result.exit_code}"
-                ),
-                verbosity,
-                "normal",
-            )
+            finally:
+                executor.close()
 
     for case_id in {r["case_id"] for r in all_results}:
         case_rows = [r for r in all_results if r["case_id"] == case_id]

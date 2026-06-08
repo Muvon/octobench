@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
 import time
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from providers.base import Provider, ProviderRunResult
+
+if TYPE_CHECKING:
+    from runners.executor import Executor
 
 
 class CodexProvider(Provider):
@@ -18,8 +19,13 @@ class CodexProvider(Provider):
         workdir: str,
         provider_model: str,
         session_name: str,
+        executor: "Executor",
     ) -> ProviderRunResult:
-        output_file = os.path.join(workdir, f"_provider_output_{session_name}.txt")
+        # Paths must be valid inside the executor's environment (host cwd or the
+        # container's /workspace); the result file is read back via the host mount.
+        ws = executor.container_workspace()
+        out_name = f"_provider_output_{session_name}.txt"
+        output_file = f"{ws}/{out_name}"
         cmd = [
             "codex",
             "exec",
@@ -27,7 +33,7 @@ class CodexProvider(Provider):
             "-m",
             provider_model,
             "-C",
-            workdir,
+            ws,
             "-s",
             "workspace-write",
             "--skip-git-repo-check",
@@ -37,21 +43,14 @@ class CodexProvider(Provider):
         ]
 
         start = time.time()
-        proc = subprocess.run(
-            cmd,
-            cwd=workdir,
-            capture_output=True,
-            text=True,
-            input=prompt,
-            env=os.environ.copy(),
-        )
+        proc = executor.run(cmd, input_text=prompt)
         elapsed_ms = int((time.time() - start) * 1000)
 
         stdout = ""
-        if os.path.exists(output_file):
+        host_output = executor.workspace_host_path() / out_name
+        if host_output.exists():
             try:
-                with open(output_file, encoding="utf-8") as f:
-                    stdout = f.read().strip()
+                stdout = host_output.read_text(encoding="utf-8").strip()
             except Exception:
                 stdout = (proc.stdout or "").strip()
         else:
@@ -153,7 +152,7 @@ class CodexProvider(Provider):
         return ProviderRunResult(
             stdout=stdout,
             stderr=(proc.stderr or "").strip(),
-            exit_code=proc.returncode,
+            exit_code=proc.exit_code,
             elapsed_ms=elapsed_ms,
             input_tokens=input_tokens,
             cached_input_tokens=cached_input_tokens,
