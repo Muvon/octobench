@@ -121,6 +121,17 @@ models:
     providers:
       octomind: minimax:MiniMax-M2.1
 
+  # MiniMax routed via octomind's octohub gateway (works when the direct
+  # MINIMAX_API_KEY has no balance). Pricing approximates MiniMax M2.1; adjust
+  # to the real octohub rate if it differs.
+  octohub-minimax:
+    pricing:
+      input: 0.27
+      cached_input: 0.027
+      output: 0.95
+    providers:
+      octomind: octohub:minimax
+
   # ===================== Moonshot (Kimi) Models =====================
   kimi-k2.5:
     pricing:

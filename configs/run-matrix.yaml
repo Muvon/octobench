@@ -1,12 +1,16 @@
+# Default benchmark matrix: each framework run at its out-of-the-box default.
+#   claude    -> `claude -p` with its native model
+#   codex     -> `codex exec` with its native model
+#   octomind  -> `octomind run developer:general` (stock coding agent) via the
+#                octohub gateway (octohub:minimax)
+# The judge (octomind `judge` role) is the only customization; it does not
+# affect how these frameworks run.
 runs:
   - provider: claude
     model: claude-sonnet-4
 
-  - provider: octomind
+  - provider: codex
     model: gpt-5.2-codex
 
   - provider: octomind
-    model: minimax-m2.5
-
-  - provider: octomind
-    model: minimax-m2.1
+    model: octohub-minimax

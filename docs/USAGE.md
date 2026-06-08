@@ -57,10 +57,13 @@ For each case and selected run target (provider + benchmark model pair):
 9. Computes scores and writes JSON.
 
 ## Octomind integration
-- Provider implementation: `providers/octomind.py` (role: `benchmark`)
-- Judge is hardcoded to Octomind role `judge`
-- Octomind config path is passed via env:
+- Provider runs octomind's stock coding agent: `octomind run developer:general -m <model>`
+- Judge runs as a dedicated role: `octomind run judge -m <model>`
+  (default `octohub:minimax`, override with `OCTOBENCH_JUDGE_MODEL`)
+- Both use the pinned config via env:
   - `OCTOMIND_CONFIG_PATH={repo_root}/configs/octomind/octomind.toml`
+- That config is octomind's upstream `config-templates/default.toml` kept untouched,
+  extended only with the `judge` role and a `websearch = "brave"` capability override.
 
 ## Key outputs
 Each result record contains:

@@ -11,7 +11,7 @@ This file is the entrypoint for contributors and agents.
 ## Repo Layout
 - `cases/`: benchmark cases in `cases/<segment>/<sub_or_lang>/<case_name>/` with scripts + fixtures
 - `configs/`: model registry and octomind config
-- `providers/`: provider implementations (`codex`, `octomind`) with shared interface
+- `providers/`: provider implementations (`claude`, `codex`, `octomind`) with shared interface; each runs its framework at its out-of-the-box default
 - `judges/`: judge prompt + parsing
 - `scoring/`: metrics + aggregation
 - `results/`: output JSON for runs

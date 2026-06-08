@@ -372,12 +372,16 @@ def parse_providers(arg: str | None) -> List[str]:
 
 
 def default_judge_cfg(repo_root: Path) -> Dict:
+    # Judge runs as the `judge` role defined in the octomind config (the upstream
+    # baseline default.toml extended only with this role). Model is passed via -m
+    # so the judge is explicit and reproducible; override with OCTOBENCH_JUDGE_MODEL.
+    judge_model = os.environ.get("OCTOBENCH_JUDGE_MODEL", "octohub:minimax")
     return {
         "name": "octomind_judge",
         "runner": "cli",
-        "model": "openrouter:anthropic/claude-sonnet-4",
+        "model": judge_model,
         "stdin_prompt": True,
-        "command": ["octomind", "run", "judge", "--format=jsonl"],
+        "command": ["octomind", "run", "judge", "-m", judge_model, "--format=jsonl"],
         "json_events": True,
         "env": {
             "OCTOMIND_CONFIG_PATH": f"{repo_root}/configs/octomind/octomind.toml",

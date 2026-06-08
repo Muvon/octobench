@@ -72,8 +72,25 @@ Script behavior:
 
 Scripts run in the workspace. Use `$CASE_DIR` to access case assets (e.g., `$CASE_DIR/fixtures`).
 
+## Fairness model
+Each framework runs **at its out-of-the-box default** — no benchmark-tuned prompts,
+roles, or configs that would stack the deck:
+- **claude**: `claude -p --model <model> --dangerously-skip-permissions`
+- **codex**: `codex exec -m <model> -s workspace-write`
+- **octomind**: `octomind run developer:general -m <model>` — octomind's stock
+  coding agent. Its config (`configs/octomind/octomind.toml`) is the upstream
+  octomind baseline (`config-templates/default.toml`) left **untouched** and
+  extended with only a `judge` role (see below). The lone deviation is
+  `[capabilities] websearch = "brave"`, which swaps a default web-search provider
+  whose npm package is unpublished — it activates lazily and never fires on the
+  coding cases.
+
+The judge is the only intentional customization, and it is a separate role that
+cannot influence how the frameworks-under-test run.
+
 ## Providers
 Provider implementations live in:
+- `providers/claude.py`
 - `providers/codex.py`
 - `providers/octomind.py`
 - `providers/base.py`
@@ -97,9 +114,15 @@ Model registry:
 
 ## Judge
 The judge prompt is hardcoded in `judges/prompts.py` and expects JSON output.
-Judge execution is hardcoded to Octomind with:
+The judge runs as an Octomind **role** appended to the baseline config:
 - `OCTOMIND_CONFIG_PATH={repo_root}/configs/octomind/octomind.toml`
-- Octomind role: `judge`
+- Command: `octomind run judge -m <judge_model> --format=jsonl`
+- Default judge model: `octohub:minimax`; override with `OCTOBENCH_JUDGE_MODEL`
+
+The `judge` role has no tools and emits strict JSON, so it is isolated from the
+benchmarked runs. `configs/octomind/octomind.toml` is octomind's upstream
+`config-templates/default.toml` kept verbatim, with only the `judge` role (and the
+`websearch = "brave"` capability override) added at the end.
 
 ## Scoring
 Scoring is globally configurable via config files. The framework collects:

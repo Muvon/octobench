@@ -150,10 +150,14 @@ class OctomindProvider(Provider):
         env = os.environ.copy()
         env["OCTOMIND_CONFIG_PATH"] = self.config_path
 
+        # Run octomind's stock coding agent (`developer:general`) exactly as a real
+        # user would. The config at OCTOMIND_CONFIG_PATH is the upstream baseline
+        # default.toml plus a `judge` role; the baseline is untouched, so this is a
+        # fair, like-for-like coding run vs `claude -p` / `codex exec`.
         main_cmd = [
             "octomind",
             "run",
-            "developer",
+            "developer:general",
             "--name",
             session_name,
             "--model",
