@@ -7,10 +7,10 @@
 # affect how these frameworks run.
 runs:
   - provider: claude
-    model: claude-sonnet-4
+    model: claude-opus-4-8
 
   - provider: codex
-    model: gpt-5.2-codex
+    model: gpt-5.3-codex
 
   - provider: octomind
-    model: octohub-minimax
+    model: minimax-m3
