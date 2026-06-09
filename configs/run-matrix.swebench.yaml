@@ -2,7 +2,7 @@
 # Each framework at its default; octomind via the octohub gateway.
 runs:
   - provider: octomind
-    model: octohub-minimax
+    model: claude-opus-4
 
   - provider: claude
-    model: claude-sonnet-4
+    model: claude-opus-4

@@ -20,6 +20,9 @@ class ProviderRunResult:
     reasoning_tokens: Optional[int] = None
     total_tokens: Optional[int] = None
     provider_trace: Optional[dict[str, Any]] = None
+    # Full raw agent output (the complete jsonl/event trace from the CLI) — saved
+    # verbatim per run so the agent's every step/tool-call can be analyzed.
+    raw_output: Optional[str] = None
 
 
 class Provider(ABC):

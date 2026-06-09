@@ -213,9 +213,15 @@ class DockerExecutor(Executor):
             mounts += ["-v", f"{self._ws}:{self._workdir}"]
         if self._mount_case:
             mounts += ["-v", f"{self._case_dir}:{self.CASE}:ro"]
+        # Tool login credentials (NOT API keys): mounted read-only, like a real
+        # logged-in user. codex -> ~/.codex/auth.json; claude -> ~/.claude/.credentials.json
+        # (on Linux; on macOS claude keeps it in the Keychain, so nothing to mount there).
         codex_auth = Path.home() / ".codex" / "auth.json"
         if codex_auth.exists():
             mounts += ["-v", f"{codex_auth}:/root/.codex/auth.json:ro"]
+        claude_creds = Path.home() / ".claude" / ".credentials.json"
+        if claude_creds.exists():
+            mounts += ["-v", f"{claude_creds}:/root/.claude/.credentials.json:ro"]
 
         platform_args = ["--platform", self._platform] if self._platform else []
         cmd = [

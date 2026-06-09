@@ -174,6 +174,10 @@ def run_instance(instance: Dict, target: Dict, repo_root: Path, models_cfg: Dict
 
         diff = _run(executor, "cd /testbed && git diff").stdout
         write_text(logs_dir / "agent.diff", diff)
+        # Full raw agent trace (every step/tool-call) + final message + stderr, for analysis.
+        write_text(logs_dir / "agent.raw.jsonl", pr.raw_output or "")
+        write_text(logs_dir / "agent.stdout.log", pr.stdout or "")
+        write_text(logs_dir / "agent.stderr.log", pr.stderr or "")
         provider_evidence = provider_impl.build_provider_evidence(pr)
         evidence_log = ""
         if provider_evidence:

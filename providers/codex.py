@@ -164,6 +164,7 @@ class CodexProvider(Provider):
                 "tool_intents": tool_intents,
                 "tool_results": tool_results,
             },
+            raw_output=proc.stdout or "",
         )
 
     def build_provider_evidence(self, run_result: ProviderRunResult) -> str:

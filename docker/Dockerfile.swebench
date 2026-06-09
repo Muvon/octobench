@@ -13,6 +13,7 @@ FROM ${BASE_IMAGE}
 ARG OCTOMIND_VERSION=0.30.0
 ARG OCTOCODE_VERSION=0.15.0
 ARG OCTOFS_VERSION=0.4.3
+ARG OCTOBRAIN_VERSION=0.8.0
 ARG CLAUDE_VERSION=2.1.168
 
 # Agents as amd64 static binaries on the image PATH (keeps the repo's python/conda
@@ -28,6 +29,7 @@ RUN set -eux; \
     $DL "https://github.com/Muvon/octomind/releases/download/${OCTOMIND_VERSION}/octomind-${OCTOMIND_VERSION}-${T}.tar.gz" | tar -xz -C /usr/local/bin; \
     $DL "https://github.com/Muvon/octofs/releases/download/${OCTOFS_VERSION}/octofs-${OCTOFS_VERSION}-${T}.tar.gz" | tar -xz -C /usr/local/bin; \
     $DL "https://github.com/Muvon/octocode/releases/download/${OCTOCODE_VERSION}/octocode-${OCTOCODE_VERSION}-${T}.tar.gz" | tar -xz -C /usr/local/bin; \
+    $DL "https://github.com/Muvon/octobrain/releases/download/${OCTOBRAIN_VERSION}/octobrain-${OCTOBRAIN_VERSION}-${T}.tar.gz" | tar -xz -C /usr/local/bin; \
     $DL -o /usr/local/bin/claude "https://downloads.claude.ai/claude-code-releases/${CLAUDE_VERSION}/linux-x64/claude"; \
-    chmod +x /usr/local/bin/octomind /usr/local/bin/octofs /usr/local/bin/octocode /usr/local/bin/claude; \
-    octomind --version; octofs --version; claude --version || true
+    chmod +x /usr/local/bin/octomind /usr/local/bin/octofs /usr/local/bin/octocode /usr/local/bin/octobrain /usr/local/bin/claude; \
+    octomind --version; octofs --version; octobrain --version; claude --version || true

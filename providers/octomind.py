@@ -203,6 +203,7 @@ class OctomindProvider(Provider):
                 "tool_intents": tool_intents,
                 "tool_results": tool_results,
             },
+            raw_output=main.stdout or "",
         )
 
     def build_provider_evidence(self, run_result: ProviderRunResult) -> str:

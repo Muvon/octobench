@@ -662,6 +662,8 @@ def main() -> None:
                 write_text(logs_dir / "validate.stderr.log", validation_log["stderr"])
                 write_text(logs_dir / "provider.stdout.log", provider_result.stdout or "")
                 write_text(logs_dir / "provider.stderr.log", provider_result.stderr or "")
+                # Full raw agent trace (every step/tool-call) for analysis & tuning.
+                write_text(logs_dir / "provider.raw.jsonl", provider_result.raw_output or "")
 
                 judge_payload = {
                     "task": prompt,

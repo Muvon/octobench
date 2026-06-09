@@ -27,11 +27,13 @@ ARG TARGETARCH
 ARG OCTOMIND_VERSION=0.30.0
 ARG OCTOCODE_VERSION=0.15.0
 ARG OCTOFS_VERSION=0.4.3
+ARG OCTOBRAIN_VERSION=0.8.0
 ARG CODEX_VERSION=0.137.0
 ARG CLAUDE_VERSION=2.1.168
 
-# octomind + octofs + octocode: static musl binaries straight from GitHub releases.
-# octofs powers developer:general's shell/text_editor tools; octocode is codesearch.
+# octomind + octofs + octocode + octobrain: static musl binaries from GitHub releases.
+# octofs = file/shell tools, octocode = codesearch, octobrain = memory (all referenced
+# by developer:general's MCP servers).
 RUN set -eux; \
     case "${TARGETARCH:-arm64}" in \
       arm64) TRIPLE=aarch64-unknown-linux-musl; CLAUDE_PLAT=linux-arm64 ;; \
@@ -42,8 +44,9 @@ RUN set -eux; \
     $DL "https://github.com/Muvon/octomind/releases/download/${OCTOMIND_VERSION}/octomind-${OCTOMIND_VERSION}-${TRIPLE}.tar.gz" | tar -xz -C /usr/local/bin; \
     $DL "https://github.com/Muvon/octofs/releases/download/${OCTOFS_VERSION}/octofs-${OCTOFS_VERSION}-${TRIPLE}.tar.gz" | tar -xz -C /usr/local/bin; \
     $DL "https://github.com/Muvon/octocode/releases/download/${OCTOCODE_VERSION}/octocode-${OCTOCODE_VERSION}-${TRIPLE}.tar.gz" | tar -xz -C /usr/local/bin; \
-    chmod +x /usr/local/bin/octomind /usr/local/bin/octofs /usr/local/bin/octocode; \
-    octomind --version; octofs --version; octocode --version; \
+    $DL "https://github.com/Muvon/octobrain/releases/download/${OCTOBRAIN_VERSION}/octobrain-${OCTOBRAIN_VERSION}-${TRIPLE}.tar.gz" | tar -xz -C /usr/local/bin; \
+    chmod +x /usr/local/bin/octomind /usr/local/bin/octofs /usr/local/bin/octocode /usr/local/bin/octobrain; \
+    octomind --version; octofs --version; octocode --version; octobrain --version; \
     # claude code: pinned native binary (standalone, self-contained). \
     $DL -o /usr/local/bin/claude "https://downloads.claude.ai/claude-code-releases/${CLAUDE_VERSION}/${CLAUDE_PLAT}/claude"; \
     chmod +x /usr/local/bin/claude; \
@@ -58,6 +61,7 @@ RUN echo "=== installed agents ===" \
     && (octomind --version || true) \
     && (octofs --version || true) \
     && (octocode --version || true) \
+    && (octobrain --version || true) \
     && (claude --version || true) \
     && (codex --version || true) \
     && (rustc --version || true) \

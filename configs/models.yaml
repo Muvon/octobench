@@ -25,8 +25,8 @@ models:
       cached_input: 1.50
       output: 75.00
     providers:
-      claude: claude-opus-4
-      octomind: anthropic:claude-opus-4
+      claude: claude-opus-4-8
+      octomind: anthropic:claude-opus-4-8
 
   claude-sonnet-4:
     pricing:
