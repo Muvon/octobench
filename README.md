@@ -36,6 +36,49 @@ python3 -m cli.main run --cases cases --config configs/run-matrix.yaml
 Results land in `results/` as JSON.
 `--verbosity` is optional (default: `normal`).
 
+Compare a run at a glance:
+
+```bash
+python3 scripts/summary.py            # newest run under results/
+python3 scripts/summary.py path/to/results.json
+```
+
+## Execution modes (host vs Docker)
+`--executor` selects where each case runs:
+- `host` (default): cases run as local subprocesses in a fresh workspace dir.
+- `docker`: each case runs in its own container for a consistent, reproducible
+  environment. Host auth is injected (never baked in): API-key env vars are
+  forwarded by name (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OCTOHUB_API_KEY`, …)
+  and `~/.codex/auth.json` is mounted read-only. `IS_SANDBOX=1` is set so claude
+  runs headless as root.
+
+Build the agent image once (pins prebuilt agent binaries — no compiling), then run:
+
+```bash
+docker build -f docker/Dockerfile.agent -t octobench-agent:latest docker
+python3 -m cli.main run --cases cases --executor docker --image octobench-agent:latest
+```
+
+The image bundles `octomind`/`octofs`/`octocode` (static musl), `claude`, `codex`
+(npm), plus a Rust toolchain and Python. See `docker/Dockerfile.agent`.
+
+## SWE-bench-Live (real-world dataset)
+Run a real, post-2024 GitHub issue (contamination-resistant) through the same
+flow — agent fixes the repo, the instance's own tests are the objective verdict:
+
+```bash
+python3 -m cli.swebench --split lite --config configs/run-matrix.swebench.yaml
+# or a specific instance:
+python3 -m cli.swebench --instance jupyterlab__jupyter-ai-1022
+python3 scripts/summary.py results-swebench   # shows the resolved (F2P/P2P) verdict
+```
+
+Instances are pulled from the `SWE-bench-Live/SWE-bench-Live` HF dataset. Each
+instance's prebuilt image (DockerHub `starryzhang/…`, x86_64) is layered with the
+agent binaries (`docker/Dockerfile.swebench`) and run repo-in-image at `/testbed`;
+`validate` runs the instance's `test_cmds` and checks `FAIL_TO_PASS`/`PASS_TO_PASS`.
+Note: instance images are x86_64, so on Apple Silicon they run under emulation.
+
 ## Development checks
 Install and enable pre-commit hooks:
 

@@ -11,8 +11,16 @@ This document defines the required provider contract for consistent and fair ben
 
 Provider implementations must follow `providers/base.py`:
 
-1. `run_task(prompt, workdir, provider_model, session_name) -> ProviderRunResult`
+1. `run_task(prompt, workdir, provider_model, session_name, executor) -> ProviderRunResult`
 2. Optional override: `build_provider_evidence(run_result) -> str`
+
+Run the agent command via the injected `executor` (`runners/executor.py`), not
+`subprocess` directly — this is what makes a provider work identically in host and
+docker modes:
+- `executor.run(argv, env_overrides=..., input_text=prompt)` → `ExecResult(stdout, stderr, exit_code)`
+- `executor.container_workspace()` → the workdir as seen by the command (host path or `/workspace`/`/testbed`); use it for any path you pass to the CLI.
+- `executor.workspace_host_path()` → host path, to read back any files the CLI wrote.
+- `executor.octomind_config_path()` → the `OCTOMIND_CONFIG_PATH` valid in that environment.
 
 ## `ProviderRunResult` Contract
 

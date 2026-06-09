@@ -10,11 +10,14 @@ This file is the entrypoint for contributors and agents.
 
 ## Repo Layout
 - `cases/`: benchmark cases in `cases/<segment>/<sub_or_lang>/<case_name>/` with scripts + fixtures
-- `configs/`: model registry and octomind config
+- `configs/`: model registry, run matrices, and octomind config
 - `providers/`: provider implementations (`claude`, `codex`, `octomind`) with shared interface; each runs its framework at its out-of-the-box default
+- `runners/`: `executor.py` (Host/Docker execution), `cli_runner.py` (judge invocation)
+- `docker/`: `Dockerfile.agent` (agent image for `--executor docker`), `Dockerfile.swebench` (per-instance derived image)
+- `cli/`: `main.py` (runner), `swebench.py` (SWE-bench-Live single-instance runner)
 - `judges/`: judge prompt + parsing
-- `scoring/`: metrics + aggregation
-- `results/`: output JSON for runs
+- `scoring/`: metrics + aggregation; `scripts/summary.py`: comparison table
+- `results/`, `results-swebench/`: output JSON for runs
 
 ## How It Works (Short)
 1. For each case + provider + benchmark model, create an isolated workspace.

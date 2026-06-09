@@ -29,6 +29,8 @@ Optional:
 - `--scoring`: Path to scoring config (default: `configs/scoring.yaml`)
 - `--efficiency`: Path to efficiency config (default: `configs/efficiency.yaml`)
 - `--verbosity`: quiet, normal, or debug
+- `--executor`: `host` (default, local subprocesses) or `docker` (per-case container)
+- `--image`: Docker image for `--executor docker` (default `octobench-agent:latest`)
 
 Run-matrix example:
 ```yaml
@@ -55,6 +57,37 @@ For each case and selected run target (provider + benchmark model pair):
 7. Runs `quality.sh` and `validate.sh`.
 8. Sends tool output + script logs + evidence to the judge.
 9. Computes scores and writes JSON.
+
+## Docker execution
+Build the agent image once, then pass `--executor docker`:
+
+```bash
+docker build -f docker/Dockerfile.agent -t octobench-agent:latest docker
+python3 -m cli.main run --cases cases --executor docker
+```
+
+Each case runs in its own container (`runners/executor.py: DockerExecutor`). Host
+auth is injected at `docker run`: API-key env vars are forwarded by name, the
+octomind config is mounted at `/cfg/octomind.toml`, `~/.codex/auth.json` is mounted
+read-only, and `IS_SANDBOX=1` lets claude run headless as root. The workspace is a
+host dir bind-mounted at `/workspace`, so before/after snapshots still happen on the
+host. Agents are pinned Linux binaries baked into the image (no compiling).
+
+## SWE-bench-Live
+Run one real GitHub issue end-to-end (agent fix + the instance's own tests as the
+verdict):
+
+```bash
+python3 -m cli.swebench --split lite --config configs/run-matrix.swebench.yaml
+python3 -m cli.swebench --instance jupyterlab__jupyter-ai-1022   # specific instance
+python3 scripts/summary.py results-swebench
+```
+
+Flow: fetch the instance from the `SWE-bench-Live/SWE-bench-Live` HF dataset → layer
+agent binaries onto its prebuilt image (`docker/Dockerfile.swebench`) → run the agent
+repo-in-image at `/testbed` → reset to `base_commit`, apply the test patch, run
+`test_cmds`, and check `FAIL_TO_PASS`/`PASS_TO_PASS`. Instance images are x86_64
+(emulated on Apple Silicon). Results carry a `swebench.resolved` verdict.
 
 ## Octomind integration
 - Provider runs octomind's stock coding agent: `octomind run developer:general -m <model>`

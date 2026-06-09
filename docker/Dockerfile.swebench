@@ -1,0 +1,33 @@
+# Derives a runnable octobench image from a SWE-bench(-Live) instance image by
+# layering the agent CLIs (amd64 static binaries) onto it. The instance image
+# already contains the repo at /testbed plus its full test environment; we only
+# add the agents on the image's PATH so they run alongside the test env.
+#
+# Build (instance images are x86_64 — emulated on arm64 hosts):
+#   docker build --platform linux/amd64 -f docker/Dockerfile.swebench \
+#     --build-arg BASE_IMAGE=starryzhang/sweb.eval.x86_64.<id> \
+#     -t octobench-sweb:<id> docker
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+ARG OCTOMIND_VERSION=0.30.0
+ARG OCTOCODE_VERSION=0.15.0
+ARG OCTOFS_VERSION=0.4.3
+ARG CLAUDE_VERSION=2.1.168
+
+# Agents as amd64 static binaries on the image PATH (keeps the repo's python/conda
+# test environment untouched). codex is omitted here (needs node) — not required
+# for the default octomind/claude SWE-bench runs.
+RUN set -eux; \
+    if ! command -v curl >/dev/null 2>&1; then \
+      (apt-get update && apt-get install -y --no-install-recommends curl ca-certificates) \
+      || (apt-get update && apt-get install -y --no-install-recommends wget ca-certificates); \
+    fi; \
+    DL="curl --retry 5 --retry-all-errors --retry-delay 3 --connect-timeout 30 -fsSL"; \
+    T=x86_64-unknown-linux-musl; \
+    $DL "https://github.com/Muvon/octomind/releases/download/${OCTOMIND_VERSION}/octomind-${OCTOMIND_VERSION}-${T}.tar.gz" | tar -xz -C /usr/local/bin; \
+    $DL "https://github.com/Muvon/octofs/releases/download/${OCTOFS_VERSION}/octofs-${OCTOFS_VERSION}-${T}.tar.gz" | tar -xz -C /usr/local/bin; \
+    $DL "https://github.com/Muvon/octocode/releases/download/${OCTOCODE_VERSION}/octocode-${OCTOCODE_VERSION}-${T}.tar.gz" | tar -xz -C /usr/local/bin; \
+    $DL -o /usr/local/bin/claude "https://downloads.claude.ai/claude-code-releases/${CLAUDE_VERSION}/linux-x64/claude"; \
+    chmod +x /usr/local/bin/octomind /usr/local/bin/octofs /usr/local/bin/octocode /usr/local/bin/claude; \
+    octomind --version; octofs --version; claude --version || true

@@ -162,7 +162,6 @@ class DockerExecutor(Executor):
     file mount). Snapshots still happen on the host via the mounted workspace.
     """
 
-    WS = "/workspace"
     CASE = "/case"
     CFG = "/cfg/octomind.toml"
 
@@ -173,16 +172,20 @@ class DockerExecutor(Executor):
         case_dir: Path,
         octomind_config: Path,
         container_name: str,
-        log_fn: Optional[Callable[[str, str, str], None]] = None,
-        verbosity: str = "normal",
+        workdir: str = "/workspace",
+        platform: Optional[str] = None,
+        mount_workspace: bool = True,
+        mount_case: bool = True,
     ):
         self.image = image
         self._ws = Path(workspace).resolve()
         self._case_dir = Path(case_dir).resolve()
         self._octomind_config = Path(octomind_config).resolve()
         self.name = container_name
-        self._log_fn = log_fn
-        self._verbosity = verbosity
+        self._workdir = workdir
+        self._platform = platform
+        self._mount_workspace = mount_workspace
+        self._mount_case = mount_case
         self._started = False
 
     def _ensure(self) -> None:
@@ -195,22 +198,28 @@ class DockerExecutor(Executor):
         for k, v in {
             "OCTOMIND_CONFIG_PATH": self.CFG,
             "CASE_DIR": self.CASE,
-            "WORKDIR": self.WS,
+            "WORKDIR": self._workdir,
             "HOME": "/root",
+            # Containers run as root; claude refuses --dangerously-skip-permissions
+            # as root unless this sandbox marker is set (it is sandboxed here).
+            "IS_SANDBOX": "1",
         }.items():
             env_args += ["-e", f"{k}={v}"]
 
-        mounts = [
-            "-v", f"{self._ws}:{self.WS}",
-            "-v", f"{self._case_dir}:{self.CASE}:ro",
-            "-v", f"{self._octomind_config}:{self.CFG}:ro",
-        ]
+        mounts = ["-v", f"{self._octomind_config}:{self.CFG}:ro"]
+        # repo-in-image mode (SWE-bench): the repo lives inside the image at
+        # `workdir`, so no host workspace/case is mounted.
+        if self._mount_workspace:
+            mounts += ["-v", f"{self._ws}:{self._workdir}"]
+        if self._mount_case:
+            mounts += ["-v", f"{self._case_dir}:{self.CASE}:ro"]
         codex_auth = Path.home() / ".codex" / "auth.json"
         if codex_auth.exists():
             mounts += ["-v", f"{codex_auth}:/root/.codex/auth.json:ro"]
 
+        platform_args = ["--platform", self._platform] if self._platform else []
         cmd = [
-            "docker", "run", "-d", "--name", self.name, "-w", self.WS,
+            "docker", "run", "-d", *platform_args, "--name", self.name, "-w", self._workdir,
             *mounts, *env_args, self.image, "sleep", "infinity",
         ]
         proc = subprocess.run(cmd, capture_output=True, text=True)
@@ -220,7 +229,7 @@ class DockerExecutor(Executor):
 
     def run(self, argv, env_overrides=None, input_text=None) -> ExecResult:
         self._ensure()
-        exec_cmd = ["docker", "exec", "-i", "-w", self.WS]
+        exec_cmd = ["docker", "exec", "-i", "-w", self._workdir]
         if env_overrides:
             for k, v in env_overrides.items():
                 exec_cmd += ["-e", f"{k}={v}"]
@@ -237,7 +246,7 @@ class DockerExecutor(Executor):
         )
         if probe.returncode != 0:
             return {"exit_code": 0, "stdout": "", "stderr": "", "elapsed_ms": 0}
-        exec_cmd = ["docker", "exec", "-w", self.WS]
+        exec_cmd = ["docker", "exec", "-w", self._workdir]
         if extra_env:
             for k, v in extra_env.items():
                 exec_cmd += ["-e", f"{k}={v}"]
@@ -251,7 +260,7 @@ class DockerExecutor(Executor):
         return result
 
     def container_workspace(self) -> str:
-        return self.WS
+        return self._workdir
 
     def workspace_host_path(self) -> Path:
         return self._ws

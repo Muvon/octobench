@@ -10,17 +10,19 @@
 4. Add fixtures in `fixtures/`.
 
 ## Add a new provider (tool)
-1. Create `providers/<provider>.py` and implement `Provider.run_task(...)`.
-2. Return normalized fields in `ProviderRunResult`:
+1. Create `providers/<provider>.py` and implement `Provider.run_task(..., executor)`.
+2. Run the agent command via the injected `executor` (so it works in host and docker modes), not `subprocess` directly.
+3. Return normalized fields in `ProviderRunResult`:
    - output text, exit code, elapsed_ms
    - input/cached/output/total tokens
-3. Implement compact provider evidence via `build_provider_evidence(...)` when possible.
-4. Follow the full provider contract in `docs/PROVIDER_INTERFACE.md`.
-5. Register provider in `providers/factory.py`.
+4. Implement compact provider evidence via `build_provider_evidence(...)` when possible.
+5. Follow the full provider contract in `docs/PROVIDER_INTERFACE.md`.
+6. Register provider in `providers/factory.py`.
+7. For `--executor docker`, add the tool's (pinned, prebuilt) binary to `docker/Dockerfile.agent`.
 
 Octomind-specific:
-- Provider implementation uses role `benchmark`.
-- Judge remains separate and hardcoded to Octomind role `judge`.
+- Provider runs octomind's stock coding agent `octomind run developer:general -m <model>`.
+- Judge remains separate, as the Octomind `judge` role (`octomind run judge -m <model>`).
 
 ## Add benchmark model mapping + pricing
 Edit `configs/models.yaml`:
