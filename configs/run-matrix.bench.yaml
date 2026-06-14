@@ -1,0 +1,12 @@
+# Default setups for the multi-domain bench runner (python3 -m cli.bench).
+# Each framework runs at its out-of-the-box default; models are valid keys from
+# configs/models.yaml. Override per run with --providers/--models or --config.
+runs:
+  - provider: claude
+    model: claude-opus-4.5
+
+  - provider: codex
+    model: gpt-5.2-codex
+
+  - provider: octomind
+    model: minimax-m3

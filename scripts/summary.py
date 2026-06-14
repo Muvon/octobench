@@ -31,7 +31,11 @@ def _fmt(v, nd=4):
 def main() -> None:
     arg = sys.argv[1] if len(sys.argv) > 1 else None
     if arg is None:
-        path = _latest_results() or _latest_results("results-swebench")
+        path = (
+            _latest_results()
+            or _latest_results("results-swebench")
+            or _latest_results("results-bench")
+        )
     elif os.path.isdir(arg):
         path = _latest_results(arg)
     else:

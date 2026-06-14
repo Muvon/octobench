@@ -1,0 +1,20 @@
+engine: docker_task
+name: tau2_bench
+domain: agentic-orchestration-tooluse
+fit: needs-harness
+contamination: medium          # public domains, but compositional task generator
+description: >
+  tau2-bench (Sierra): tool-agent-user interaction in service domains (airline /
+  retail / telecom). Verdict = final DB/world state vs expected reward_basis — fully
+  objective. Requires an LLM user-simulator alongside the agent.
+image: ""                      # image with tau2-bench installed (sierra-research/tau2-bench)
+workdir: /workspace
+mount_workspace: true
+source: inline
+instances: []
+notes: >
+  tau2 needs a USER-simulator LLM plus the agent. To wire: build an image with
+  tau2-bench (uv, py>=3.12) and a user-LLM key; per task run the tau2 episode and
+  set verify_cmds to emit the tau2 reward (DB-state + required-actions check),
+  success_regex on reward==1. The compositional task generator lets you mint fresh
+  verifiable instances to mitigate the public-domain contamination.

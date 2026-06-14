@@ -1,0 +1,24 @@
+engine: qa
+name: financebench
+domain: finance
+fit: judge-scorable
+contamination: high            # public since 2023 — sanity reference, not discriminator
+description: >
+  FinanceBench: open-book financial QA over SEC filings (10-K/10-Q/8-K). Graded by
+  the LLM judge against the reference answer + figure. Use as a contaminated sanity
+  reference; for contamination resistance prefer post-cutoff/forward finance benches
+  (StockBench, DABStep) wired via docker_task.
+mode: judge_text
+source: hf
+dataset: PatronusAI/financebench
+hf_config: default
+split: train
+default_limit: 15
+rubric: >
+  Score 0-100 on whether the response's financial figure/fact MATCHES the reference
+  answer (units and magnitude must be correct), with correct sourcing logic. A
+  wrong or fabricated number scores near 0 regardless of explanation quality.
+fields:
+  id: financebench_id
+  question: question
+  reference: answer

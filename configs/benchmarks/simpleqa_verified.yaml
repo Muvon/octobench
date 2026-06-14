@@ -1,0 +1,23 @@
+engine: qa
+name: simpleqa_verified
+domain: frontier-reasoning-knowledge
+fit: judge-scorable
+contamination: high            # by design probes known facts; measures hallucination
+description: >
+  SimpleQA-Verified (Google DeepMind): 1000 short-form factuality prompts, graded by
+  the LLM judge against a reference answer (CORRECT / INCORRECT). A hallucination /
+  factuality signal, not a contamination-hardened reasoning test.
+mode: judge_text
+source: hf
+dataset: google/simpleqa-verified
+hf_config: simpleqa_verified
+split: eval
+default_limit: 20
+rubric: >
+  Grade strictly: score 100 only if the response's factual claim matches the
+  reference answer; score 0 if it is wrong or hallucinated. A hedged "I don't know"
+  scores ~50 (better than a confident wrong answer).
+fields:
+  id: original_index
+  question: problem
+  reference: answer

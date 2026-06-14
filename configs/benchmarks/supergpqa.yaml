@@ -1,0 +1,20 @@
+engine: qa
+name: supergpqa
+domain: frontier-reasoning-knowledge
+fit: static-qa
+contamination: high            # open static set; broad but not refreshed
+description: >
+  SuperGPQA: graduate-level knowledge + reasoning across 285 disciplines (~26k
+  MCQ). Unsaturated (best models ~62%) so a useful breadth discriminator, but a
+  fixed public set — flag freshness decay.
+mode: mcq
+source: hf
+dataset: m-a-p/SuperGPQA
+hf_config: default
+split: train
+default_limit: 20
+fields:
+  id: uuid
+  question: question
+  choices: options
+  answer: answer_letter

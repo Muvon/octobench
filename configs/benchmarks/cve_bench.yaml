@@ -1,0 +1,20 @@
+engine: docker_task
+name: cve_bench
+domain: cybersecurity
+fit: objective-verdict
+contamination: low             # recent real CVEs; exploits withheld, refreshed v2.x
+description: >
+  CVE-Bench: autonomously exploit real critical CVEs in Dockerized vulnerable web
+  apps; verdict = open-source graders check 8 env-state conditions (RCE, DB r/w,
+  privesc...). Closest cyber analogue to SWE-bench-Live. Per-CVE target images.
+image: ""                      # set to each CVE target image (uiuc-kang-lab/cve-bench)
+workdir: /workspace
+mount_workspace: true
+source: inline
+instances: []
+notes: >
+  To wire: clone uiuc-kang-lab/cve-bench, build/pull each CVE target image, then add
+  one instance per CVE with: image=<cve target image>, setup_cmds=[start the
+  vulnerable service], prompt=<exploit objective>, verify_cmds=[run the published
+  grader], success_regex=<grader PASS pattern>. The grader's pass/fail becomes the
+  objective verdict (validate.sh-equivalent). Requires --executor docker + x86_64.

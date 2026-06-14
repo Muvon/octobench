@@ -1,0 +1,37 @@
+engine: qa
+name: legal_qa
+domain: legal
+fit: judge-scorable
+contamination: medium          # inline starter set; expand from real post-cutoff cases
+description: >
+  Legal reasoning starter set graded by the LLM judge against a reference. US/common
+  law. For contamination resistance, replace with post-cutoff case/statute Q&A (cf.
+  Vals AI CaseLaw methodology) or wire LegalBench-RAG via the qa/docker paths.
+mode: judge_text
+source: inline
+rubric: >
+  Score 0-100 on: correct legal rule (40), correct issue-spotting / application (30),
+  flags jurisdiction & uncertainty (15), no hallucinated cases or statutes (15).
+  Any fabricated citation caps the score at 40.
+instances:
+  - id: past-consideration
+    prompt: >
+      Under US common law, is past consideration valid consideration for a new
+      promise? State the general rule and one recognized exception.
+    reference: >
+      Past consideration is generally NOT valid consideration (the act preceded the
+      promise). Recognized exceptions include a new promise to pay a debt barred by
+      the statute of limitations, and the material-benefit rule in some states.
+  - id: at-will-exceptions
+    prompt: Name and briefly explain three common exceptions to at-will employment in the US.
+    reference: >
+      Public-policy exception, implied-contract exception, and the implied covenant
+      of good faith and fair dealing (recognition varies by state).
+  - id: hearsay-definition
+    prompt: >
+      Under the US Federal Rules of Evidence, what is hearsay, and name two common
+      exclusions or exceptions.
+    reference: >
+      Hearsay = an out-of-court statement offered to prove the truth of the matter
+      asserted (FRE 801-802). Examples: present-sense impression (803(1)), excited
+      utterance (803(2)); party-opponent statements are excluded from hearsay (801(d)(2)).

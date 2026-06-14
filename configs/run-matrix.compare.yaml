@@ -1,0 +1,34 @@
+# Comparison matrix: claude-code vs octomind, same + different models.
+#   claude    framework: Sonnet 4 (4-6) and Opus 4 (4-8) via the claude CLI
+#   octomind  framework: SAME anthropic models via octohub (sonnet/opus), plus
+#             minimax-m3, kimi (k2.7-code), glm-5.1 — all via the octohub gateway.
+# `model` is the configs/models.yaml key (for pricing/label); `provider_model` is
+# the exact string passed to the framework. Requires OCTOHUB_API_URL + OCTOHUB_API_KEY.
+runs:
+  - provider: claude
+    model: claude-sonnet-4
+    provider_model: claude-sonnet-4-6
+
+  - provider: claude
+    model: claude-opus-4
+    provider_model: claude-opus-4-8
+
+  - provider: octomind
+    model: claude-sonnet-4
+    provider_model: octohub:sonnet
+
+  - provider: octomind
+    model: claude-opus-4
+    provider_model: octohub:opus
+
+  - provider: octomind
+    model: minimax-m3
+    provider_model: octohub:minimax
+
+  - provider: octomind
+    model: kimi-k2.6
+    provider_model: octohub:kimi
+
+  - provider: octomind
+    model: glm-5.1
+    provider_model: octohub:glm

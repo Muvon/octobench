@@ -9,8 +9,8 @@ git clone "${REPO_URL}" .
 echo "[setup] checking out ${COMMIT_SHA}"
 git checkout "${COMMIT_SHA}"
 
-echo "[setup] running octocode index (this can take time)"
-octocode index
+# echo "[setup] running octocode index (this can take time)"
+# octocode index
 
 MINIMAX_FILE="src/llm/providers/minimax.rs"
 if [[ ! -f "${MINIMAX_FILE}" ]]; then

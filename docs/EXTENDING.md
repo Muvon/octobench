@@ -43,6 +43,32 @@ models:
       octomind: openai:gpt-5.2-codex
 ```
 
+## Add a multi-domain benchmark (`cli.bench`)
+Benchmarks beyond local cases / SWE-bench-Live are config-driven — usually **no
+code** is needed. Create `configs/benchmarks/<name>.yaml` with an `engine` key
+(`qa`, `docker_task`, or `swebench_live`) and run it:
+
+```bash
+python3 -m cli.bench --benchmark <name> --limit N
+python3 scripts/bench_selftest.py        # offline validation (no network/API)
+```
+
+- **`qa`** (`benchmarks/qa.py`) — single-turn QA from a Hugging Face dataset
+  (`source: hf`) or `source: inline`. Modes: `mcq`, `final_answer` (`match:
+  math|numeric|string|set`), `constraint` (IFEval `instruction_id_list`+`kwargs` or
+  inline `constraints`), `judge_text` (set a `rubric`, map a `reference`). Objective
+  modes compute the verdict in `benchmarks/verify.py`; the agent writes its answer to
+  `answer.txt`.
+- **`docker_task`** (`benchmarks/docker_task.py`) — set `image`, `workdir`, and
+  per-instance `setup_cmds` / `verify_cmds` / `success_regex` (matched against agent
+  output + verify output) or `success_exit: true`. The programmatic check is the
+  objective verdict. `ctf_smoke.yaml` is a self-contained working example.
+- **`swebench_live`** — wraps `cli/swebench.py`.
+
+New engines register in `benchmarks/registry.py:ENGINES`. New objective matchers /
+constraint verifiers live in `benchmarks/verify.py`. See
+`configs/benchmarks/README.md` for the catalog and field-mapping details.
+
 ## Notes on scripts
 - Scripts are bash only.
 - Output is **not parsed**; it is fed to the judge.

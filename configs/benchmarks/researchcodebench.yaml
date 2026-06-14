@@ -1,0 +1,20 @@
+engine: docker_task
+name: researchcodebench
+domain: science-research-deepresearch
+fit: objective-verdict
+contamination: low             # 2024-2025 ML papers, mostly post-cutoff
+description: >
+  ResearchCodeBench: implement the novel contribution of a recent ML paper as code
+  that passes the repo's own tests (212 challenges from 2024-2025 papers). Verdict =
+  execution-based pass@1 — SWE-bench-Live-shaped. Strongest science contamination
+  story; some tasks need a GPU.
+image: ""                      # python/ML image with the paper's deps (PatrickHua/ResearchCodeBench)
+workdir: /workspace
+mount_workspace: true
+source: inline
+instances: []
+notes: >
+  To wire: per challenge, use an image with the paper repo + deps, setup_cmds to
+  place the fill-in stub, prompt to the implement-the-function task, verify_cmds to
+  run the repo's tests, success_regex on the test PASS summary. Confirm per-repo
+  test runner; some repos require GPU.

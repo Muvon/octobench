@@ -1,0 +1,18 @@
+engine: qa
+name: mmlu
+domain: frontier-reasoning-knowledge
+fit: static-qa
+contamination: high            # classic, saturated, contaminated — baseline only
+description: >
+  MMLU (cais/mmlu, 'all'): the classic 4-option knowledge MCQ. Include only as a
+  contaminated sanity baseline / regression check, NOT a 2026 discriminator.
+mode: mcq
+source: hf
+dataset: cais/mmlu
+hf_config: all
+split: test
+default_limit: 20
+fields:
+  question: question
+  choices: choices
+  answer: answer        # 0-based integer index

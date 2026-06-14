@@ -1,0 +1,12 @@
+engine: swebench_live
+name: swebench_live
+domain: coding-swe
+fit: objective-verdict
+contamination: low             # post-2024 GitHub issues, monthly refresh
+description: >
+  SWE-bench-Live: real post-2024 GitHub issues, repo-in-image, verdict = the repo's
+  own FAIL_TO_PASS/PASS_TO_PASS tests. The gold-standard contamination-resistant
+  objective coding case. Runs in Docker (per-instance image, x86_64). Splits:
+  lite | verified | test | full.
+split: lite
+default_limit: 1

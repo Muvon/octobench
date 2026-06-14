@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 from typing import TYPE_CHECKING, Any, Optional
@@ -60,7 +61,8 @@ def _extract_from_jsonl(
     Optional[int],
     Optional[int],
 ]:
-    assistant_messages: list[str] = []
+    assistant_messages: list[str] = []  # compacted, for judge-evidence trace
+    full_assistant: list[str] = []       # full text, for the actual verdict
     tool_intents: list[str] = []
     tool_results: list[str] = []
 
@@ -75,9 +77,13 @@ def _extract_from_jsonl(
         typ = str(obj.get("type", "")).strip().lower()
         if typ == "assistant":
             content = obj.get("content")
-            msg = _compact_text(content, limit=360)
-            if msg:
-                assistant_messages.append(msg)
+            # Preserve the FULL message (with newlines) for the verdict — QA/IFEval
+            # grade this text. The compacted copy is only for the judge trace.
+            full = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
+            full = (full or "").strip()
+            if full:
+                full_assistant.append(full)
+                assistant_messages.append(_compact_text(content, limit=360))
         elif typ == "tool_use":
             tool_name = obj.get("tool") or typ
             params = obj.get("params")
@@ -121,7 +127,7 @@ def _extract_from_jsonl(
     if total_tokens is None and input_tokens is not None and output_tokens is not None:
         total_tokens = input_tokens + output_tokens + (cached_tokens or 0) + (reasoning_tokens or 0)
 
-    final_text = assistant_messages[-1] if assistant_messages else ""
+    final_text = full_assistant[-1] if full_assistant else ""
     return (
         final_text,
         assistant_messages[-12:],
@@ -151,10 +157,15 @@ class OctomindProvider(Provider):
         # container's /cfg/octomind.toml) is the upstream baseline default.toml plus
         # a `judge` role; the baseline is untouched, so this is a fair, like-for-like
         # coding run vs `claude -p` / `codex exec`.
+        # Agent tag is task-appropriate: octobench picks octomind's coding agent
+        # (developer:general) for coding cases and its general assistant
+        # (assistant:general) for non-coding tasks (QA / instruction-following),
+        # so we fairly test the framework's best-fit agent per task type.
+        agent_tag = os.environ.get("OCTOMIND_AGENT", "developer:general")
         main_cmd = [
             "octomind",
             "run",
-            "developer:general",
+            agent_tag,
             "--name",
             session_name,
             "--model",

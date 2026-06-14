@@ -1,0 +1,20 @@
+engine: docker_task
+name: terminal_bench
+domain: coding-swe
+fit: objective-verdict
+contamination: medium          # hand-authored, static set; canary-protected
+description: >
+  Terminal-Bench 2.0: hard, realistic CLI/terminal tasks (compile, train, configure,
+  debug) in per-task Docker containers, each with completion tests. Verdict = task
+  test pass. The Harbor harness natively runs claude-code / codex CLI — aligns with
+  octobench's framework axis.
+image: ""                      # per-task container (tbench / harbor-framework)
+workdir: /app
+mount_workspace: false
+source: inline
+instances: []
+notes: >
+  To wire: use a Terminal-Bench task image, set workdir to the task dir, prompt to
+  the task instruction, and verify_cmds to the task's completion test script with
+  success_regex on its PASS output (objective). Alternatively run via the upstream
+  Harbor harness directly; this adapter is for embedding individual tasks as cases.

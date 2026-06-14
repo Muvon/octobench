@@ -1,0 +1,21 @@
+engine: qa
+name: ifeval
+domain: instruction-following
+fit: objective-verdict
+contamination: high            # saturated; use IFBench for a clean read (see ifbench.yaml)
+description: >
+  IFEval: verifiable output-constraint following (word counts, formatting, casing,
+  keywords...). Each constraint is checked PROGRAMMATICALLY (no judge) — a clean
+  validate.sh-style objective verdict. Saturated for frontier models; keep as a
+  format-adherence floor and prefer IFBench for discrimination.
+mode: constraint
+source: hf
+dataset: google/IFEval
+hf_config: default
+split: train
+default_limit: 20
+fields:
+  id: key
+  question: prompt
+  instruction_id_list: instruction_id_list
+  kwargs: kwargs

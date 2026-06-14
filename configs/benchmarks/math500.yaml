@@ -1,0 +1,20 @@
+engine: qa
+name: math500
+domain: math
+fit: objective-verdict
+contamination: medium          # MATH subset, public; objective numeric/symbolic match
+description: >
+  MATH-500: 500 competition-math problems with verifiable final answers. Objective
+  numeric/symbolic match (no judge needed for the verdict). Good cheap math probe;
+  pair with a live set (aime25/MathArena) for contamination resistance.
+mode: final_answer
+match: math
+source: hf
+dataset: HuggingFaceH4/MATH-500
+hf_config: default
+split: test
+default_limit: 20
+fields:
+  id: unique_id
+  question: problem
+  answer: answer

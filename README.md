@@ -79,6 +79,48 @@ agent binaries (`docker/Dockerfile.swebench`) and run repo-in-image at `/testbed
 `validate` runs the instance's `test_cmds` and checks `FAIL_TO_PASS`/`PASS_TO_PASS`.
 Note: instance images are x86_64, so on Apple Silicon they run under emulation.
 
+## Multi-domain benchmarks (`cli.bench`)
+SWE-bench-Live answers "which setup wins at coding". The unified bench runner
+extends that to **every domain** — knowledge, math, instruction-following, health,
+finance, cyber, science, data, marketing, legal, browser, computer-use,
+orchestration — by turning credible, contamination-resistant benchmarks into
+octobench cases. Each benchmark is a YAML config (`configs/benchmarks/*.yaml`) bound
+to one of three adapter engines:
+
+- **`qa`** — single-turn QA. Objective modes (`mcq` / `final_answer` / `constraint`)
+  compute a deterministic verdict; `judge_text` uses the LLM judge against a rubric.
+- **`docker_task`** — env-required benches: run setup + the agent + a verify command
+  in a container, derive a programmatic pass/fail (generalizes SWE-bench-Live).
+- **`swebench_live`** — the existing real-GitHub-issue flow, registered as an adapter.
+
+```bash
+python3 -m cli.bench --list                              # catalog across domains
+# objective MCQ via the local claude login (no API key); --providers/--models pick the setup
+python3 -m cli.bench --benchmark mmlu_pro --limit 5 --providers claude --models claude-sonnet-4
+python3 -m cli.bench --benchmark aime25 --limit 10 --providers claude --models claude-sonnet-4   # math, post-cutoff
+python3 -m cli.bench --benchmark ifeval --limit 10 --providers claude --models claude-sonnet-4 --no-judge
+
+# via octomind over the octohub gateway (export the gateway URL + key first)
+export OCTOHUB_API_URL=https://octohub.muvon.ltd         # OCTOHUB_API_KEY must also be set
+python3 -m cli.bench --benchmark financebench --limit 5 --providers octomind --models minimax-m3
+python3 -m cli.bench --benchmark swebench_live --split lite --limit 1 --providers octomind --models minimax-m3
+python3 -m cli.bench --benchmark ctf_smoke --executor docker   # self-contained Docker proof
+python3 scripts/summary.py results-bench                 # comparison table
+```
+
+Pick setups with `--providers/--models` (pair each model with a provider it maps to in
+`configs/models.yaml`) or a run-matrix (`configs/run-matrix.bench.yaml`). `--no-judge`
+skips the judge — objective benches still score from their verdict. The `octomind`
+provider and the judge route through octohub, so set `OCTOHUB_API_URL`/`OCTOHUB_API_KEY`
+in the run env; the `claude` provider uses your local claude login.
+Benches marked **data** in `--list` run today from Hugging Face / inline data;
+**needs-image** ones need their upstream Docker image (see each config's `notes`).
+The verdict is contamination-resistant when it's objective (`validate.sh`-style),
+so the runner biases there and records the judge as a secondary quality lens.
+Validate the whole framework offline (no network/API) with
+`python3 scripts/bench_selftest.py`. See `configs/benchmarks/README.md` for the full
+catalog and how to add a benchmark.
+
 ## Development checks
 Install and enable pre-commit hooks:
 

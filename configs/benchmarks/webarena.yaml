@@ -1,0 +1,20 @@
+engine: docker_task
+name: webarena
+domain: browser-web
+fit: needs-harness
+contamination: high            # saturated/contaminated; use WebArena-Verified comparators
+description: >
+  WebArena / VisualWebArena: 812 tasks on self-hosted site replicas (CMS, GitLab,
+  Reddit-clone, shopping, maps, wiki). Verdict = programmatic state/string checks.
+  The proven baseline, but contaminated/saturated — for a fresher web signal prefer
+  WebGames (hermetic objective) or REAL/AGI SDK (realevals.xyz, deterministic).
+image: ""                      # the WebArena docker stack (web-arena-x/webarena via BrowserGym)
+workdir: /workspace
+source: inline
+instances: []
+notes: >
+  Browser benches need a browser harness (BrowserGym/Playwright) the bare agent
+  CLIs do not have — so this needs the upstream stack stood up and an agent that can
+  drive a browser. To wire: bring up the WebArena sites, run via BrowserGym, and
+  surface each task's functional-correctness check as verify_cmds/success_regex.
+  Use WebArena-Verified comparators and treat absolute scores skeptically.

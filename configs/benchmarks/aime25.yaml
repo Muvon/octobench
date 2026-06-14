@@ -1,0 +1,20 @@
+engine: qa
+name: aime25
+domain: math
+fit: objective-verdict
+contamination: low             # AIME 2025: post-cutoff for most models, integer answers
+description: >
+  AIME 2025 problems (math-ai/aime25): integer-answer competition math released in
+  2025 — contamination-resistant by recency (the live-competition paradigm, cf.
+  MathArena). Objective exact integer match.
+mode: final_answer
+match: numeric
+source: hf
+dataset: math-ai/aime25
+hf_config: default
+split: test
+default_limit: 30
+fields:
+  id: id
+  question: problem
+  answer: answer

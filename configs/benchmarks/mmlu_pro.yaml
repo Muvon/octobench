@@ -1,0 +1,19 @@
+engine: qa
+name: mmlu_pro
+domain: frontier-reasoning-knowledge
+fit: static-qa
+contamination: high            # public since 2024; objective but memorizable
+description: >
+  MMLU-Pro: 10-option graduate-level knowledge MCQ across many disciplines.
+  Objective letter match. Broad knowledge baseline (not contamination-resistant).
+mode: mcq
+source: hf
+dataset: TIGER-Lab/MMLU-Pro
+hf_config: default
+split: test
+default_limit: 20
+fields:
+  id: question_id
+  question: question
+  choices: options
+  answer: answer        # answer is a letter (A, B, ...)

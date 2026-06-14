@@ -1,0 +1,20 @@
+engine: qa
+name: medxpertqa
+domain: health-medical
+fit: static-qa
+contamination: medium          # data-synthesis + expert review, but static public
+description: >
+  MedXpertQA (Text): board-level medical reasoning MCQ across 17 specialties.
+  Objective letter match. Harder/cleaner than MedQA but a static public set — pair
+  with MedAgentBench (objective agentic) or a live set for contamination resistance.
+mode: mcq
+source: hf
+dataset: TsinghuaC3I/MedXpertQA
+hf_config: Text
+split: test
+default_limit: 20
+fields:
+  id: id
+  question: question
+  choices: options       # letter-keyed dict {"A": ..., "B": ...}
+  answer: label          # gold letter

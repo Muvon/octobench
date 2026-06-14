@@ -43,9 +43,18 @@ def fetch_rows(split: str, length: int = 100, offset: int = 0) -> List[Dict]:
         f"{HF_ROWS}?dataset={urllib.parse.quote(DATASET)}"
         f"&config=default&split={split}&offset={offset}&length={length}"
     )
-    with urllib.request.urlopen(url, timeout=90) as resp:  # noqa: S310 (trusted HF endpoint)
-        data = json.load(resp)
-    return [r["row"] for r in data.get("rows", [])]
+    # The public HF endpoint occasionally drops the TLS connection mid-read; retry.
+    last_err = None
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(url, timeout=90) as resp:  # noqa: S310 (trusted HF endpoint)
+                data = json.load(resp)
+            return [r["row"] for r in data.get("rows", [])]
+        except Exception as e:  # transient TLS/EOF/5xx — back off and retry
+            last_err = e
+            if attempt < 3:
+                time.sleep(1.5 * (attempt + 1))
+    raise RuntimeError(f"HF fetch failed for split '{split}': {last_err}")
 
 
 def _as_list(value) -> List[str]:

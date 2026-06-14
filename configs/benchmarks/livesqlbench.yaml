@@ -1,0 +1,19 @@
+engine: docker_task
+name: livesqlbench
+domain: data-office-spreadsheets
+fit: objective-verdict
+contamination: low             # rolling hidden->dev sets, live schemas
+description: >
+  LiveSQLBench: real-world text-to-SQL on industrial schemas with a rolling
+  hidden->dev refresh. Verdict = execute the generated SQL against the DB and check
+  the result set — objective, validate.sh-shaped. Top wireable data pick.
+image: ""                      # postgres/db image preloaded with the target schema
+workdir: /workspace
+mount_workspace: true
+source: inline
+instances: []
+notes: >
+  To wire: per task, use a DB container preloaded with the schema, prompt to the NL
+  question, agent writes/executes SQL, verify_cmds run the gold query + diff the
+  result set (or run the harness checker), success_regex on the MATCH/PASS line.
+  Pull the newest LiveSQLBench release to keep it contamination-free.

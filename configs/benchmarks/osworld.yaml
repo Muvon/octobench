@@ -1,0 +1,19 @@
+engine: docker_task
+name: osworld
+domain: computer-use-gui-os
+fit: needs-harness
+contamination: high            # de-facto CUA training target; treat scores skeptically
+description: >
+  OSWorld: open-ended real-computer GUI tasks (office, browser, OS settings) with
+  execution-based env-state validators. Verdict maps to validate.sh once the GUI
+  VM/Docker harness is stood up. Contaminated (RL training target) — for a cleaner
+  signal prefer AndroidWorld (random-seed params) or TheAgentCompany (self-hosted).
+image: ""                      # OSWorld Ubuntu VM/Docker provider (xlang-ai/OSWorld)
+workdir: /root
+source: inline
+instances: []
+notes: >
+  OSWorld needs a full GUI VM and a computer-use agent (screenshot+action loop) that
+  the bare coding CLIs do not provide. To wire: stand up the OSWorld provider
+  (Docker/VMware/AWS), drive a computer-use agent, and surface each task's
+  execution-based validator as verify_cmds/success_regex. Heavy infra; x86_64.

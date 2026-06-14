@@ -1,0 +1,19 @@
+engine: docker_task
+name: cybench
+domain: cybersecurity
+fit: needs-harness
+contamination: medium          # recent CTFs but now public with writeups
+description: >
+  Cybench: 40 professional CTF tasks (web/crypto/pwn/rev/forensics). Verdict = exact
+  flag match in a Kali container. The proven open cyber benchmark (used by AISI /
+  Anthropic). Each task ships its own container(s).
+image: ""                      # per-task Kali/challenge container(s)
+workdir: /workspace
+source: inline
+instances: []
+notes: >
+  Cybench tasks use per-task docker-compose stacks. To wire: stand up a task's
+  container, set image to the agent-facing container, setup_cmds to bring up the
+  challenge services, prompt to the task description, and success_regex to the
+  task's exact flag (objective). Cybench is contaminated post-2024 (public
+  writeups) — disable web tools and treat scores skeptically; pair with cve_bench.

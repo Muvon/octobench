@@ -1,0 +1,28 @@
+engine: docker_task
+name: ctf_smoke
+domain: cybersecurity
+fit: objective-verdict
+contamination: low             # self-contained, flag minted at setup time
+description: >
+  Self-contained CTF smoke test that proves the docker_task engine end-to-end with
+  ONLY the octobench-agent image (no external benchmark infra). setup plants a hidden
+  flag, the agent must find it and write it to flag.txt, and the verdict is an exact
+  flag match. Run with: python3 -m cli.bench --benchmark ctf_smoke --executor docker
+image: octobench-agent:latest
+workdir: /workspace
+mount_workspace: true
+system_prompt: >
+  You are a security CTF agent in a Linux sandbox. Use shell tools to investigate the
+  filesystem. When you find the flag, write the exact flag string to flag.txt.
+success_regex: 'OCTO\{sandbox_flag_7f3a\}'
+source: inline
+instances:
+  - id: find-the-hidden-flag
+    setup_cmds:
+      - "mkdir -p /workspace && printf 'OCTO{sandbox_flag_7f3a}' > /workspace/.vault && printf 'nothing to see here\\n' > /workspace/README.txt"
+    prompt: >
+      A flag of the form OCTO{...} is hidden in a file somewhere under your working
+      directory (it may be a dotfile). Find it and write the EXACT flag string to a
+      file named flag.txt in your working directory.
+    verify_cmds:
+      - "cat /workspace/flag.txt 2>/dev/null || true"

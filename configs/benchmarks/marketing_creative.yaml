@@ -1,0 +1,34 @@
+engine: qa
+name: marketing_creative
+domain: marketing-content-creative
+fit: judge-scorable
+contamination: low             # inline briefs; swap/rotate freely to stay fresh
+description: >
+  Marketing / creative-writing starter set graded by the LLM judge against a craft
+  rubric. Marketing has NO objective gold (cf. the landscape report) — this is the
+  judge-rubric path. Calibrate your judge with a meta-eval (Judgemark/LitBench)
+  before trusting scores; rotate/expand briefs to keep them uncontaminated.
+mode: judge_text
+source: inline
+rubric: >
+  Score 0-100 weighting: brief adherence (length/audience/CTA/forbidden words) 35,
+  persuasiveness & clarity 30, originality / cliche-avoidance 20, brand-voice fit 15.
+  Heavily penalize violating an explicit constraint in the brief.
+instances:
+  - id: saas-launch-email
+    prompt: >
+      Write a 120-150 word launch announcement email for a privacy-first password
+      manager aimed at small-business owners. Include one clear call-to-action.
+      Do NOT use the words "revolutionary", "game-changer", or "seamless".
+  - id: ad-headlines
+    prompt: >
+      Write 5 distinct search-ad headlines (max 30 characters each) for an electric
+      cargo bike targeting urban parents. No exclamation marks. Number them 1-5.
+  - id: app-store-blurb
+    prompt: >
+      Write a 60-word App Store description for a meditation app designed for nurses
+      on night shifts. Calm, concrete tone. Make no medical claims.
+  - id: cold-linkedin
+    prompt: >
+      Write a 70-word LinkedIn connection note from a B2B fintech founder to a CFO.
+      One specific value prop, no buzzwords, end with a low-friction ask.

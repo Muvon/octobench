@@ -1,0 +1,21 @@
+engine: docker_task
+name: medagentbench
+domain: health-medical
+fit: objective-verdict
+contamination: low             # synthetic patients, new tasks, agentic format
+description: >
+  MedAgentBench: agentic medical tasks against a Dockerized FHIR server (100
+  synthetic patients, NO real PHI). Deterministic refsol verdict on the returned
+  value / resulting FHIR state — maps to validate.sh exactly like SWE-bench-Live.
+  The top contamination-resistant health fit.
+image: ""                      # the published MedAgentBench FHIR image (HAPI FHIR, :8080)
+workdir: /workspace
+mount_workspace: true
+source: inline
+instances: []
+notes: >
+  To wire: pull the MedAgentBench image (stanfordmlgroup/medagentbench), which runs
+  HAPI FHIR on :8080 with synthetic patients. Per task add an instance with the
+  physician-written prompt, point the agent at the FHIR API, and set verify_cmds to
+  the task's refsol.py check (Query: value match; Action: resulting FHIR state),
+  success_regex on the refsol PASS line. No PHI/DUA needed.

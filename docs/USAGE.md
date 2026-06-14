@@ -89,14 +89,89 @@ repo-in-image at `/testbed` → reset to `base_commit`, apply the test patch, ru
 `test_cmds`, and check `FAIL_TO_PASS`/`PASS_TO_PASS`. Instance images are x86_64
 (emulated on Apple Silicon). Results carry a `swebench.resolved` verdict.
 
+## Multi-domain benchmarks (`cli.bench`)
+The unified runner runs any benchmark in `configs/benchmarks/*.yaml` across the agent
+SETUPS (provider + model + executor) and writes results to `results-bench/<timestamp>/`.
+It reuses the same executor, judge, and scoring as the case/SWE-bench runners, so
+results are directly comparable.
+
+List the catalog (domain, engine, fit, readiness):
+```bash
+python3 -m cli.bench --list
+```
+
+Run a benchmark (each example is verified working):
+```bash
+# objective MCQ (knowledge) via the local claude login — no API key needed
+python3 -m cli.bench --benchmark mmlu --limit 5 --providers claude --models claude-sonnet-4
+
+# instruction-following: programmatic constraint check, no judge required
+python3 -m cli.bench --benchmark ifeval --limit 5 --providers claude --models claude-sonnet-4 --no-judge
+
+# via octomind over the octohub gateway (export the gateway URL + key first)
+export OCTOHUB_API_URL=https://octohub.muvon.ltd      # OCTOHUB_API_KEY must also be set
+python3 -m cli.bench --benchmark mmlu        --limit 5 --providers octomind --models minimax-m3
+python3 -m cli.bench --benchmark financebench --limit 3 --providers octomind --models minimax-m3   # judge-scored
+
+# coding: real GitHub issue, repo-in-image (Docker)
+python3 -m cli.bench --benchmark swebench_live --split lite --limit 1 --providers octomind --models minimax-m3
+
+python3 scripts/summary.py results-bench    # comparison table (latest run)
+```
+
+Flags (superset of `cli.main`):
+- `--benchmark NAME|path` — config under `configs/benchmarks/` (or a `.yaml` path)
+- `--list` — print the catalog and exit
+- `--limit N`, `--split S`, `--instance ID` — instance selection
+- `--providers` / `--models` — cross-product setup selection (or use `--config <run-matrix>`)
+- `--no-judge` — skip the LLM judge; objective benches (`mcq`/`final_answer`/`constraint`)
+  still score from their verdict (saves cost/time; the judge is only a secondary lens there)
+- `--executor host|docker`, `--image`, `--scoring`, `--efficiency`, `--verbosity`,
+  `--out` (default `results-bench`)
+
+Provider/model pairing: each model key in `configs/models.yaml` maps to specific
+providers — pair them correctly (`claude`+`claude-sonnet-4`, `codex`+`gpt-5.2-codex`,
+`octomind`+`minimax-m3`). Cross-product only works for pairs that have a mapping;
+otherwise use a run-matrix (e.g. `configs/run-matrix.bench.yaml`).
+
+Engines & verdict:
+- `qa` — single-turn. `mcq`/`final_answer`/`constraint` produce an OBJECTIVE,
+  contamination-resistant verdict that drives `final_score` (100/0, like SWE-bench-Live);
+  `judge_text` is graded by the LLM judge against a rubric.
+- `docker_task` — env-required benches (CTF/CVE, terminal, FHIR, SQL...): run setup +
+  agent + a verify command in a container and derive a programmatic pass/fail.
+- `swebench_live` — real GitHub issues (wraps `cli.swebench`).
+
+Readiness column in `--list`: **data** = runs now from Hugging Face / inline (needs a
+model login/key); **needs-image** = needs the upstream Docker image (each config's
+`notes` says how to wire it); **docker** = SWE-bench-Live per-instance images.
+
+Auth: the `claude` provider uses your local claude login (no key). The `octomind`
+provider AND the judge route through the octohub gateway, so set `OCTOHUB_API_URL` and
+`OCTOHUB_API_KEY` in the RUN environment — note a non-interactive `ssh host 'cmd'` shell
+does NOT inherit your interactive exports, so put them in the box's profile for remote
+runs. Validate the whole framework offline (no network/API) with
+`python3 scripts/bench_selftest.py`. Full catalog + how to add a benchmark:
+`configs/benchmarks/README.md`.
+
 ## Octomind integration
-- Provider runs octomind's stock coding agent: `octomind run developer:general -m <model>`
+- Provider runs a **task-appropriate** octomind agent (tested fairly per task type):
+  - coding cases (local cases, SWE-bench, `docker_task`) → `developer:general`
+  - non-coding `cli.bench` tasks (QA / instruction-following) → `assistant:general`
+  - selected by `cli.bench` (engine default), overridable per benchmark with
+    `octomind_agent: <tag>` in the config, or globally via the `OCTOMIND_AGENT` env var.
+  - NOTE: the captured final answer is the agent's FULL message (octomind provider
+    keeps full text for the verdict; only the judge-evidence trace is compacted).
+- Provider runs octomind's stock coding agent: `octomind run <agent> -m <model>`
 - Judge runs as a dedicated role: `octomind run judge -m <model>`
   (default `octohub:minimax`, override with `OCTOBENCH_JUDGE_MODEL`)
 - Both use the pinned config via env:
   - `OCTOMIND_CONFIG_PATH={repo_root}/configs/octomind/octomind.toml`
-- That config is octomind's upstream `config-templates/default.toml` kept untouched,
+- That config is octomind's upstream `config-templates/default.toml` (synced to the
+  current template, which includes the `[supervisor]` control plane) kept untouched,
   extended only with the `judge` role and a `websearch = "brave"` capability override.
+  To re-sync after an octomind upgrade: copy the current `config-templates/default.toml`,
+  re-add those two edits, and validate with `scripts/bench_selftest.py` + an octomind smoke.
 
 ## Key outputs
 Each result record contains:
