@@ -1,0 +1,5 @@
+# octomind opus via octohub — inspect prompt-cache behavior on octomind 0.32.0
+runs:
+  - provider: octomind
+    model: claude-opus-4
+    provider_model: octohub:opus

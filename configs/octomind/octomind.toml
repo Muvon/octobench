@@ -642,7 +642,13 @@ knowledge_retention = 10
 # Use a fast, cheap model like Haiku for cost savings (10x cheaper than Sonnet)
 # Cost comparison: Haiku ~$0.0003 vs Sonnet ~$0.003 per compression decision
 [compression.decision]
-model = "openai:gpt-5-mini"
+# Route via octohub, NOT a direct "openai:" model. The bench runs octohub/
+# subscription-only (no OPENAI_API_KEY in-env), so a direct model here fails to
+# authenticate — and octomind then logs "compression failed, continuing session"
+# and skips compaction, so context overgrows past the model's window and the
+# provider rejects with 400 "prompt too long". octohub:gpt-mini → openai:gpt-5-mini
+# on the gateway (which holds the key).
+model = "octohub:gpt-mini"
 max_tokens = 16000  # Enough for decision + summary
 temperature = 0.3  # Lower temperature for consistent decisions
 top_p = 1.0
@@ -663,13 +669,13 @@ ignore_cost = false  # When true, compression decision API cost is not tracked (
 # Master switch for the whole control plane
 enabled = true
 # Shared cheap model for supervisor mechanics (a mechanic may override)
-model = "anthropic:claude-haiku-4-5"
+model = "octohub:haiku"
 
 [supervisor.learning]
 # Enable the learning system
 enabled = true
 # Model for extraction and retrieval LLM calls (cheap model recommended)
-model = "anthropic:claude-haiku-4-5"
+model = "octohub:haiku"
 # Backend: "file" (default, zero deps) or "mcp" (external tool with field mapping)
 backend = "file"
 # Minimum user messages before intermediate learning triggers during auto-compaction

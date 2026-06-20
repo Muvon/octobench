@@ -34,8 +34,13 @@ class CodexProvider(Provider):
             provider_model,
             "-C",
             ws,
+            # danger-full-access (not workspace-write): codex's sandboxed modes wrap
+            # every shell command in bubblewrap (bwrap), which isn't present and can't
+            # run in the unprivileged container — so commands fail before starting. The
+            # container is already the isolation boundary (like claude's IS_SANDBOX=1),
+            # so we let codex run commands directly.
             "-s",
-            "workspace-write",
+            "danger-full-access",
             "--skip-git-repo-check",
             "--output-last-message",
             output_file,

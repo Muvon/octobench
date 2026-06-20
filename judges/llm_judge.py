@@ -62,8 +62,10 @@ def _escape_control_chars_in_json_strings(s: str) -> str:
 def _extract_json(text: str) -> Dict:
     text = _strip_terminal_noise(text)
 
-    # Preferred: explicit tagged payload
-    tagged = re.search(r"<results>\s*(\{.*?\})\s*</results>", text, re.DOTALL)
+    # Preferred: explicit tagged payload. Greedy {.*} (not {.*?}) so a `}` inside a
+    # string value (judge reasoning often quotes code) doesn't truncate the JSON —
+    # the closing </results> tag bounds the match.
+    tagged = re.search(r"<results>\s*(\{.*\})\s*</results>", text, re.DOTALL)
     if tagged:
         payload = tagged.group(1)
         try:
@@ -126,3 +128,10 @@ def run_judge(prompt_payload: Dict, judge_cfg: Dict, workdir: str) -> Dict:
     data["_judge_exit_code"] = result.exit_code
     data["_judge_elapsed_ms"] = result.elapsed_ms
     return data
+
+
+if __name__ == "__main__":
+    # parser self-check: a `}` inside a string value must not truncate the payload
+    out = _extract_json('log noise <results>{"score": 7, "reasoning": "used dict {k: v}"}</results> tail')
+    assert out["score"] == 7 and out["reasoning"].endswith("}"), out
+    print("ok")

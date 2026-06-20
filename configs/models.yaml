@@ -9,6 +9,17 @@ models:
       codex: gpt-5.2-codex
       octomind: openai:gpt-5.2-codex
 
+  # ponytail: gpt-5.5 reuses gpt-5.2-codex pricing as a proxy; actual run cost is
+  # $0 (codex subscription). Only gpt-5.5 is subscription-accessible via codex.
+  gpt-5.5:
+    pricing:
+      input: 1.75
+      cached_input: 0.175
+      output: 14.0
+    providers:
+      codex: gpt-5.5
+      octomind: openai:gpt-5.5
+
   # ===================== Anthropic Models =====================
   claude-opus-4.5:
     pricing:

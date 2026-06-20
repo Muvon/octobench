@@ -1,0 +1,4 @@
+runs:
+  - provider: octomind
+    model: claude-opus-4
+    provider_model: octohub:opus

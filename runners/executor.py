@@ -214,15 +214,23 @@ class DockerExecutor(Executor):
             mounts += ["-v", f"{self._ws}:{self._workdir}"]
         if self._mount_case:
             mounts += ["-v", f"{self._case_dir}:{self.CASE}:ro"]
-        # Tool login credentials (NOT API keys): mounted read-only, like a real
-        # logged-in user. codex -> ~/.codex/auth.json; claude -> ~/.claude/.credentials.json
-        # (on Linux; on macOS claude keeps it in the Keychain, so nothing to mount there).
+        # Tool login credentials (NOT API keys), mounted read-WRITE: codex ->
+        # ~/.codex/auth.json; claude -> ~/.claude/.credentials.json (Linux; on macOS
+        # claude uses the Keychain, so nothing to mount there).
+        #
+        # MUST be writable. These are OAuth logins: the agent refreshes the short-lived
+        # access token mid-run, and the provider ROTATES the refresh token on use
+        # (the old one is invalidated server-side). With a :ro mount the agent gets the
+        # new token but can't save it back, so the run invalidates the host login →
+        # every later run (and the user's own session) gets a 401. Read-write lets the
+        # refreshed token persist. Safe here because agent runs are sequential — no two
+        # containers write the same credential file at once.
         codex_auth = Path.home() / ".codex" / "auth.json"
         if codex_auth.exists():
-            mounts += ["-v", f"{codex_auth}:/root/.codex/auth.json:ro"]
+            mounts += ["-v", f"{codex_auth}:/root/.codex/auth.json:rw"]
         claude_creds = Path.home() / ".claude" / ".credentials.json"
         if claude_creds.exists():
-            mounts += ["-v", f"{claude_creds}:/root/.claude/.credentials.json:ro"]
+            mounts += ["-v", f"{claude_creds}:/root/.claude/.credentials.json:rw"]
 
         platform_args = ["--platform", self._platform] if self._platform else []
         cmd = [
