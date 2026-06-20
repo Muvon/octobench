@@ -758,3 +758,12 @@ welcome = ""
 [roles.mcp]
 server_refs = []
 allowed_tools = []
+
+# octobench: override octocode codesearch server to skip git (works in ephemeral reset repos)
+[[mcp.servers]]
+name = "octocode"
+type = "stdio"
+command = "octocode"
+args = ["mcp", "--no-git"]
+timeout_seconds = 240
+tools = []
