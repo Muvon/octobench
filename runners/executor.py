@@ -208,6 +208,11 @@ class DockerExecutor(Executor):
             env_args += ["-e", f"{k}={v}"]
 
         mounts = ["-v", f"{self._octomind_config}:{self.CFG}:ro"]
+        # octobench: optional octomind binary override (built-from-ref),
+        # mounted over the baked binary so one image serves multiple refs.
+        _ob = os.environ.get("OCTOMIND_BIN")
+        if _ob and Path(_ob).exists():
+            mounts += ["-v", f"{Path(_ob).resolve()}:/usr/local/bin/octomind:ro"]
         # repo-in-image mode (SWE-bench): the repo lives inside the image at
         # `workdir`, so no host workspace/case is mounted.
         if self._mount_workspace:

@@ -666,82 +666,42 @@ ignore_cost = false  # When true, compression decision API cost is not tracked (
 # ═══════════════════════════════════════════════════════════════════════
 
 [supervisor]
-# Master switch for the whole control plane
 enabled = true
-# Shared cheap model for supervisor mechanics (a mechanic may override)
 model = "octohub:haiku"
+claim_check = true
+max_consecutive_steers = 0
 
 [supervisor.learning]
-# Enable the learning system
 enabled = true
-# Model for extraction and retrieval LLM calls (cheap model recommended)
 model = "octohub:haiku"
-# Backend: "file" (default, zero deps) or "mcp" (external tool with field mapping)
 backend = "file"
-# Minimum user messages before intermediate learning triggers during auto-compaction
 min_messages_for_intermediate = 3
-# Maximum lessons to inject into the system prompt per session
 max_inject = 5
 
-# Orientation memory: durable understanding of the subject (decisions,
-# structure, constraints). Injected as working assumptions to verify.
 [supervisor.orientation]
 enabled = true
 max_inject = 5
-# Soft time-decay: entries unused this many days lose confidence (no git needed)
 decay_days = 90
 
-# Detectors: deterministic, free, every turn -- the cheap trigger that decides
-# when (rarely) to wake the model.
 [supervisor.detectors]
-# Identical tool+args this many times in a row -> loop fired
 loop_threshold = 3
-# Turns without new information -> drift candidate
 no_progress_window = 5
-# Inject the self-report status-token instruction and parse it back
+truncation_threshold = 2
+dedup_threshold = 2
+distraction_threshold = 0
+drift_floor = 0.7
 self_report = true
+sequential_threshold = 0
 
-# Verify-gate: on self-reported `done`, run a checklist before accepting.
 [supervisor.gate]
 enabled = true
-# Max gate re-entry iterations (bounds over-verification)
 max_iterations = 2
+verifier_model = "octohub:haiku"
+require_check_after_mutation = true
 
-# MCP backend configuration (uncomment to use instead of file backend):
-# Octobrain example — field_map maps canonical learning fields to the MCP tool's actual arguments.
-# Empty string = omit that field. Missing = omit.
-#
-# backend = "mcp"
-#
-# [supervisor.learning.store]
-# tool = "memorize"
-# [supervisor.learning.store.field_map]
-# content = "content"              # required by memorize
-# title = "title"                  # required by memorize (short summary)
-# memory_type = "memory_type"      # "learning" — valid octobrain category
-# importance = "importance"        # 0.0-1.0
-# confidence = "source"            # maps high/medium/low → user_confirmed/agent_inferred
-# tags = "tags"                    # array of strings, max 10
-# role = "role"
-# project = "project"
-#
-# [supervisor.learning.retrieve]
-# tool = "remember"
-# [supervisor.learning.retrieve.field_map]
-# query = "query"                  # string or array of search terms
-# memory_type = "memory_types"     # passed as ["learning"] array to match octobrain schema
-# role = "role"
-# project = "project"
-# limit = "limit"                  # max 5 for octobrain
+[supervisor.recite]
+enabled = true
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# OCTOBENCH JUDGE ROLE (EXTENSION — does NOT alter baseline behaviour)
-# The baseline above is the untouched octomind default config. We only append a
-# dedicated `judge` role used solely by octobench to evaluate task results.
-# Frameworks under test run the baseline default (`octomind run -m MODEL`); the
-# judge runs as `octomind run judge -m MODEL`. The judge has no tools and emits
-# strict JSON only, so it cannot influence the fairness of benchmarked runs.
-# ═══════════════════════════════════════════════════════════════════════════════
 [[roles]]
 name = "judge"
 temperature = 0.0
@@ -759,11 +719,3 @@ welcome = ""
 server_refs = []
 allowed_tools = []
 
-# octobench: override octocode codesearch server to skip git (works in ephemeral reset repos)
-[[mcp.servers]]
-name = "octocode"
-type = "stdio"
-command = "octocode"
-args = ["mcp", "--no-git"]
-timeout_seconds = 240
-tools = []
