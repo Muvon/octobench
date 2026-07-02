@@ -62,6 +62,39 @@ def fetch_n(
     return out[:n]
 
 
+def fetch_jsonl(
+    url: str,
+    n: int,
+    row_filter: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    """Fetch up to `n` rows from a JSONL file over HTTP (e.g. a GitHub raw URL).
+
+    Streams line-by-line and stops as soon as `n` rows match `row_filter`
+    (field == value equality), so large upstream files are only partially read.
+    """
+    last_err: Optional[Exception] = None
+    for attempt in range(_RETRIES):
+        out: List[Dict[str, Any]] = []
+        try:
+            with urllib.request.urlopen(url, timeout=90) as resp:  # noqa: S310
+                for raw in resp:
+                    line = raw.strip()
+                    if not line:
+                        continue
+                    row = json.loads(line)
+                    if row_filter and any(row.get(k) != v for k, v in row_filter.items()):
+                        continue
+                    out.append(row)
+                    if len(out) >= n:
+                        return out
+            return out
+        except Exception as e:  # transient TLS/EOF/5xx — back off and retry
+            last_err = e
+            if attempt < _RETRIES - 1:
+                time.sleep(1.5 * (attempt + 1))
+    raise RuntimeError(f"JSONL fetch failed for {url}: {last_err}")
+
+
 def get_field(row: Dict[str, Any], path: Optional[str], default: Any = None) -> Any:
     """Read a (possibly dotted, list-indexable) field path from a row.
 

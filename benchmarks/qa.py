@@ -12,6 +12,7 @@ computed from that (objective modes) or handed to the judge (judge_text).
 """
 from __future__ import annotations
 
+import json
 import shutil
 import time
 from pathlib import Path
@@ -46,6 +47,7 @@ DOMAIN_SYSTEM = {
     "finance": "You are an expert financial analyst.",
     "legal": "You are an expert attorney answering a legal question.",
     "science-research-deepresearch": "You are an expert research scientist.",
+    "writing": "You are an expert professional writer, editor, and content strategist.",
 }
 
 
@@ -72,6 +74,10 @@ class QAAdapter(BenchmarkAdapter):
             ds = self.config["dataset"]
             cfg = self.config.get("hf_config", "default")
             rows = hf.fetch_n(ds, split, n, config=cfg)
+            insts = [self._inst_from_hf(i, r) for i, r in enumerate(rows)]
+        elif src == "url":
+            n = limit or int(self.config.get("default_limit", 20))
+            rows = hf.fetch_jsonl(self.config["url"], n, self.config.get("filter"))
             insts = [self._inst_from_hf(i, r) for i, r in enumerate(rows)]
         else:
             raise RuntimeError(f"qa: unknown source '{src}'")
@@ -112,7 +118,7 @@ class QAAdapter(BenchmarkAdapter):
             gold=gold,
             system_prompt=str(get("system_prompt", "") or ""),
             reference=str(get("reference", "") or ""),
-            rubric=str(get("rubric", "") or self.config.get("rubric", "")),
+            rubric=self._rubric_text(get("rubric", None)),
             constraints=constraints,
             choices=choices,
             meta={"domain": self.domain},
@@ -154,6 +160,22 @@ class QAAdapter(BenchmarkAdapter):
             r["_gold_text"] = str(correct)  # stash for gold resolution
             return options
         return None
+
+    def _rubric_text(self, val: Any) -> str:
+        """Per-instance rubric. A criteria LIST (e.g. WritingBench checklists with
+        1-10 scoring bands) is rendered under the config-level rubric preamble."""
+        base = str(self.config.get("rubric", "") or "")
+        if val is None or val == "":
+            return base
+        if isinstance(val, list):
+            items = "\n\n".join(
+                json.dumps(c, ensure_ascii=False, indent=1)
+                if isinstance(c, (dict, list))
+                else str(c)
+                for c in val
+            )
+            return f"{base}\n\nCRITERIA:\n{items}".strip()
+        return str(val)
 
     def _build_constraints(self, r: Dict, f: Dict) -> Any:
         ids = hf.get_field(r, f.get("instruction_id_list"))

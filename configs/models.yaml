@@ -83,7 +83,16 @@ models:
       octomind: google:gemini-2.5-flash
 
   # ===================== GLM (Z.ai) Models =====================
-  glm-5.1:
+  # octohub:glm now serves glm-5.2 (gateway remap 2026-07) — use this key, not glm-5.1.
+  glm-5.2:
+    pricing:                     # ponytail: glm-5.1 pricing as proxy until 5.2 published
+      input: 1.00
+      cached_input: 0.10
+      output: 3.20
+    providers:
+      octomind: octohub:glm
+
+  glm-5.1:                       # historical: octohub:glm served 5.1 before 2026-07
     pricing:
       input: 1.00
       cached_input: 0.10
@@ -165,6 +174,14 @@ models:
     providers:
       octomind: octohub:kimi
 
+  kimi-k2.6-code:
+    pricing:                     # ponytail: kimi-k2.6 pricing as proxy
+      input: 0.10
+      cached_input: 0.01
+      output: 0.60
+    providers:
+      octomind: octohub:kimi-code
+
   kimi-k2-turbo:
     pricing:
       input: 0.15
@@ -189,3 +206,11 @@ models:
       output: 8.00
     providers:
       octomind: deepseek:deepseek-reasoner
+
+  deepseek-4-pro:
+    pricing:                     # ponytail: reasoner pricing as proxy until 4-pro published
+      input: 2.00
+      cached_input: 0.20
+      output: 8.00
+    providers:
+      octomind: octohub:deepseek-pro

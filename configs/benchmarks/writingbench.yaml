@@ -1,0 +1,28 @@
+engine: qa
+name: writingbench
+domain: writing
+fit: judge-scorable
+contamination: medium          # public since 2025-03; queries are long real-world briefs
+description: >
+  WritingBench (X-PLUG/Alibaba, 2025): the proven generative-writing benchmark —
+  1000 real-world writing/editing queries across 6 domains (academic&engineering,
+  finance&business, politics&law, literature&arts, education, advertising&marketing),
+  each shipping 5 query-specific rubric criteria with 1-10 scoring bands designed
+  for LLM-judge evaluation. English subset, fetched live from the official repo
+  (github.com/X-PLUG/WritingBench). Answers "who is the best content writer/editor".
+mode: judge_text
+octomind_agent: content:article   # octomind's tap writer agent (not assistant:general)
+source: url
+url: https://raw.githubusercontent.com/X-PLUG/WritingBench/main/benchmark_query/benchmark_all.jsonl
+filter: { lang: en }
+default_limit: 12
+rubric: >
+  Grade with the official WritingBench protocol: score the response on EACH of the
+  five criteria below using that criterion's 1-10 band descriptions, then report the
+  overall score 0-100 (average of the five criterion scores x 10). Heavily penalize
+  ignoring an explicit requirement of the query (format, length, audience, source
+  material). Judge the writing itself, not the effort.
+fields:
+  id: index
+  question: query
+  rubric: checklist

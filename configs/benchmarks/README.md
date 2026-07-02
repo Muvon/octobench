@@ -49,6 +49,7 @@ Benches marked **data** in `--list` run today against Hugging Face / inline data
 - **health:** `medxpertqa` (board-level MCQ)
 - **finance:** `financebench` (judge vs reference)
 - **marketing/creative:** `marketing_creative` (judge rubric, inline briefs)
+- **writing:** `writingbench` (per-query WritingBench rubrics, official JSONL over HTTP)
 - **legal:** `legal_qa` (judge rubric, inline starters)
 
 ## ready = needs-image / docker → wire the upstream env
