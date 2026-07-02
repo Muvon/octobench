@@ -1,0 +1,4 @@
+runs:
+  - provider: octomind
+    model: gpt-5.5
+    provider_model: openai:gpt-5.5

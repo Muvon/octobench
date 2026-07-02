@@ -1,0 +1,24 @@
+# SWE-bench: same pool as the writingbench 10-task run, coding-tuned octohub mappings
+# (octohub:glm=glm-5.2, octohub:kimi-code=kimi-2.6-code) + deepseek-4-pro.
+runs:
+  - provider: codex
+    model: gpt-5.5
+    provider_model: gpt-5.5
+  - provider: claude
+    model: claude-sonnet-4
+    provider_model: claude-sonnet-4-6
+  - provider: claude
+    model: claude-opus-4
+    provider_model: claude-opus-4-8
+  - provider: octomind
+    model: glm-5.2
+    provider_model: octohub:glm
+  - provider: octomind
+    model: minimax-m3
+    provider_model: octohub:minimax
+  - provider: octomind
+    model: kimi-k2.6-code
+    provider_model: octohub:kimi-code
+  - provider: octomind
+    model: deepseek-4-pro
+    provider_model: octohub:deepseek-pro

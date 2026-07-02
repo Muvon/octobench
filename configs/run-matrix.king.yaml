@@ -1,0 +1,8 @@
+# codex (default, ChatGPT-sub gpt-5.5) vs octomind via octohub:glm — "who is the king"
+runs:
+  - provider: codex
+    model: gpt-5.5
+    provider_model: gpt-5.5
+  - provider: octomind
+    model: glm-5.1
+    provider_model: octohub:glm

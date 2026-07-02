@@ -1,0 +1,4 @@
+runs:
+  - provider: octomind
+    model: kimi-k2.6
+    provider_model: octohub:kimi-code

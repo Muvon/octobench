@@ -1,0 +1,14 @@
+# Final comparison: codex (default) vs 3 octomind/octohub models.
+runs:
+  - provider: codex
+    model: gpt-5.5
+    provider_model: gpt-5.5
+  - provider: octomind
+    model: glm-5.1
+    provider_model: octohub:glm
+  - provider: octomind
+    model: minimax-m3
+    provider_model: octohub:minimax
+  - provider: octomind
+    model: kimi-k2.6
+    provider_model: octohub:kimi

@@ -1,26 +1,81 @@
+# Pricing per 1M tokens (USD): input = cache-miss input, cached_input = cache-read,
+# output = completion. Actualized 2026-07-02 from official provider pricing pages
+# (OpenAI developers.openai.com, Anthropic platform.claude.com, Google ai.google.dev,
+# Z.ai, MiniMax platform.minimax.io, Moonshot platform.kimi.ai, DeepSeek api-docs).
+# Tiered models (long-context surcharges) use the base tier.
 models:
   # ===================== OpenAI Models =====================
-  gpt-5.2-codex:
-    pricing:
-      input: 1.75
-      cached_input: 0.175
-      output: 14.0
-    providers:
-      codex: gpt-5.2-codex
-      octomind: openai:gpt-5.2-codex
-
-  # ponytail: gpt-5.5 reuses gpt-5.2-codex pricing as a proxy; actual run cost is
-  # $0 (codex subscription). Only gpt-5.5 is subscription-accessible via codex.
   gpt-5.5:
-    pricing:
-      input: 1.75
-      cached_input: 0.175
-      output: 14.0
+    pricing:                     # note: codex CLI runs are ChatGPT-subscription ($0 actual)
+      input: 5.00
+      cached_input: 0.50
+      output: 30.00
     providers:
       codex: gpt-5.5
       octomind: openai:gpt-5.5
 
+  gpt-5.4:
+    pricing:
+      input: 2.50
+      cached_input: 0.25
+      output: 15.00
+    providers:
+      octomind: openai:gpt-5.4
+
+  gpt-5.4-mini:
+    pricing:
+      input: 0.75
+      cached_input: 0.075
+      output: 4.50
+    providers:
+      octomind: openai:gpt-5.4-mini
+
+  gpt-5.3-codex:
+    pricing:
+      input: 1.75
+      cached_input: 0.175
+      output: 14.00
+    providers:
+      codex: gpt-5.3-codex
+      octomind: openai:gpt-5.3-codex
+
+  gpt-5.2-codex:                 # legacy: no longer on the OpenAI price list; kept for old matrices
+    pricing:
+      input: 1.75
+      cached_input: 0.175
+      output: 14.00
+    providers:
+      codex: gpt-5.2-codex
+      octomind: openai:gpt-5.2-codex
+
   # ===================== Anthropic Models =====================
+  claude-fable-5:
+    pricing:
+      input: 10.00
+      cached_input: 1.00
+      output: 50.00
+    providers:
+      claude: claude-fable-5
+      octomind: anthropic:claude-fable-5
+
+  claude-opus-4:                 # maps to opus 4.8; opus 4.6+ tier is $5/$25 (was wrongly 15/75)
+    pricing:
+      input: 5.00
+      cached_input: 0.50
+      output: 25.00
+    providers:
+      claude: claude-opus-4-8
+      octomind: anthropic:claude-opus-4-8
+
+  claude-opus-4.7:
+    pricing:
+      input: 5.00
+      cached_input: 0.50
+      output: 25.00
+    providers:
+      claude: claude-opus-4-7
+      octomind: anthropic:claude-opus-4-7
+
   claude-opus-4.5:
     pricing:
       input: 5.00
@@ -30,16 +85,16 @@ models:
       claude: claude-opus-4-5
       octomind: anthropic:claude-opus-4-5
 
-  claude-opus-4:
-    pricing:
-      input: 15.00
-      cached_input: 1.50
-      output: 75.00
+  claude-sonnet-5:
+    pricing:                     # standard tier; intro $2/$10 applies through 2026-08-31
+      input: 3.00
+      cached_input: 0.30
+      output: 15.00
     providers:
-      claude: claude-opus-4-8
-      octomind: anthropic:claude-opus-4-8
+      claude: claude-sonnet-5
+      octomind: anthropic:claude-sonnet-5
 
-  claude-sonnet-4:
+  claude-sonnet-4:               # maps to sonnet 4.6
     pricing:
       input: 3.00
       cached_input: 0.30
@@ -48,47 +103,55 @@ models:
       claude: claude-sonnet-4-6
       octomind: anthropic:claude-sonnet-4-6
 
-  claude-sonnet-3.7:
+  claude-haiku-4.5:
     pricing:
-      input: 3.00
-      cached_input: 0.30
-      output: 15.00
+      input: 1.00
+      cached_input: 0.10
+      output: 5.00
     providers:
-      claude: claude-3-7-sonnet
-      octomind: anthropic:claude-3-7-sonnet
+      claude: claude-haiku-4-5
+      octomind: anthropic:claude-haiku-4-5
 
   # ===================== Google Gemini Models =====================
   gemini-3-pro:
-    pricing:
+    pricing:                     # <=200k tier; >200k is 4.00/18.00
       input: 2.00
       cached_input: 0.20
       output: 12.00
     providers:
       octomind: google:gemini-3-pro
 
-  gemini-2.5-pro:
+  gemini-3.5-flash:
     pricing:
+      input: 1.50
+      cached_input: 0.15
+      output: 9.00
+    providers:
+      octomind: google:gemini-3.5-flash
+
+  gemini-2.5-pro:
+    pricing:                     # <=200k tier; output was wrongly 5.00
       input: 1.25
       cached_input: 0.125
-      output: 5.00
+      output: 10.00
     providers:
       octomind: google:gemini-2.5-pro
 
   gemini-2.5-flash:
-    pricing:
-      input: 0.075
-      cached_input: 0.0075
-      output: 0.30
+    pricing:                     # was wrongly 0.075/0.30 (flash-lite-era numbers)
+      input: 0.30
+      cached_input: 0.03
+      output: 2.50
     providers:
       octomind: google:gemini-2.5-flash
 
   # ===================== GLM (Z.ai) Models =====================
-  # octohub:glm now serves glm-5.2 (gateway remap 2026-07) — use this key, not glm-5.1.
+  # octohub:glm serves glm-5.2 (gateway remap 2026-07) — use this key, not glm-5.1.
   glm-5.2:
-    pricing:                     # ponytail: glm-5.1 pricing as proxy until 5.2 published
-      input: 1.00
-      cached_input: 0.10
-      output: 3.20
+    pricing:
+      input: 1.40
+      cached_input: 0.26
+      output: 4.40
     providers:
       octomind: octohub:glm
 
@@ -101,14 +164,14 @@ models:
       octomind: octohub:glm
 
   glm-5:
-    pricing:
-      input: 1.00
-      cached_input: 0.10
-      output: 3.20
+    pricing:                     # cached_input estimated at the family's ~0.19x ratio
+      input: 0.60
+      cached_input: 0.11
+      output: 1.92
     providers:
       octomind: zai:glm-5
 
-  glm-5-code:
+  glm-5-code:                    # not on the current Z.ai price list; last known values
     pricing:
       input: 1.20
       cached_input: 0.12
@@ -119,12 +182,12 @@ models:
   glm-4.7:
     pricing:
       input: 0.60
-      cached_input: 0.06
+      cached_input: 0.11
       output: 2.20
     providers:
       octomind: zai:glm-4.7
 
-  glm-4.6:
+  glm-4.6:                       # legacy, off the current price list; last known values
     pricing:
       input: 0.60
       cached_input: 0.06
@@ -134,12 +197,20 @@ models:
 
   # ===================== MiniMax Models =====================
   minimax-m3:
-    pricing:
-      input: 0.27
-      cached_input: 0.027
-      output: 0.95
+    pricing:                     # <=512k tier; >512k doubles
+      input: 0.30
+      cached_input: 0.06
+      output: 1.20
     providers:
       octomind: octohub:minimax
+
+  minimax-m2.7:
+    pricing:
+      input: 0.30
+      cached_input: 0.06
+      output: 1.20
+    providers:
+      octomind: minimax:MiniMax-M2.7
 
   minimax-m2.5:
     pricing:
@@ -151,66 +222,76 @@ models:
 
   minimax-m2.1:
     pricing:
-      input: 0.27
-      cached_input: 0.027
-      output: 0.95
+      input: 0.30
+      cached_input: 0.03
+      output: 1.20
     providers:
       octomind: minimax:MiniMax-M2.1
 
   # ===================== Moonshot (Kimi) Models =====================
-  kimi-k2.5:
-    pricing:
-      input: 0.10
-      cached_input: 0.01
-      output: 0.60
-    providers:
-      octomind: moonshot:kimi-k2.5
-
   kimi-k2.6:
-    pricing:
-      input: 0.10
-      cached_input: 0.01
-      output: 0.60
+    pricing:                     # was wrongly 0.10/0.60 (k2-era numbers)
+      input: 0.95
+      cached_input: 0.16
+      output: 4.00
     providers:
       octomind: octohub:kimi
 
   kimi-k2.6-code:
-    pricing:                     # ponytail: kimi-k2.6 pricing as proxy
-      input: 0.10
-      cached_input: 0.01
-      output: 0.60
+    pricing:                     # ponytail: k2.6 pricing as proxy — code variant not published
+      input: 0.95
+      cached_input: 0.16
+      output: 4.00
     providers:
       octomind: octohub:kimi-code
 
+  kimi-k2.5:
+    pricing:
+      input: 0.60
+      cached_input: 0.10
+      output: 3.00
+    providers:
+      octomind: moonshot:kimi-k2.5
+
   kimi-k2-turbo:
     pricing:
-      input: 0.15
-      cached_input: 0.015
-      output: 0.60
+      input: 1.15
+      cached_input: 0.15
+      output: 8.00
     providers:
       octomind: moonshot:kimi-k2-turbo
 
   # ===================== DeepSeek Models =====================
+  # deepseek-chat / deepseek-reasoner are aliases of deepseek-v4-flash (non-thinking /
+  # thinking) and are deprecated upstream on 2026-07-24 — prefer deepseek-v4-flash.
+  deepseek-v4-flash:
+    pricing:
+      input: 0.14
+      cached_input: 0.0028
+      output: 0.28
+    providers:
+      octomind: deepseek:deepseek-v4-flash
+
   deepseek-chat:
     pricing:
-      input: 0.50
-      cached_input: 0.05
-      output: 2.00
+      input: 0.14
+      cached_input: 0.0028
+      output: 0.28
     providers:
       octomind: deepseek:deepseek-chat
 
   deepseek-reasoner:
     pricing:
-      input: 2.00
-      cached_input: 0.20
-      output: 8.00
+      input: 0.14
+      cached_input: 0.0028
+      output: 0.28
     providers:
       octomind: deepseek:deepseek-reasoner
 
   deepseek-4-pro:
-    pricing:                     # ponytail: reasoner pricing as proxy until 4-pro published
-      input: 2.00
-      cached_input: 0.20
-      output: 8.00
+    pricing:                     # promo rate; standard post-promo is 1.74/3.48
+      input: 0.435
+      cached_input: 0.003625
+      output: 0.87
     providers:
       octomind: octohub:deepseek-pro
