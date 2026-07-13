@@ -1,0 +1,29 @@
+engine: qa
+name: facts_grounding
+domain: grounding-factuality
+fit: judge-scorable
+contamination: medium          # public half of FACTS (860 of 1719); private half withheld
+description: >
+  FACTS Grounding (Google DeepMind, 2024): long-form answers grounded STRICTLY in a
+  supplied context document (up to ~32k tokens) — the trusted attribution/faithfulness
+  benchmark. Official public examples set (google/FACTS-grounding-public, 860 rows;
+  full_prompt = system instruction + user request + document). Complements
+  simpleqa_verified (closed-book factuality) with grounded generation. ~7% of
+  upstream rows carry stray literal "{instruction}"/"{question}" tokens (request and
+  document are intact) — identical noise for every setup, left as-is.
+mode: judge_text
+source: hf
+dataset: google/FACTS-grounding-public
+hf_config: examples
+split: public
+default_limit: 10
+rubric: >
+  Official FACTS Grounding protocol, two phases. Phase 1 — ELIGIBILITY: the response
+  must genuinely address the user request (a refusal, an off-topic answer, or an
+  unrequested document summary is ineligible) -> score 0. Phase 2 — GROUNDING: every
+  factual claim must be directly supported by the provided context document; any claim
+  from outside knowledge or contradicting the document is a grounding violation.
+  Eligible AND fully grounded -> 100. Ineligible or materially ungrounded -> 0. Use
+  intermediate scores only for a single minor unsupported-but-harmless aside (60-80).
+fields:
+  question: full_prompt

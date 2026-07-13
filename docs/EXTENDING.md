@@ -54,15 +54,20 @@ python3 scripts/bench_selftest.py        # offline validation (no network/API)
 ```
 
 - **`qa`** (`benchmarks/qa.py`) — single-turn QA from a Hugging Face dataset
-  (`source: hf`) or `source: inline`. Modes: `mcq`, `final_answer` (`match:
-  math|numeric|string|set`), `constraint` (IFEval `instruction_id_list`+`kwargs` or
-  inline `constraints`), `judge_text` (set a `rubric`, map a `reference`). Objective
-  modes compute the verdict in `benchmarks/verify.py`; the agent writes its answer to
-  `answer.txt`.
+  (`source: hf`, gated sets read `HF_TOKEN`), a JSONL URL (`source: url`), or
+  `source: inline`. Modes: `mcq`, `final_answer` (`match: math|numeric|string|set|letter`;
+  `letter` compares the leading choice letter, e.g. HLE), `constraint` (IFEval
+  `instruction_id_list`+`kwargs` or inline `constraints`; IFBench's 58 ids are delegated
+  to `benchmarks/ifbench_vendor/`, needs the requirements.txt deps), `judge_text` (set a
+  `rubric`, map a `reference`; a chat-message-list `question` is rendered as a transcript).
+  Objective modes compute the verdict in `benchmarks/verify.py`; the agent writes its
+  answer to `answer.txt`.
 - **`docker_task`** (`benchmarks/docker_task.py`) — set `image`, `workdir`, and
-  per-instance `setup_cmds` / `verify_cmds` / `success_regex` (matched against agent
-  output + verify output) or `success_exit: true`. The programmatic check is the
-  objective verdict. `ctf_smoke.yaml` is a self-contained working example.
+  `setup_cmds` / `verify_cmds` / `success_regex` (matched against agent output + verify
+  output) or `success_exit: true`, per-instance or config-level. The programmatic check
+  is the objective verdict. `ctf_smoke.yaml` is a self-contained working example;
+  `tau2_bench.yaml` (telecom solo, image `docker/Dockerfile.tau2`) drives tau2's tools
+  via a shell bridge and is scored by tau2's own evaluator.
 - **`swebench_live`** — wraps `cli/swebench.py`.
 
 New engines register in `benchmarks/registry.py:ENGINES`. New objective matchers /

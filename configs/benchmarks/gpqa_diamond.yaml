@@ -1,0 +1,22 @@
+engine: qa
+name: gpqa_diamond
+domain: frontier-reasoning-knowledge
+fit: static-qa
+contamination: high            # 2023 public set with canary string; the standard model-card bench
+description: >
+  GPQA Diamond (Rein et al., 2023): the 198 hardest "Google-proof" graduate-level
+  science MCQs — the knowledge benchmark every lab reports on model cards. Source is
+  a 1:1 public mirror of the gated Idavidrein/gpqa diamond CSV (original columns);
+  choices are assembled from correct+incorrect fields and deterministically rotated
+  per Record ID.
+mode: mcq
+source: hf
+dataset: nmayorga7/gpqa_diamond
+hf_config: default
+split: train
+default_limit: 20
+fields:
+  id: Record ID
+  question: Question
+  correct: Correct Answer
+  incorrect_fields: ["Incorrect Answer 1", "Incorrect Answer 2", "Incorrect Answer 3"]

@@ -60,6 +60,11 @@ def test_final_answer() -> None:
     check("math boxed", verify.final_answer_match(r"so \boxed{42}", "42", "math"))
     check("string norm", verify.final_answer_match("Hello, World.", "hello world", "string"))
     check("numeric wrong", not verify.final_answer_match("69", 70, "numeric"))
+    # letter mode (HLE multipleChoice): bare letter and "letter. text" both match
+    check("letter bare", verify.final_answer_match("D", "D", "letter"))
+    check("letter with text", verify.final_answer_match("D. Weak Non-Sadism", "D", "letter"))
+    check("letter paren", verify.final_answer_match("(C)", "C", "letter"))
+    check("letter wrong", not verify.final_answer_match("A. Something", "D", "letter"))
 
 
 def test_constraints() -> None:
@@ -80,6 +85,25 @@ def test_constraints() -> None:
     inline = [{"type": "lowercase"}, {"type": "word_count", "relation": "at most", "num_words": 3}]
     ok2, _ = verify.verify_constraints("all lower", inline)
     check("inline lowercase+short pass", ok2 is True)
+
+
+def test_ifbench() -> None:
+    """Vendored IFBench checkers (needs nltk/emoji/syllapy; first run may download
+    nltk corpora into benchmarks/ifbench_vendor/.nltk_data)."""
+    spec = {
+        "instruction_id_list": ["count:word_count_range"],
+        "kwargs": [{"min_words": 3, "max_words": 5}],
+    }
+    ok, d = verify.verify_constraints("one two three four", spec)
+    check("ifbench word_count_range pass", ok is True, str(d))
+    bad, _ = verify.verify_constraints("one two", spec)
+    check("ifbench word_count_range fail", bad is False)
+    mixed = {
+        "instruction_id_list": ["punctuation:no_comma", "count:unique_word_count"],
+        "kwargs": [{}, {"N": 3}],
+    }
+    ok2, d2 = verify.verify_constraints("red green blue red", mixed)
+    check("ifeval+ifbench mixed pass", ok2 is True, str(d2))
 
 
 def test_scoring() -> None:
@@ -124,6 +148,7 @@ def main() -> None:
     test_mcq()
     test_final_answer()
     test_constraints()
+    test_ifbench()
     test_scoring()
     print(f"\n{_passed} passed, {_failed} failed")
     sys.exit(1 if _failed else 0)

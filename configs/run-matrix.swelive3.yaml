@@ -1,0 +1,11 @@
+# SWE-bench-Live 100-task run: 3 sub/gateway arms against each instance's image.
+#   codex gpt-5.5   — ChatGPT subscription ($0 marginal)
+#   claude opus-4.8 — Claude login subscription ($0 marginal; API key blanked)
+#   octomind glm-5.2 — octohub gateway (pay-per-token — the only real cost)
+runs:
+  - provider: codex
+    model: gpt-5.5
+  - provider: claude
+    model: claude-opus-4
+  - provider: octomind
+    model: glm-5.2

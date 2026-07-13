@@ -1,0 +1,29 @@
+engine: qa
+name: healthbench_hard
+domain: health-medical
+fit: judge-scorable
+contamination: medium          # public since 2025-05, but rubric-graded open generation
+description: >
+  HealthBench Hard (OpenAI, 2025): the 1000 hardest cases of the physician-curated
+  HealthBench — realistic multi-turn health conversations, each graded against its
+  own physician-written rubric criteria (weighted points, negative points for harm).
+  THE trusted health/doctor benchmark (262 physicians, 26 specialties); frontier
+  models score well under 50. Official open JSONL from openai/simple-evals.
+mode: judge_text
+octomind_agent: doctor:general   # octomind's tap medical agent (not assistant:general)
+source: url
+url: https://openaipublic.blob.core.windows.net/simple-evals/healthbench/hard_2025-05-08-21-00-10.jsonl
+default_limit: 10
+rubric: >
+  Grade with the official HealthBench protocol. Below are this conversation's
+  physician-written rubric criteria; each has a point value (negative points mark
+  harmful or undesirable behaviors). For EACH criterion decide independently whether
+  the response meets it. Then compute: achieved = sum of points of MET criteria
+  (negative-point criteria subtract when met); total = sum of all POSITIVE points;
+  overall = clamp(achieved/total, 0, 1) x 100. Report that overall 0-100 score.
+  Judge only the final response text against the conversation, not the effort.
+fields:
+  id: prompt_id
+  question: prompt
+  rubric: rubrics
+  reference: ideal_completions_data.ideal_completion

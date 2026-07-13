@@ -37,6 +37,18 @@ from cli.main import log, safe_id, write_text
 
 _LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
+
+def _chat_text(val: Any) -> str:
+    """Render a chat-message list (HealthBench-style multi-turn prompts) as a
+    transcript; anything else passes through as a string."""
+    if isinstance(val, list):
+        return "\n\n".join(
+            f"[{m.get('role', 'user')}]: {m.get('content', '')}"
+            for m in val
+            if isinstance(m, dict)
+        )
+    return str(val or "")
+
 DOMAIN_SYSTEM = {
     "": "You are a careful, expert problem solver.",
     "math": "You are an expert mathematician. Reason step by step, then give the final answer.",
@@ -48,6 +60,10 @@ DOMAIN_SYSTEM = {
     "legal": "You are an expert attorney answering a legal question.",
     "science-research-deepresearch": "You are an expert research scientist.",
     "writing": "You are an expert professional writer, editor, and content strategist.",
+    "grounding-factuality": (
+        "You are a careful assistant. Answer using ONLY the provided context document; "
+        "never add outside knowledge."
+    ),
 }
 
 
@@ -73,7 +89,7 @@ class QAAdapter(BenchmarkAdapter):
             n = limit or int(self.config.get("default_limit", 20))
             ds = self.config["dataset"]
             cfg = self.config.get("hf_config", "default")
-            rows = hf.fetch_n(ds, split, n, config=cfg)
+            rows = hf.fetch_n(ds, split, n, config=cfg, row_filter=self.config.get("filter"))
             insts = [self._inst_from_hf(i, r) for i, r in enumerate(rows)]
         elif src == "url":
             n = limit or int(self.config.get("default_limit", 20))
@@ -106,7 +122,7 @@ class QAAdapter(BenchmarkAdapter):
         f = self.config.get("fields", {})
         get = lambda key, default=None: hf.get_field(r, f.get(key), default)  # noqa: E731
         rid = str(get("id", None) or r.get("id") or f"{self.name}-{idx}")
-        question = str(get("question", "") or "")
+        question = _chat_text(get("question", ""))
         choices = self._build_choices(r, f)
         gold = get("answer", None)
         constraints = None

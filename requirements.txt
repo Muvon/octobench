@@ -1,1 +1,6 @@
 PyYAML>=6.0
+# vendored allenai/IFBench constraint checkers (benchmarks/ifbench_vendor)
+nltk>=3.8
+emoji>=2.0
+syllapy>=0.7
+setuptools<81   # syllapy imports pkg_resources, removed in setuptools>=81

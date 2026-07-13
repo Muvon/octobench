@@ -152,6 +152,13 @@ def final_answer_match(response: str, gold: Any, mode: str = "math", tol: float 
     cand = extract_final(response)
     gold_s = str(gold)
 
+    if mode == "letter":
+        # gold is a choice letter (e.g. "D"); accept "D", "D)", "D. Weak Non-Sadism",
+        # "(D)" — anything whose leading token is that letter (HLE multipleChoice).
+        gl = gold_s.strip().upper()
+        m = re.match(r"\s*\(?([A-Za-z])\)?[.):\s]", cand + " ")
+        return bool(m) and m.group(1).upper() == gl
+
     if mode in ("numeric", "math"):
         gf, cf = _to_float(gold_s), _to_float(cand)
         if gf is not None and cf is not None:
@@ -343,6 +350,39 @@ IFEVAL_VERIFIERS = {
     "combination:repeat_prompt": _v_repeat_prompt,
 }
 
+# ---------------------------------------------------------------------------
+# IFBench delegation (vendored allenai/IFBench checkers, benchmarks/ifbench_vendor)
+# ---------------------------------------------------------------------------
+
+
+class ConstraintEngineError(RuntimeError):
+    """The constraint engine itself is unusable (missing vendored deps) — abort
+    the run loudly instead of silently mis-scoring."""
+
+
+_IFBENCH_REGISTRY: Optional[Dict[str, Any]] = None
+
+
+def _ifbench_check(cid: str, kwargs: Dict[str, Any], text: str) -> Optional[bool]:
+    """Run one vendored IFBench checker; None when `cid` is not an IFBench id."""
+    global _IFBENCH_REGISTRY
+    if _IFBENCH_REGISTRY is None:
+        try:
+            from benchmarks.ifbench_vendor import INSTRUCTION_DICT
+        except ImportError as e:
+            raise ConstraintEngineError(
+                f"constraint '{cid}' needs the vendored IFBench engine — "
+                f"pip install nltk emoji syllapy 'setuptools<81' ({e})"
+            ) from e
+        _IFBENCH_REGISTRY = INSTRUCTION_DICT
+    cls = _IFBENCH_REGISTRY.get(cid)
+    if cls is None:
+        return None
+    checker = cls(cid)
+    checker.build_description(**kwargs)
+    return bool(checker.check_following(text))
+
+
 # Also accept short type names in inline configs.
 _SHORT_ALIASES = {
     "keywords": "keywords:existence",
@@ -400,17 +440,23 @@ def verify_constraints(response: str, constraints: Any) -> Tuple[Optional[bool],
         # IFEval kwargs carry every possible key with None for the unused ones;
         # drop None so verifiers fall back to their defaults instead of int(None).
         kw = {k: v for k, v in (kw or {}).items() if v is not None}
-        if fn is None:
-            results.append({"id": cid, "status": "skipped"})
-            continue
-        recognized += 1
         try:
-            ok = bool(fn(text, kw))
+            if fn is not None:
+                ok = bool(fn(text, kw))
+            else:
+                ib = _ifbench_check(cid, kw, text)
+                if ib is None:
+                    results.append({"id": cid, "status": "skipped"})
+                    continue
+                ok = ib
+        except ConstraintEngineError:
+            raise
         except Exception as e:  # a buggy verifier must not crash the run
-            ok = False
+            recognized += 1
             results.append({"id": cid, "status": "error", "error": str(e)})
             all_pass = False
             continue
+        recognized += 1
         results.append({"id": cid, "status": "pass" if ok else "fail"})
         all_pass = all_pass and ok
 

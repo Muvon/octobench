@@ -13,9 +13,9 @@ This file is the entrypoint for contributors and agents.
 - `configs/`: model registry, run matrices, and octomind config
 - `providers/`: provider implementations (`claude`, `codex`, `octomind`) with shared interface; each runs its framework at its out-of-the-box default
 - `runners/`: `executor.py` (Host/Docker execution), `cli_runner.py` (judge invocation)
-- `docker/`: `Dockerfile.agent` (agent image for `--executor docker`), `Dockerfile.swebench` (per-instance derived image)
+- `docker/`: `Dockerfile.agent` (agent image for `--executor docker`), `Dockerfile.swebench` (per-instance derived image), `Dockerfile.tau2` + `tau2_bridge.py` (tau2-bench solo image + shell bridge)
 - `cli/`: `main.py` (local-case runner), `swebench.py` (SWE-bench-Live runner), `bench.py` (unified multi-domain benchmark runner)
-- `benchmarks/`: config-driven benchmark adapters (`qa`, `docker_task`, `swebench_live`) + matchers/constraint engine (`verify.py`); configs in `configs/benchmarks/*.yaml`
+- `benchmarks/`: config-driven benchmark adapters (`qa`, `docker_task`, `swebench_live`) + matchers/constraint engine (`verify.py`); `ifbench_vendor/` (vendored allenai IFBench checkers); configs in `configs/benchmarks/*.yaml`
 - `judges/`: judge prompt + parsing
 - `scoring/`: metrics + aggregation; `scripts/summary.py`: comparison table
 - `results/`, `results-swebench/`: output JSON for runs

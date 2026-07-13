@@ -43,10 +43,16 @@ path), `static-qa` (objective but contaminated/saturated — baseline only),
 Benches marked **data** in `--list` run today against Hugging Face / inline data
 (you only need a model API key / login for the framework under test):
 
-- **frontier knowledge:** `mmlu_pro`, `supergpqa`, `mmlu` (MCQ), `simpleqa_verified` (factuality)
+- **frontier knowledge:** `mmlu_pro`, `supergpqa`, `mmlu` (MCQ), `gpqa_diamond`
+  (the model-card standard, public mirror), `hle` (GATED: accept terms at
+  huggingface.co/datasets/cais/hle + set `HF_TOKEN`), `simpleqa_verified` (factuality)
+- **grounding:** `facts_grounding` (FACTS public set: answer strictly from a document)
 - **math:** `aime25` (post-cutoff, low contamination), `math500`
-- **instruction-following:** `ifeval` (programmatic constraint checkers)
-- **health:** `medxpertqa` (board-level MCQ)
+- **instruction-following:** `ifeval` (programmatic constraint checkers), `ifbench`
+  (58 new verifiable constraints via the vendored allenai checkers — install
+  requirements.txt: nltk/emoji/syllapy)
+- **health:** `medxpertqa` (board-level MCQ), `healthbench_hard` (physician rubrics,
+  octomind runs `doctor:general`)
 - **finance:** `financebench` (judge vs reference)
 - **marketing/creative:** `marketing_creative` (judge rubric, inline briefs)
 - **writing:** `writingbench` (per-query WritingBench rubrics, official JSONL over HTTP)
@@ -62,7 +68,11 @@ Docker image or harness. Each config's `notes` field says exactly how to wire it
 - **health:** `medagentbench` (FHIR image, synthetic patients)
 - **science:** `researchcodebench`
 - **data:** `livesqlbench`
-- **orchestration:** `tau2_bench`
+- **orchestration:** `tau2_bench` — WIRED (telecom solo mode, objective). Build its
+  image once, then run: `docker build -f docker/Dockerfile.tau2 -t octobench-tau2:latest docker`.
+  The agent drives tau2's tools via the `tau2` shell bridge and is scored by tau2's own
+  evaluator (final DB state). octomind needs a shell-capable role — set
+  `octomind_agent: developer:general` (concierge/assistant lack `shell`).
 - **browser:** `webarena`
 - **computer-use:** `osworld`
 
@@ -94,11 +104,16 @@ fields: { question: question, choices: options, answer: answer }
 `choices` may be a list field, a letter-keyed dict, `options_fields: [opa,opb,...]`,
 or `correct` + `incorrect`/`incorrect_fields` (assembled + rotated).
 
-**Objective final answer:** `mode: final_answer`, `match: math|numeric|string|set`,
-`fields: { question: ..., answer: ... }`.
+**Objective final answer:** `mode: final_answer`, `match: math|numeric|string|set|letter`,
+`fields: { question: ..., answer: ... }`. `letter` compares only the leading choice
+letter (e.g. gold `D` matches `D`, `D)`, or `D. Weak Non-Sadism`) — used by HLE
+multiple-choice, whose choices are inline in the question.
 
 **Programmatic instruction-following:** `mode: constraint`, fields mapping
-`instruction_id_list` + `kwargs` (IFEval schema) or inline `constraints`.
+`instruction_id_list` + `kwargs` (IFEval schema) or inline `constraints`. IFEval ids run
+in-process; IFBench's 58 ids are delegated to the vendored `benchmarks/ifbench_vendor/`
+checkers (needs `nltk`/`emoji`/`syllapy` from requirements.txt — a `ConstraintEngineError`
+is raised, not silently skipped, if they're missing).
 
 **Judge-scored open generation:** `mode: judge_text`, set a `rubric`, map a
 `reference` field (or inline `instances`).

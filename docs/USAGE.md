@@ -154,6 +154,17 @@ runs. Validate the whole framework offline (no network/API) with
 `python3 scripts/bench_selftest.py`. Full catalog + how to add a benchmark:
 `configs/benchmarks/README.md`.
 
+Per-benchmark extras (host-side, only for the benches that need them):
+- **`ifbench`** — the constraint checkers are vendored from allenai and need
+  `pip install -r requirements.txt` (`nltk`/`emoji`/`syllapy`; nltk corpora download once
+  on first use). These run in the `cli.bench` process on the host, not in the container.
+- **`hle`** — `cais/hle` is gated: accept the terms on Hugging Face and set `HF_TOKEN`
+  (public-gated read) in the run env; `benchmarks/hf.py` uses it host-side for the data
+  load only (the token is never forwarded into the agent container).
+- **`tau2_bench`** — build its image first:
+  `docker build -f docker/Dockerfile.tau2 -t octobench-tau2:latest docker`; octomind needs
+  `octomind_agent: developer:general` (shell-capable) to drive the `tau2` bridge.
+
 ## Octomind integration
 - Provider runs a **task-appropriate** octomind agent (tested fairly per task type):
   - coding cases (local cases, SWE-bench, `docker_task`) → `developer:general`

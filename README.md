@@ -115,6 +115,10 @@ provider and the judge route through octohub, so set `OCTOHUB_API_URL`/`OCTOHUB_
 in the run env; the `claude` provider uses your local claude login.
 Benches marked **data** in `--list` run today from Hugging Face / inline data;
 **needs-image** ones need their upstream Docker image (see each config's `notes`).
+A few need host-side extras: `hle` is gated (set `HF_TOKEN`), `ifbench` uses the
+vendored allenai checkers (from `requirements.txt`), and `tau2_bench` needs its image
+(`docker build -f docker/Dockerfile.tau2 -t octobench-tau2:latest docker`) — see
+`docs/USAGE.md` and `configs/benchmarks/README.md`.
 The verdict is contamination-resistant when it's objective (`validate.sh`-style),
 so the runner biases there and records the judge as a secondary quality lens.
 Validate the whole framework offline (no network/API) with

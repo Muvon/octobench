@@ -1,0 +1,28 @@
+engine: qa
+name: hle
+domain: frontier-reasoning-knowledge
+fit: static-qa
+contamination: low             # 2025 frontier set, built to resist search/retrieval
+description: >
+  Humanity's Last Exam (CAIS + Scale AI, 2025): 2500 expert-written questions across
+  100+ subjects — the frontier model-card benchmark (published in Nature). Text-only
+  multiple-choice slice (choices are embedded in the question text; image questions
+  and free-form exactMatch rows filtered out) for an objective letter verdict.
+  GATED dataset: accept the terms at huggingface.co/datasets/cais/hle with your HF
+  account and set HF_TOKEN (with public-gated read access) in the run environment.
+mode: final_answer
+match: letter                   # answers are choice letters; accept "D" or "D. <text>"
+source: hf
+dataset: cais/hle
+hf_config: default
+split: test
+default_limit: 20
+filter: { image: "", answer_type: "multipleChoice" }
+fields:
+  id: id
+  question: question
+  answer: answer
+notes: >
+  If loading returns 0 instances, the gate is not accepted or HF_TOKEN lacks gated
+  read. Verify the filter values against a real row once access works (image should
+  be empty for text-only; answer_type multipleChoice vs exactMatch).

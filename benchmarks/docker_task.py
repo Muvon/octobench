@@ -83,17 +83,20 @@ class DockerTaskAdapter(BenchmarkAdapter):
     def _inst(self, idx: int, r: Dict) -> Instance:
         return Instance(
             id=str(r.get("id", f"{self.name}-{idx}")),
-            prompt=str(r.get("prompt", r.get("problem", ""))),
+            prompt=str(r.get("prompt", r.get("problem", self.config.get("prompt", "")))),
             system_prompt=r.get("system_prompt", ""),
             meta={
                 "domain": self.domain,
                 "image": r.get("image", self.image),
                 "platform": r.get("platform", self.platform),
                 "workdir": r.get("workdir", self.workdir),
-                "setup_cmds": r.get("setup_cmds", []),
-                "verify_cmds": r.get("verify_cmds", []),
-                "success_regex": r.get("success_regex"),
-                "success_exit": r.get("success_exit", False),
+                # setup is usually per-instance; verify is often one shared command —
+                # fall back to the config-level list when the row omits it.
+                "setup_cmds": r.get("setup_cmds", self.config.get("setup_cmds", [])),
+                "verify_cmds": r.get("verify_cmds", self.config.get("verify_cmds", [])),
+                # per-instance override, else the config-level default (like _inst_hf)
+                "success_regex": r.get("success_regex", self.config.get("success_regex")),
+                "success_exit": r.get("success_exit", self.config.get("success_exit", False)),
             },
             raw=r,
         )

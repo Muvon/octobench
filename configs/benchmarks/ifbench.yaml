@@ -1,0 +1,22 @@
+engine: qa
+name: ifbench
+domain: instruction-following
+fit: objective-verdict
+contamination: low             # 2025 out-of-domain constraints; frontier ~50-85, unsaturated
+description: >
+  IFBench (AI2, 2025): the successor to IFEval — 58 NEW verifiable out-of-domain
+  output constraints (word ranges, ratios, positional/structural rules...) over 300
+  prompts, checked PROGRAMMATICALLY by the official allenai checkers (vendored under
+  benchmarks/ifbench_vendor; needs nltk+emoji+syllapy, see requirements.txt).
+  Discriminates where IFEval is saturated.
+mode: constraint
+source: hf
+dataset: allenai/IFBench_test
+hf_config: default
+split: train
+default_limit: 20
+fields:
+  id: key
+  question: prompt
+  instruction_id_list: instruction_id_list
+  kwargs: kwargs

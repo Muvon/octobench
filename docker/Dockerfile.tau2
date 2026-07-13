@@ -1,0 +1,29 @@
+# tau2-bench (solo mode) image: layers the Sierra tau2 package + the octobench
+# solo bridge onto the standard agent image, so a CLI agent can solve a telecom
+# ticket by shelling out to `tau2 <init_index|tools|call|reward>` and be scored by
+# tau2's own evaluator.
+#
+# tau2 is NOT on PyPI and resolves its task data relative to the repo
+# (DATA_DIR = <repo>/data), so we clone + editable-install it into a py3.12 venv
+# (tau2 requires >=3.12; the base image ships 3.11) and pin TAU2_DATA_DIR.
+#
+# Build (needs octobench-agent:latest as the base):
+#   docker build -f docker/Dockerfile.tau2 -t octobench-tau2:latest docker
+FROM octobench-agent:latest
+
+ARG TAU2_REF=main
+RUN curl -fsSL https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+RUN git clone --depth 1 --branch "${TAU2_REF}" \
+      https://github.com/sierra-research/tau2-bench /opt/tau2-bench \
+    && uv venv --python 3.12 /opt/tau2 \
+    && uv pip install --python /opt/tau2/bin/python -e /opt/tau2-bench
+ENV TAU2_DATA_DIR=/opt/tau2-bench/data
+
+# Bridge + a `tau2` shim on PATH (uses the 3.12 venv python).
+COPY tau2_bridge.py /opt/octobench/tau2_bridge.py
+RUN printf '#!/usr/bin/env bash\nexec /opt/tau2/bin/python /opt/octobench/tau2_bridge.py "$@"\n' \
+      > /usr/local/bin/tau2 \
+    && chmod +x /usr/local/bin/tau2 \
+    && (tau2 tools >/dev/null 2>&1 && echo "tau2 bridge OK" \
+        || echo "WARN: tau2 bridge self-check failed at build (diagnose at runtime)")

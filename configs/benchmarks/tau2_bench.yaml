@@ -1,20 +1,61 @@
 engine: docker_task
 name: tau2_bench
 domain: agentic-orchestration-tooluse
-fit: needs-harness
-contamination: medium          # public domains, but compositional task generator
+fit: objective-verdict
+contamination: low             # solo tickets scored on final env state, not text
 description: >
-  tau2-bench (Sierra): tool-agent-user interaction in service domains (airline /
-  retail / telecom). Verdict = final DB/world state vs expected reward_basis — fully
-  objective. Requires an LLM user-simulator alongside the agent.
-image: ""                      # image with tau2-bench installed (sierra-research/tau2-bench)
+  tau2-bench (Sierra) — telecom domain, SOLO mode: the agent is given a support
+  ticket + policy and must resolve it by making tool calls against the tau2
+  environment (no user simulator). Verdict = tau2's own reward (final DB/env-state
+  assertions + required actions) via evaluate_simulation — fully objective and
+  faithful to the upstream benchmark. The agent works the env through a shell
+  bridge (`tau2 init_index|tools|call|reward`) baked into the image.
+image: octobench-tau2:latest
 workdir: /workspace
 mount_workspace: true
-source: inline
-instances: []
+success_regex: 'TAU2_REWARD=1(?:\.0+)?\b'
+octomind_agent: developer:general   # needs shell to drive `tau2 call`; concierge/assistant lack it
+system_prompt: >
+  You are a telecom customer-service agent resolving a support ticket in a sandbox,
+  WITHOUT talking to any user — you act only through tool calls.
+prompt: >
+  Resolve this telecom support ticket by calling environment tools. Steps:
+  1) Run `cat ticket.md` (the request) and `cat policy.md` (the rules you MUST follow).
+  2) Run `tau2 tools` to see the available tools and their JSON argument schemas.
+  3) Make tool calls one at a time with:  tau2 call <tool_name> '<json args>'
+     e.g.  tau2 call get_customer_by_phone '{"phone_number": "555-123-2002"}'
+     Read each result before the next call; strictly follow policy.md.
+  4) When the ticket's goal is achieved, stop — you are done. Do not fabricate tool
+     output; only the real results from `tau2 call` count toward the score.
+verify_cmds:
+  - "tau2 reward"
 notes: >
-  tau2 needs a USER-simulator LLM plus the agent. To wire: build an image with
-  tau2-bench (uv, py>=3.12) and a user-LLM key; per task run the tau2 episode and
-  set verify_cmds to emit the tau2 reward (DB-state + required-actions check),
-  success_regex on reward==1. The compositional task generator lets you mint fresh
-  verifiable instances to mitigate the public-domain contamination.
+  Build the image once on the run box:
+    docker build -f docker/Dockerfile.tau2 -t octobench-tau2:latest docker
+  (needs octobench-agent:latest as the base). Run:
+    python3 -m cli.bench --benchmark tau2_bench --executor docker --limit 1
+  Instances are the 20 telecom SMALL-split solo tasks (indices 0-19); switch splits
+  or add retail/airline by setting TAU2_DOMAIN / the loader in tau2_bridge.py. Full
+  dual-control (with a user-simulator LLM) is intentionally out of scope here.
+source: inline
+instances:
+  - { id: telecom-solo-00-mobile_data_issue, setup_cmds: ["tau2 init_index 0"] }
+  - { id: telecom-solo-01-mobile_data_issue, setup_cmds: ["tau2 init_index 1"] }
+  - { id: telecom-solo-02-mobile_data_issue, setup_cmds: ["tau2 init_index 2"] }
+  - { id: telecom-solo-03-mobile_data_issue, setup_cmds: ["tau2 init_index 3"] }
+  - { id: telecom-solo-04-mobile_data_issue, setup_cmds: ["tau2 init_index 4"] }
+  - { id: telecom-solo-05-mobile_data_issue, setup_cmds: ["tau2 init_index 5"] }
+  - { id: telecom-solo-06-mobile_data_issue, setup_cmds: ["tau2 init_index 6"] }
+  - { id: telecom-solo-07-mobile_data_issue, setup_cmds: ["tau2 init_index 7"] }
+  - { id: telecom-solo-08-service_issue, setup_cmds: ["tau2 init_index 8"] }
+  - { id: telecom-solo-09-service_issue, setup_cmds: ["tau2 init_index 9"] }
+  - { id: telecom-solo-10-service_issue, setup_cmds: ["tau2 init_index 10"] }
+  - { id: telecom-solo-11-service_issue, setup_cmds: ["tau2 init_index 11"] }
+  - { id: telecom-solo-12-service_issue, setup_cmds: ["tau2 init_index 12"] }
+  - { id: telecom-solo-13-service_issue, setup_cmds: ["tau2 init_index 13"] }
+  - { id: telecom-solo-14-mms_issue, setup_cmds: ["tau2 init_index 14"] }
+  - { id: telecom-solo-15-mms_issue, setup_cmds: ["tau2 init_index 15"] }
+  - { id: telecom-solo-16-mms_issue, setup_cmds: ["tau2 init_index 16"] }
+  - { id: telecom-solo-17-mms_issue, setup_cmds: ["tau2 init_index 17"] }
+  - { id: telecom-solo-18-mms_issue, setup_cmds: ["tau2 init_index 18"] }
+  - { id: telecom-solo-19-mms_issue, setup_cmds: ["tau2 init_index 19"] }
