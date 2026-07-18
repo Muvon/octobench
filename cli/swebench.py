@@ -43,17 +43,34 @@ def fetch_rows(split: str, length: int = 100, offset: int = 0) -> List[Dict]:
         f"{HF_ROWS}?dataset={urllib.parse.quote(DATASET)}"
         f"&config=default&split={split}&offset={offset}&length={length}"
     )
+    # Snapshot cache: the dataset is frozen, but the HF rows endpoint has outages
+    # (503s) that would otherwise fail every bench run. Refresh on success; fall
+    # back to the last good snapshot on failure.
+    cache = f"/home/box/work/muvon/octobench/.hf_rows_cache_{split}_{offset}_{length}.json"
     # The public HF endpoint occasionally drops the TLS connection mid-read; retry.
     last_err = None
     for attempt in range(4):
         try:
             with urllib.request.urlopen(url, timeout=90) as resp:  # noqa: S310 (trusted HF endpoint)
                 data = json.load(resp)
-            return [r["row"] for r in data.get("rows", [])]
+            rows = [r["row"] for r in data.get("rows", [])]
+            try:
+                with open(cache, "w") as f:
+                    json.dump(rows, f)
+            except OSError:
+                pass
+            return rows
         except Exception as e:  # transient TLS/EOF/5xx — back off and retry
             last_err = e
             if attempt < 3:
                 time.sleep(1.5 * (attempt + 1))
+    try:
+        with open(cache) as f:
+            rows = json.load(f)
+        print(f"WARNING: HF fetch failed ({last_err}); using snapshot cache {cache}")
+        return rows
+    except OSError:
+        pass
     raise RuntimeError(f"HF fetch failed for split '{split}': {last_err}")
 
 

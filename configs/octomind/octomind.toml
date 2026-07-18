@@ -743,7 +743,7 @@ max_iterations = 2
 # model -- a same-family verifier inherits the same blind spots and rubber-stamps
 # them; cross-family catches far more (e.g. openai:gpt-5-mini, google:gemini-2.5-flash).
 # Defaults to the cheap supervisor model so it works out of the box; change it.
-verifier_model = "octohub:qwen"
+verifier_model = "octohub:minimax"
 # Free deterministic pre-gate (no model call): refuse a `done` claim when code
 # was changed but no successful check (build/test/lint/etc.) ran since the change.
 require_check_after_mutation = true
@@ -754,7 +754,7 @@ require_plan_complete = true
 # high-attention recency window instead of buried in the mid-transcript summary.
 # Short sessions (no compaction yet -> empty anchor) pay nothing.
 [supervisor.recite]
-enabled = true
+enabled = false
 
 # Condense: task-aware narrowing of oversized tool outputs. When a tool result
 # exceeds tokens_threshold, ONE cheap-model call per round decides what the
