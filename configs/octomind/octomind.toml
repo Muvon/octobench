@@ -399,6 +399,19 @@ tools = []
 # timeout_seconds = 30
 # tools = []
 
+
+# octobench: static octocode server — overrides the tap capability launch args.
+# --no-git skips git-based optimizations (root-owned /testbed trips ownership
+# checks in containers); with octocode >= 0.18 mcp_index defaults to false so
+# startup is inert and view_signatures / structural_search serve AST-side.
+[[mcp.servers]]
+name = "octocode"
+type = "stdio"
+command = "octocode"
+args = ["mcp", "--path=.", "--no-git"]
+timeout_seconds = 300
+tools = []
+
 # [[mcp.servers]]
 #	name = "octocode"
 #	type = "stdio"
@@ -754,7 +767,7 @@ require_plan_complete = true
 # high-attention recency window instead of buried in the mid-transcript summary.
 # Short sessions (no compaction yet -> empty anchor) pay nothing.
 [supervisor.recite]
-enabled = false
+enabled = true
 
 # Condense: task-aware narrowing of oversized tool outputs. When a tool result
 # exceeds tokens_threshold, ONE cheap-model call per round decides what the

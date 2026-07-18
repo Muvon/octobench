@@ -213,6 +213,13 @@ class DockerExecutor(Executor):
         _ob = os.environ.get("OCTOMIND_BIN")
         if _ob and Path(_ob).exists():
             mounts += ["-v", f"{Path(_ob).resolve()}:/usr/local/bin/octomind:ro"]
+        # octolib embedding-model cache, warmed once on the host — mounted
+        # read-only so octocode loads models from cache instead of fetching
+        # them from HF inside octomind's stdin-init timeout.
+        _oc_cache = Path(os.environ.get("OCTOLIB_CACHE",
+                                        str(Path.home() / "octolib-cache")))
+        if _oc_cache.is_dir() and any(_oc_cache.iterdir()):
+            mounts += ["-v", f"{_oc_cache.resolve()}:/root/.cache/octolib:ro"]
         # repo-in-image mode (SWE-bench): the repo lives inside the image at
         # `workdir`, so no host workspace/case is mounted.
         if self._mount_workspace:
