@@ -11,7 +11,23 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       curl ca-certificates git xz-utils unzip python3 sudo \
       build-essential pkg-config libssl-dev \
+      cmake ninja-build \
+      python3-venv python3-pip \
+      php-cli php-xml php-mbstring php-curl php-zip php-intl php-sqlite3 \
     && rm -rf /var/lib/apt/lists/*
+
+# composer — PHP cases' dependency install (pinned installer channel, latest 2.x).
+RUN curl --retry 5 --retry-all-errors -fsSL https://getcomposer.org/installer -o /tmp/composer-setup.php \
+    && php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer \
+    && rm -f /tmp/composer-setup.php \
+    && composer --version
+
+# Shared python venv OUTSIDE the workspace: cases `pip install -e .` into it and
+# `python`/`pytest` resolve to it for scripts and agents alike, keeping installed
+# deps (and bytecode) out of the workspace snapshot/evidence.
+RUN python3 -m venv /opt/venv && /opt/venv/bin/pip install -q -U pip pytest
+ENV PATH=/opt/venv/bin:$PATH \
+    PYTHONDONTWRITEBYTECODE=1
 
 # Rust toolchain — required by rust cases' cargo check/quality/validate steps.
 ENV RUSTUP_HOME=/usr/local/rustup \
@@ -24,12 +40,12 @@ RUN curl --retry 5 --retry-all-errors --retry-delay 3 --connect-timeout 30 -fsSL
 
 # ── Pinned agent CLIs (prebuilt, no source builds) ───────────────────────────
 ARG TARGETARCH
-ARG OCTOMIND_VERSION=0.35.0
+ARG OCTOMIND_VERSION=0.39.0
 ARG OCTOCODE_VERSION=0.15.0
 ARG OCTOFS_VERSION=0.4.3
 ARG OCTOBRAIN_VERSION=0.8.0
 ARG CODEX_VERSION=0.137.0
-ARG CLAUDE_VERSION=2.1.168
+ARG CLAUDE_VERSION=2.1.220
 
 # octomind + octofs + octocode + octobrain: static musl binaries from GitHub releases.
 # octofs = file/shell tools, octocode = codesearch, octobrain = memory (all referenced
