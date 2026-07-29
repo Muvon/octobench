@@ -1,0 +1,8 @@
+# Quick same-model face-off: claude CLI vs octomind, both on claude-opus-5.
+runs:
+  - provider: claude
+    model: claude-opus-5
+    provider_model: claude-opus-5
+  - provider: octomind
+    model: claude-opus-5
+    provider_model: anthropic:claude-opus-5

@@ -1,0 +1,5 @@
+# Challenger: octomind on ollama glm-5.2 only.
+runs:
+  - provider: octomind
+    model: glm-5.2
+    provider_model: ollama:glm-5.2

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import time
@@ -31,10 +32,15 @@ from scoring.aggregate import compute_cost, compute_efficiency_score
 HF_ROWS = "https://datasets-server.huggingface.co/rows"
 DATASET = "SWE-bench-Live/SWE-bench-Live"
 
+# Neutral SWE-bench-style task preamble. Deliberately does NOT say "minimal
+# change": gold fixes routinely span the full API surface (base + impls +
+# wrappers + conventions), and a literal "minimal" instruction in the USER
+# message overrides completeness guidance in agent roles — measurably pushing
+# literal-minded models to single-site patches that fail the hidden tests.
 SYSTEM_PROMPT = (
     "You are an autonomous software engineer working in the git repository at "
-    "/testbed. Resolve the reported issue with the minimal necessary code change. "
-    "Do NOT modify tests. When done, stop."
+    "/testbed. Resolve the reported issue completely, as the project's "
+    "maintainers would. Do NOT modify tests. When done, stop."
 )
 
 
@@ -47,6 +53,14 @@ def fetch_rows(split: str, length: int = 100, offset: int = 0) -> List[Dict]:
     # (503s) that would otherwise fail every bench run. Refresh on success; fall
     # back to the last good snapshot on failure.
     cache = f"/home/box/work/muvon/octobench/.hf_rows_cache_{split}_{offset}_{length}.json"
+    # Cache-first: the dataset is a frozen snapshot, and parallel bench runs
+    # paginating a split rate-limit the HF endpoint (429) when every process
+    # re-fetches every window. A present cache is authoritative.
+    try:
+        with open(cache) as f:
+            return json.load(f)
+    except OSError:
+        pass
     # The public HF endpoint occasionally drops the TLS connection mid-read; retry.
     last_err = None
     for attempt in range(4):
@@ -88,9 +102,15 @@ def select_instance(split: str, instance_id: Optional[str]) -> Dict:
     if not rows:
         raise RuntimeError(f"No rows returned for split '{split}'")
     if instance_id:
-        for r in rows:
-            if r.get("instance_id") == instance_id:
-                return r
+        # Paginate the whole split: recent instances live at high offsets
+        # (full split is ~1900 rows and unsorted by date).
+        offset = 0
+        while rows:
+            for r in rows:
+                if r.get("instance_id") == instance_id:
+                    return r
+            offset += 100
+            rows = fetch_rows(split, length=100, offset=offset)
         raise RuntimeError(f"instance '{instance_id}' not found in split '{split}'")
     # Default: smallest instance (fewest tests) — fastest to prove the flow.
     rows.sort(key=lambda r: sum(len(_as_list(r.get(k))) for k in ("FAIL_TO_PASS", "PASS_TO_PASS")))
@@ -125,7 +145,7 @@ def build_derived_image(instance_id: str, repo_root: Path, verbosity: str) -> st
     return derived
 
 
-_RESULT_RE = re.compile(r"^(PASSED|FAILED|ERROR|SKIPPED)\s+(\S+)", re.M)
+_RESULT_RE = re.compile(r"^(PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)\s+(\S+)", re.M)
 
 
 def parse_test_results(output: str, fail_to_pass: List[str], pass_to_pass: List[str]) -> Dict:
@@ -135,7 +155,10 @@ def parse_test_results(output: str, fail_to_pass: List[str], pass_to_pass: List[
         status[m.group(2)] = m.group(1)
 
     def passed(tid: str) -> bool:
-        return status.get(tid) == "PASSED"
+        # XFAIL/XPASS count as passing: the dataset's baseline run counts them
+        # so (e.g. matplotlib-29007 lists 28 repo-marked xfail tests in
+        # PASS_TO_PASS); requiring literal PASSED makes resolved unreachable.
+        return status.get(tid) in ("PASSED", "XFAIL", "XPASS")
 
     f2p_ok = [t for t in fail_to_pass if passed(t)]
     p2p_ok = [t for t in pass_to_pass if passed(t)]
@@ -172,6 +195,27 @@ def run_instance(instance: Dict, target: Dict, repo_root: Path, models_cfg: Dict
 
     derived = build_derived_image(instance_id, repo_root, verbosity)
     repo_config = repo_root / "configs" / "octomind" / "octomind.toml"
+    # Workflow mode: workflows take no --model flag, so bind the matrix model to
+    # every role the workflow runs via a `[taps]` mapping appended to a per-run
+    # copy of the config (priority: CLI --model > taps > role.model > default).
+    if provider_name == "octomind" and os.environ.get("OCTOMIND_WORKFLOW"):
+        roles = os.environ.get(
+            "OCTOMIND_WORKFLOW_ROLES",
+            "developer:context,developer:general,developer:brief,assistant:researcher",
+        ).split(",")
+        cfg_text = repo_config.read_text()
+        mapping = "".join(
+            f'"{r.strip()}" = "{provider_model}"\n' for r in roles if r.strip()
+        )
+        if re.search(r"(?m)^\[taps\]\s*$", cfg_text):
+            cfg_text = re.sub(
+                r"(?m)^\[taps\]\s*$", "[taps]\n" + mapping.rstrip("\n"),
+                cfg_text, count=1,
+            )
+        else:
+            cfg_text += "\n[taps]\n" + mapping
+        repo_config = logs_dir / "octomind.workflow.toml"
+        repo_config.write_text(cfg_text)
     name = f"obsweb-{safe_id(instance_id)[:22]}-{provider_name[:6]}-{int(time.time() * 1000)}"
     executor = DockerExecutor(
         derived, repo_root, repo_root, repo_config, name,
@@ -180,15 +224,21 @@ def run_instance(instance: Dict, target: Dict, repo_root: Path, models_cfg: Dict
     )
 
     try:
-        # Reset repo to base_commit, then apply the PR's test patch so the
-        # FAIL_TO_PASS tests exist for verification.
+        # Reset repo to base_commit. The PR's test patch is deliberately NOT
+        # applied here: SWE-bench semantics — the agent must solve from the
+        # problem statement alone, never seeing the grading tests (pre-applying
+        # them let agents read the expected behavior via `git diff`, and left
+        # them editable as a cheat vector).
         _run(executor, "git config --global --add safe.directory /testbed")
         _run(executor, f"cd /testbed && git reset --hard {base_commit} -q && git clean -fdq")
-        if test_patch.strip():
-            _run(executor, "cat > /tmp/test.patch", input_text=test_patch)
-            ap = _run(executor, "cd /testbed && git apply -v /tmp/test.patch 2>&1 || "
-                                "(patch -p1 < /tmp/test.patch)")
-            log(f"[swebench] applied test_patch (rc={ap.exit_code})", verbosity, "debug")
+        # Strip every ref, tag, reflog and remote: instance images carry history
+        # PAST base_commit, and agents provably mined it for the gold fix
+        # (`git log --all` / `git show <fix-sha>`). Afterwards only base_commit
+        # ancestry is reachable; future objects stay in the pack but are
+        # unaddressable without their sha.
+        _run(executor, f"cd /testbed && git checkout -q --detach {base_commit} && "
+                       "git for-each-ref --format='%(refname)' | xargs -r -n1 git update-ref -d; "
+                       "rm -rf .git/logs; git remote | xargs -r -n1 git remote remove")
 
         log(f"[swebench] {instance_id} provider={provider_name} agent starting",
             verbosity, "normal")
@@ -211,6 +261,19 @@ def run_instance(instance: Dict, target: Dict, repo_root: Path, models_cfg: Dict
                 "<provider_evidence>\n" + provider_evidence.strip() + "\n</provider_evidence>\n"
             )
         evidence_log += "<evidence_diff>\n" + diff[:8000] + "\n</evidence_diff>"
+
+        # Verify-time test_patch application: restore every file it touches to
+        # base state first (discarding any agent tampering with grading-test
+        # files — such edits still show honestly in agent.diff above), then
+        # apply the patch so the FAIL_TO_PASS tests exist for verification.
+        if test_patch.strip():
+            for tf in re.findall(r"^diff --git a/\S+ b/(\S+)", test_patch, re.M):
+                _run(executor, f"cd /testbed && rm -f -- '{tf}' && "
+                               f"git checkout {base_commit} -- '{tf}' 2>/dev/null || true")
+            _run(executor, "cat > /tmp/test.patch", input_text=test_patch)
+            ap = _run(executor, "cd /testbed && git apply -v /tmp/test.patch 2>&1 || "
+                                "(patch -p1 < /tmp/test.patch)")
+            log(f"[swebench] applied test_patch (rc={ap.exit_code})", verbosity, "debug")
 
         # Verify: run the instance's own test command(s).
         log(f"[swebench] {instance_id} running tests", verbosity, "normal")

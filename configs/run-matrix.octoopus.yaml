@@ -1,0 +1,6 @@
+# Same-model framework comparison: octomind driving claude-opus-5 directly
+# (anthropic API key) vs the claude CLI run from run-matrix.3way.yaml.
+runs:
+  - provider: octomind
+    model: claude-opus-5
+    provider_model: anthropic:claude-opus-5

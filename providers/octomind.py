@@ -162,16 +162,24 @@ class OctomindProvider(Provider):
         # (assistant:general) for non-coding tasks (QA / instruction-following),
         # so we fairly test the framework's best-fit agent per task type.
         agent_tag = os.environ.get("OCTOMIND_AGENT", "developer:general")
-        main_cmd = [
-            "octomind",
-            "run",
-            agent_tag,
-            "--name",
-            session_name,
-            "--model",
-            provider_model,
-            "--format=jsonl",
-        ]
+        # OCTOMIND_WORKFLOW switches to octomind's multi-step workflow engine
+        # (e.g. `develop`: context -> developer <-> evaluator loop). Workflows
+        # take no --model flag; the model binds via a `[taps]` mapping appended
+        # to the runtime config (see cli/swebench.py). Same stdin/jsonl contract.
+        workflow = os.environ.get("OCTOMIND_WORKFLOW")
+        if workflow:
+            main_cmd = ["octomind", "workflow", workflow, "--format=jsonl"]
+        else:
+            main_cmd = [
+                "octomind",
+                "run",
+                agent_tag,
+                "--name",
+                session_name,
+                "--model",
+                provider_model,
+                "--format=jsonl",
+            ]
 
         start = time.time()
         main = executor.run(

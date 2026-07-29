@@ -1,0 +1,5 @@
+# Baseline: claude CLI on opus-5 only.
+runs:
+  - provider: claude
+    model: claude-opus-5
+    provider_model: claude-opus-5

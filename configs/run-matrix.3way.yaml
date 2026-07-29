@@ -1,0 +1,12 @@
+# 3-way SWE-bench comparison on ollama-era setup (octohub down):
+# octomind glm-5.2 via ollama.com cloud vs codex gpt-5.5 (sub) vs claude opus 5.
+runs:
+  - provider: octomind
+    model: glm-5.2
+    provider_model: ollama:glm-5.2
+  - provider: codex
+    model: gpt-5.5
+    provider_model: gpt-5.5
+  - provider: claude
+    model: claude-opus-5
+    provider_model: claude-opus-5

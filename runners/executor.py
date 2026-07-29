@@ -25,6 +25,8 @@ AUTH_ENV_KEYS = [
     "GEMINI_API_KEY",
     "OCTOHUB_API_KEY",
     "OCTOHUB_API_URL",
+    "OLLAMA_API_KEY",
+    "OLLAMA_API_URL",
     "OCTOMIND_AGENT",
     "BRAVE_API_KEY",
     "TAVILY_API_KEY",
@@ -213,6 +215,19 @@ class DockerExecutor(Executor):
         _ob = os.environ.get("OCTOMIND_BIN")
         if _ob and Path(_ob).exists():
             mounts += ["-v", f"{Path(_ob).resolve()}:/usr/local/bin/octomind:ro"]
+        # octobench: same override for codex (new models can require a newer CLI
+        # than the one baked in the image, e.g. gpt-5.6-sol needs >= 0.145.0).
+        _cb = os.environ.get("CODEX_BIN")
+        if _cb and Path(_cb).exists():
+            mounts += ["-v", f"{Path(_cb).resolve()}:/usr/local/bin/codex:ro"]
+        # octobench: staged muvon tap mounted over the container tap cache so
+        # role edits under test reach fresh containers without publishing.
+        # Read-only is safe: octomind's silent `git pull` on it fails and the
+        # staged copy is used as-is.
+        _tap = os.environ.get("OCTOMIND_TAP_CACHE")
+        if _tap and Path(_tap).is_dir():
+            mounts += ["-v", f"{Path(_tap).resolve()}:"
+                             "/root/.local/share/octomind/taps/muvon/octomind-tap:ro"]
         # octolib embedding-model cache, warmed once on the host — mounted
         # read-only so octocode loads models from cache instead of fetching
         # them from HF inside octomind's stdin-init timeout.
