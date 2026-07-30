@@ -1,0 +1,21 @@
+id: dev2_cpp_catch2_textflow_utf8
+name: Catch2 TextFlow UTF-8 wrapping
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/catchorg/Catch2
+  pr: 3086
+  scenario: bug-fix
+  base_sha: 8492fd444e42f331f48611d2b5ef11c8ce338423
+  gold_sha: 572f96b8febec9dd14ac5284e6a959a7246325c8
+  test_paths:
+    - tests/SelfTest/IntrospectiveTests/TextFlow.tests.cpp
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Catch2's console output line-wrapping breaks non-ASCII text: multi-byte UTF-8 characters (accented letters, CJK, emoji) get split mid-character and line breaks land at the wrong column, because the text-flow component counts bytes instead of characters (see issue #1022). Fix it so UTF-8 text wraps correctly:
+  - The wrapping string type's size must count UTF-8 codepoints (a 2-, 3-, or 4-byte sequence counts as one), still excluding ANSI escape sequences from the count.
+  - Both forward and backward iteration must step one codepoint at a time (never landing inside a multi-byte sequence), and substring extraction must keep each codepoint's full byte sequence intact.
+  - Column wrapping is by codepoints: width N accommodates N visible characters, and a multi-byte character is never split across lines.
+  - ANSI escape skipping and pure-ASCII behavior are unchanged.

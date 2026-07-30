@@ -1,0 +1,22 @@
+id: dev_rust_uuid_parse_panic
+name: UUID parser panic on malformed input
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/uuid-rs/uuid
+  pr: 886
+  scenario: crash-fix
+  base_sha: d11965705f88ae2546e0d277dac8f52f47e5694f
+  gold_sha: 2320c6a0335cfddaec4df58d1a7fe410070ab9e9
+  test_paths:
+    - src/parser.rs
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  The UUID parser panics on certain malformed inputs instead of returning an error. For example `Uuid::parse_str("{}")` crashes with an arithmetic-overflow panic in the error-reporting path, and other degenerate braced (`{...}`) or `urn:uuid:...` inputs can panic or report a wrong error position. Parsing must never panic: every failure has to come back as the library's structured parse error. When an invalid character is reported, its index must be its position in the full original input (including any braces or `urn:uuid:` prefix), and the reported character must be the actual character at that position even when the input contains multi-byte unicode.
+
+  Acceptance checks:
+  - `Uuid::parse_str("{}")` returns the group-count error reporting 1 group, and does not panic.
+  - `Uuid::from_str("urn:uuid:urae0c8")` returns an invalid-character error for 'u' at index 9.
+  - Braced inputs mixing multi-byte unicode with an invalid ASCII character report that character at its full-input index.

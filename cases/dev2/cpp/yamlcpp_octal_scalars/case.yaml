@@ -1,0 +1,30 @@
+id: dev2_cpp_yamlcpp_octal_scalars
+name: yaml-cpp YAML 1.2 octal scalars (issue-driven)
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/jbeder/yaml-cpp
+  pr: 1451
+  scenario: parser-spec-compliance
+  prompt_source: original-issue
+  issue: 1251
+  base_sha: eadeac64e1a0619b5efa5a5674b5edb1a71a8885
+  gold_sha: 847020a9cd706412eae6d73a0ba12ec02428bc5b
+  test_paths:
+    - test/node/node_test.cpp
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Resolve the following reported issue.
+
+  # YAML octal scalars not converted to ints
+
+  The [1.2.2 YAML spec](https://yaml.org/spec/1.2.2/#tags) indicates octal literals should be formatted as "0o123" which is annoyingly not consistent with what C++ thinks octal strings should look like (0123). 
+  The stringstream extraction currently used expects octals to have a single leading '0', not '0o'. This is used by yaml-cpp:
+  https://github.com/jbeder/yaml-cpp/blob/eaf72053724814be3b99d38e292fca5797a57b7b/include/yaml-cpp/node/convert.h#L142-L155
+  Which ultimately means "0o123" cannot be converted to an int. "0123" on the other hand _can_ be converted to an int, which is maybe not the desired behavior if strictly adhering to the 1.2 spec.
+  Note this is true only as of YAML 1.2, version 1.1 specifies octals the opposite way 🙃.
+  Somewhat related to treatment of booleans:  #1198 
+
+  Maintainer note: existing conversions, including legacy leading-zero octal (e.g. "0123"), must keep working.

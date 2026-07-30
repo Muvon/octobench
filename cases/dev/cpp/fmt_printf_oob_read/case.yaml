@@ -1,0 +1,17 @@
+id: dev_cpp_fmt_printf_oob_read
+name: fmt printf out-of-bounds argument read
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/fmtlib/fmt
+  pr: 4800
+  scenario: crash-fix
+  base_sha: e60274b29c0a748df2c6280d0a374e6eef3b6c73
+  gold_sha: 128ba144ab85ddd0ad9ea39f2febdfb51802cb1b
+  test_paths:
+    - test/printf-test.cc
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Printf-style formatting crashes on a malformed positional width or precision of index 0: running e.g. `fmt::sprintf("%*0$d", ...)` or `fmt::sprintf("%.*0$d", ...)` with plenty of arguments (say 16 ints) performs an out-of-bounds argument read and can die with SIGBUS in release builds. Positional argument indexes are 1-based, so index 0 is invalid and must surface the library's normal `format_error` with message "argument not found" — no crash and no out-of-bounds access, regardless of how many arguments are supplied.

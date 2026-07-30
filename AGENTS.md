@@ -44,6 +44,61 @@ python3 -m cli.main run --cases cases --providers codex,octomind --verbosity nor
 - Put fixtures under `fixtures/`.
 - Add scripts as needed.
 
+## Real-Commit Case Harvesting (cases/dev)
+
+`cases/dev/<lang>/<case>/` cases are reverse-engineered from REAL merged PRs in
+trusted open-source repos. The pipeline, end to end:
+
+1. **Mine candidates.** Search merged PRs in respected, actively-maintained
+   repos (high review bar, real CI). Hard criteria:
+   - **Recency beats everything: merged AFTER the newest model's training
+     cutoff** (contamination control — the fix must be unseen; prefer the most
+     recent mergeable window and refresh the case set as cutoffs move).
+   - Human-authored; not a revert/docs/refactor/CI-only change.
+   - Diff touches BOTH production source and tests; tests deterministic, no
+     network at test time, runnable selectively (single file / filter).
+   - Variety on two axes: scenario (simple edit / crash fix / bug fix /
+     feature) and granularity (~1-line to a few hundred lines), spread across
+     languages/build systems.
+   - Toolchain must exist in `docker/Dockerfile.agent` (or extend it).
+2. **Reverse the task.** `scripts/reverse_spec.sh <repo_url> <gold_sha> [out.md]`
+   runs the tap agent `developer:reverse-spec` on the gold commit and emits the
+   as-it-arrived Task Prompt + Clarified Spec. Draft specs live in
+   `cases/_specs/` (gitignored — working material, not repo content).
+3. **Curate the instruction** (`case.yaml` `instruction:`) by the
+   **derivability rule**: everything the hidden tests assert must be derivable
+   from the instruction alone.
+   - Bug/crash fix where any correct fix passes → the short informal prompt.
+   - Feature whose tests pin public API names, wire formats, error codes, or
+     exact output → prompt + the pinning requirements from the Clarified Spec.
+   - A test asserting an internal name/pick no spec could state = taste-graded
+     → reject the case (or drop that test file from `validate.sh`).
+   - Issue-driven cases obey the SAME rule against the issue text: read every
+     held-out assertion and check it is derivable from the issue. Exact
+     error-message PROSE the issue never quotes is the classic trap (codes and
+     exception types are fine — they're API surface); an otherwise-perfect fix
+     fails on wording (observed: agent matched the maintainer's error id but
+     not the message string). Verify the string-level assertions, not just
+     which codes/types a test mentions.
+4. **Case mechanics** (leak hygiene, learned the hard way on SWE-bench-Live):
+   - `setup.sh`: `git init` + `git fetch --depth 1 origin BASE_SHA` (single
+     reachable commit — gold is not in the object store), branch, `git remote
+     remove origin`, then full env prep (installs into `/opt/venv`, vendor/,
+     node_modules, warm cargo/cmake builds).
+   - `validate.sh`: re-adds origin, fetches GOLD_SHA **at verify time**, checks
+     out ONLY the gold test paths (agent never sees them; agent edits to tests
+     are overwritten), runs those tests. The gold test file usually carries old
+     + new tests, so one run covers fail-to-pass and regressions.
+   - `quality.sh`: cheap objective build/lint only.
+   - `case.yaml` `meta:` records repo/base_sha/gold_sha/test_paths (harness
+     ignores it; tooling reads it).
+5. **Prove fail-to-pass before benching.** `scripts/verify_case.sh <case_dir>`
+   (agent image): setup → validate must FAIL at base → apply gold source (first-
+   parent diff, test paths excluded) → validate must PASS. A case that fails
+   either leg does not ship.
+6. **Audit after runs**: grep provider traces for `/case` reads or upstream
+   re-fetches — the two remaining leak paths are visible in traces.
+
 ## Add a Tool
 - Add `providers/<name>.py` implementing `Provider.run_task(...)`.
 - Register it in `providers/factory.py`.

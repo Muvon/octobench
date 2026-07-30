@@ -1,0 +1,20 @@
+id: dev2_python_anyio_tls_idna2008
+name: AnyIO TLS unicode hostname IDNA 2008
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/agronholm/anyio
+  pr: 1208
+  scenario: encoding-security
+  base_sha: eb562e6462ee46b1904e50b02ce00a858cdeb200
+  gold_sha: 68f58915f82d9be8109ebbbd8f5d70577d43f2ce
+  test_paths:
+    - tests/streams/test_tls.py
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  When connecting to a TLS server with an internationalized (unicode) host name, the hostname is matched against the peer certificate using IDNA 2003 (what the stdlib ssl module applies to a raw unicode server_hostname) instead of IDNA 2008 — e.g. `faß.de` becomes `fass.de` (a different domain!) rather than `xn--fa-hia.de`, so verification can match the wrong certificate. `connect_tcp()` already encodes hostnames with IDNA 2008 (uts46) for DNS resolution, but the TLS wrap step doesn't. Fix it so certificate matching uses IDNA 2008 too:
+  - The TLS wrap step must own the encoding: a unicode hostname is IDNA-2008-encoded before being handed to the SSL layer; ASCII hostnames pass through unchanged; no hostname stays no hostname.
+  - Callers already forward the original unicode host name to the wrap step — keep that as-is; the wrap step is the single place where encoding for certificate matching happens.
+  - Share the IDNA-2008 encoding logic with the existing DNS-resolution path instead of duplicating it.

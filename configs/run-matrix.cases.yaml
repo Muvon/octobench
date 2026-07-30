@@ -1,0 +1,9 @@
+# Internal real-commit cases bench: claude (opus 5) vs octomind (glm-5.2 via
+# ollama cloud). Both run their stock single-agent invocation; the judge role is
+# the only shared customization.
+runs:
+  - provider: claude
+    model: claude-opus-5
+
+  - provider: octomind
+    model: glm-5.2

@@ -4,6 +4,10 @@
 
 Benchmark framework to compare **LLM tool + config + prompt** setups across a shared set of cases.
 
+**Latest results:** see [BENCHMARK.md](BENCHMARK.md) — the real-commit benchmark
+(25 fail-to-pass-proven tasks from merged OSS pull requests across 5 languages)
+comparing claude, octomind, and codex, with full reproduction instructions.
+
 Contribution guide: see `CONTRIBUTING.md` (focused on adding new cases).
 
 ## Key ideas

@@ -1,0 +1,17 @@
+id: dev2_rust_bytes_truncate_release
+name: Bytes truncate(0) shared-reference release
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/tokio-rs/bytes
+  pr: 842
+  scenario: resource-lifecycle
+  base_sha: 002df10b8c610788b2730ec1234934e81aaa2880
+  gold_sha: d5c8ad3227afe459c09f1d0d85455abf00f0381a
+  test_paths:
+    - tests/test_bytes.rs
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  When a Bytes value is shared (cloned) and one holder is truncated down to zero length, it still keeps its reference to the underlying allocation — so the sibling clones can never obtain unique mutable access via `try_into_mut`, and pooled buffers are never reclaimed. Truncating to zero should release that clone's hold on the shared allocation: the truncated value ends up empty (keeping the pointer-address semantics the other zero-length operations use), sibling clones can then get `try_into_mut` to succeed and mutate the bytes, and `clear()` inherits the same behavior. Truncating to a non-zero length keeps today's behavior — the allocation stays shared and a sibling's `try_into_mut` still fails; `truncate(len >= self.len)` stays a no-op.

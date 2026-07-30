@@ -1,0 +1,62 @@
+id: dev2_rust_serdejson_enum_key_string
+name: serde_json enum non-string key (issue-driven)
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/serde-rs/json
+  pr: 1324
+  scenario: parser-validation
+  prompt_source: original-issue
+  issue: 979
+  base_sha: 5d30df60e916e9b8fc46c74794007ff271fdfbbf
+  gold_sha: 1a360b0a6c003912afc3503c834b0edd798bca28
+  test_paths:
+    - tests/regression/issue979.rs
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Resolve the following reported issue.
+
+  # `EnumAccess.variant` can parse non-string JSON object member names
+
+  ### Version
+  1.0.91
+
+  ### Description
+  When `visit_enum` is used for a JSON object, then `EnumAccess.variant` can parse non-string JSON object member names, which is malformed JSON. The reason for this is likely that the following line does not enforce that the next value is a string:
+  https://github.com/serde-rs/json/blob/e41ee42d92022dbffc00f4ed50580fa5e060a379/src/de.rs#L2019
+
+  ### Reproducer code
+  ```rust
+  use serde::de::{Deserializer, VariantAccess, Visitor};
+
+  struct V;
+  impl<'de> Visitor<'de> for V {
+      type Value = (Vec<bool>, ());
+
+      fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+          write!(formatter, "enum")
+      }
+
+      fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
+      where
+          A: serde::de::EnumAccess<'de>,
+      {
+          // Issue is here: Implementation for serde_json's internal VariantAccess struct
+          // reads object member as regular value, without enforcing that it is a string
+          let (key, variant_access) = data.variant()?;
+          let value = variant_access.newtype_variant()?;
+          Ok((key, value))
+      }
+  }
+
+  fn main() {
+      let mut de = serde_json::Deserializer::from_str("{[true]: null}");
+      let entry = de.deserialize_enum("name", &[], V).unwrap();
+      println!("entry: {entry:?}");
+      de.end().unwrap();
+  }
+
+  ```
+  This deserializes the malformed JSON object `{[true]: null}` without reporting any error.

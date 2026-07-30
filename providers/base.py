@@ -19,6 +19,11 @@ class ProviderRunResult:
     output_tokens: Optional[int] = None
     reasoning_tokens: Optional[int] = None
     total_tokens: Optional[int] = None
+    # Provider-reported cost (authoritative when present). Claude reports
+    # total_cost_usd itself, which correctly prices 1h cache WRITES at 2x input —
+    # a component compute_cost() cannot see (cache_creation is folded into
+    # input_tokens for the token columns).
+    provider_cost_usd: Optional[float] = None
     provider_trace: Optional[dict[str, Any]] = None
     # Full raw agent output (the complete jsonl/event trace from the CLI) — saved
     # verbatim per run so the agent's every step/tool-call can be analyzed.

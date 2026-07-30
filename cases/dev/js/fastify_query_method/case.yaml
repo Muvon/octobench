@@ -1,0 +1,30 @@
+id: dev_js_fastify_query_method
+name: Fastify HTTP QUERY method support
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/fastify/fastify
+  pr: 6832
+  scenario: feature
+  base_sha: de3752df84bb8dd35a8226bb467f05862f4da57c
+  gold_sha: 6e680c3e8150071be96cba6b30e1d74487559b54
+  test_paths:
+    - test/rfc-10008.test.js
+    - test/route-shorthand.test.js
+    - test/internals/all.test.js
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Add support for the HTTP QUERY method defined in RFC 10008. It should be a first-class built-in method like GET/POST, with a `fastify.query()` shorthand, and update the docs and types accordingly.
+
+  Requirements:
+  - QUERY is included in the default set of supported HTTP methods, so `fastify.route({ method: 'QUERY', ... })` works without calling `addHttpMethod`, and `fastify.all()` covers it too.
+  - A `fastify.query(url, [options], handler)` shorthand is provided, matching the existing post/put/patch shorthands.
+  - QUERY is treated as a body-carrying method: body parsing runs for it the same way it does for POST/PUT/PATCH.
+  - Per the RFC, a QUERY request without a Content-Type header is rejected with HTTP 400 and error code `FST_ERR_ROUTE_MISSING_CONTENT_TYPE`; a QUERY request with a Content-Type but no body is rejected with HTTP 400 and error code `FST_ERR_ROUTE_MISSING_CONTENT` (no content sniffing). Both are new error codes registered in the error system with status 400.
+  - The existing content-type-parser error paths apply unchanged to QUERY: unsupported media type responds 415 (`FST_ERR_CTP_INVALID_MEDIA_TYPE`), malformed JSON body responds 400 (`FST_ERR_CTP_INVALID_JSON_BODY`).
+
+  Acceptance checks:
+  - A QUERY request with `Content-Type: application/json` and a JSON body reaches the handler and returns 200 (via route() and via query()).
+  - Missing Content-Type → 400 with code `FST_ERR_ROUTE_MISSING_CONTENT_TYPE`; empty body → 400 with code `FST_ERR_ROUTE_MISSING_CONTENT`; invalid JSON → 400 `FST_ERR_CTP_INVALID_JSON_BODY`; unsupported media type → 415 `FST_ERR_CTP_INVALID_MEDIA_TYPE`.

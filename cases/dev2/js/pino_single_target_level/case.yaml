@@ -1,0 +1,66 @@
+id: dev2_js_pino_single_target_level
+name: pino single-target level filter (issue-driven)
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/pinojs/pino
+  pr: 2432
+  scenario: transport-config-boundary
+  prompt_source: original-issue
+  issue: 1996
+  base_sha: 7b2fee8700cb4ecab0d55dbe831d60b60fc16929
+  gold_sha: ea99eee063c783964f51bf3ac2c2c2815263056e
+  test_paths:
+    - test/transport/core.test.js
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Resolve the following reported issue.
+
+  # `level` filter not work for transports
+
+  How to reproduce:
+
+  ```js
+  import pino from 'pino'
+
+  const transports = pino.transport({
+    targets: [{
+        level: 'error',
+        target: 'pino/file',
+        options: {
+          destination: '1' //stdout
+        }
+    }]
+  })
+
+  const logger = pino({}, transports)
+
+  logger.debug('Debug')
+  logger.info('Info')
+  logger.warn('Warn')
+  logger.error('Error')
+  ```
+  **Expected behavior:**
+
+  ```bash
+  node test 
+
+  {"level":50,"time":1719528510555,"pid":47437,"hostname":"anime-desktop","msg":"Error"}
+  ```
+
+  **Actual behavior:**
+
+  ```bash
+  node test 
+
+  {"level":30,"time":1719528510555,"pid":47437,"hostname":"anime-desktop","msg":"Info"}
+  {"level":40,"time":1719528510555,"pid":47437,"hostname":"anime-desktop","msg":"Warn"}
+  {"level":50,"time":1719528510555,"pid":47437,"hostname":"anime-desktop","msg":"Error"}
+  ```
+
+  Same for any other transports
+
+  **Version:** 9.2.0
+  **Node.js version:** 18.20.3

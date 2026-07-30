@@ -1,0 +1,22 @@
+id: dev2_js_undici_async_mock_reply
+name: Undici async mock reply callbacks
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/nodejs/undici
+  pr: 5534
+  scenario: feature
+  base_sha: 3c662a598cae8ea6dc5b605a2a0de0de11647437
+  gold_sha: 6de5935f8add8d1fe3734281a8db1eb28f7fe729
+  test_paths:
+    - test/mock-interceptor.js
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  The mock interceptor's `reply(callback)` doesn't work when the callback is async — a callback returning a promise passes the object check but spreads into nothing, so dispatch throws `InvalidArgumentError: statusCode must be defined`. The data callback already supports async; make the reply options callback support it too, so `reply(async (opts) => ({ statusCode, data }))` works. Requirements:
+  - When the callback returns a promise, dispatch awaits it and uses the resolved `{ statusCode, data, responseOptions }`.
+  - The resolved value is validated with the same rules as a synchronous return (non-null object, statusCode defined — same errors).
+  - A rejecting callback surfaces its error to the caller as a response error instead of throwing synchronously from dispatch.
+  - Invocation bookkeeping (consumed/pending, timesInvoked) updates when the interceptor matches, so a still-pending async callback can't be matched beyond its configured times() — mirroring how async data callbacks behave.
+  - defaultReplyHeaders, replyContentLength, and times() work correctly with async callbacks. Update the TypeScript types (promise-returning callback allowed) and the mock docs accordingly.

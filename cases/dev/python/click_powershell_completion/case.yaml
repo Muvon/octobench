@@ -1,0 +1,29 @@
+id: dev_python_click_powershell_completion
+name: Click PowerShell shell completion
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/pallets/click
+  pr: 3637
+  scenario: feature
+  base_sha: b551fe85714c906565303fae98136d7c72b252ea
+  gold_sha: 7df2f82305f20f1611a9668b38d26933b648d807
+  test_paths:
+    - tests/test_shell_completion.py
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Click already generates shell completion scripts for bash, zsh, and fish. Add PowerShell as a fourth built-in completer so PowerShell users get tab completion too, covering both Windows PowerShell 5.1+ and PowerShell 7 (pwsh). It must follow the same conventions as the existing shells, and the shell-completion docs should mention the new shell.
+
+  Requirements:
+  - `powershell` is a registered built-in shell name, selectable via `_FOO_BAR_COMPLETE=powershell_source` (script generation) and `powershell_complete` (runtime completion), following the same env-var convention as bash, zsh, and fish.
+  - The generated completion script uses PowerShell's native argument-completion mechanism (`Register-ArgumentCompleter -Native`).
+  - At completion time, the full command text is forwarded to the Python side via `COMP_WORDS` and the cursor/word index via `COMP_CWORD`, reusing the existing shared argument-splitting logic rather than reimplementing it per shell.
+  - Completion items are emitted as three newline-separated fields per item — type, value, help — and the PowerShell script maps the plain, dir, and file item types to appropriate PowerShell completion results.
+  - Help text is flattened to one line by replacing each carriage return and each newline character with a single space, independently (a CRLF pair therefore becomes two spaces — do not collapse runs); items with no help use the same `_` sentinel the zsh completer uses.
+
+  Acceptance checks:
+  - `_CLI_COMPLETE=powershell_source cli` emits a script containing `Register-ArgumentCompleter` and the `powershell_complete` marker.
+  - With `COMP_WORDS`/`COMP_CWORD` set, the powershell completer returns completions in `type\nvalue\nhelp` framing (e.g. `plain\na\n_\nplain\nb\nbee\n` for two subcommands `a` and `b` where only `b` has help "bee").
+  - An item with no help produces `_` as the help field.

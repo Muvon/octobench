@@ -1,0 +1,28 @@
+id: dev2_js_pinopretty_strip_controls
+name: pino-pretty strip unsafe control chars
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/pinojs/pino-pretty
+  pr: 671
+  scenario: security-output-sanitization
+  base_sha: a93ed108418d64c089ba9474cc96685dc2e417f2
+  gold_sha: 87ed39f620160e0e1ccb6edf36c2901f8d5de741
+  test_paths:
+    - lib/utils/prettify-error-log.test.js
+    - lib/utils/prettify-error.test.js
+    - lib/utils/prettify-message.test.js
+    - lib/utils/prettify-metadata.test.js
+    - lib/utils/prettify-object.test.js
+    - lib/utils/prettify-time.test.js
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  pino-pretty prints log fields straight into the terminal, so a log line containing escape sequences like ESC[2J (clear screen) or other control characters can hijack the terminal — clearing it, moving the cursor, or injecting hidden text. Sanitize every piece of log-derived text pino-pretty writes out, without breaking legitimate formatting and without clobbering output a user's own custom prettifier deliberately produced.
+
+  Requirements:
+  - Strip terminal control characters in the ranges U+0000–U+0008, U+000B–U+001F, and U+007F–U+009F from any log-derived string before rendering; tab (U+0009), LF (U+000A), and CR (U+000D) are preserved.
+  - Non-string values are coerced to strings BEFORE stripping, so numeric/boolean/array values are covered too.
+  - Every default render path is covered: the log message (including messages assembled from a string messageFormat template), error stacks, error property keys and primitive error property values (including errorProps: '*'), generic log-object property keys and values, the name/pid/hostname/caller metadata line, and the timestamp.
+  - Trusted output stays untouched: strings produced by a user's custom prettifiers (including custom time/error prettifiers) and pino-pretty's own colorizer escapes keep their control characters.

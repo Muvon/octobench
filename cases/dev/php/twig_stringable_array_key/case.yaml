@@ -1,0 +1,17 @@
+id: dev_php_twig_stringable_array_key
+name: Twig ArrayAccess Stringable object key
+category: dev
+difficulty: simple
+meta:
+  repo: https://github.com/twigphp/Twig
+  pr: 4856
+  scenario: simple-edit
+  base_sha: 2fb736d03319099b4847f73b0bddb8b883408854
+  gold_sha: 8ada671fc39a235b48ef7d18020ab43658e98917
+  test_paths:
+    - tests/TemplateTest.php
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Since a recent release, templates doing `{{ data[object] }}` — where `data` is an ArrayAccess implementation keyed by objects (like SplObjectStorage) and `object` is a Stringable — stopped resolving: the lookup returns nothing instead of the stored value. It used to work. Accessing plain arrays with a Stringable key must keep coercing the key to a string as before, but ArrayAccess objects should receive the original object key for the offset lookup. The fix must hold with strict_variables enabled and disabled.

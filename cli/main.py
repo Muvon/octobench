@@ -109,7 +109,10 @@ def snapshot_files(workdir: Path) -> Dict[str, Dict]:
             content = None
             try:
                 text = data.decode("utf-8")
-                if len(text) <= 4000:
+                # Real repos have real-sized sources; content feeds the judge's
+                # evidence diff, so a tight cap starves the judge of the very
+                # code it must grade (observed: empty zero-confidence verdicts).
+                if len(text) <= 200_000:
                     content = text
             except Exception:
                 content = None
@@ -148,13 +151,19 @@ def build_evidence(before: Dict[str, Dict], after: Dict[str, Dict], diff: Dict) 
         after_c = after.get(rel, {}).get("content")
         if before_c is None or after_c is None:
             continue
-        diff_lines = difflib.unified_diff(
-            before_c.splitlines(),
-            after_c.splitlines(),
-            fromfile=f"a/{rel}",
-            tofile=f"b/{rel}",
-            lineterm="",
+        diff_lines = list(
+            difflib.unified_diff(
+                before_c.splitlines(),
+                after_c.splitlines(),
+                fromfile=f"a/{rel}",
+                tofile=f"b/{rel}",
+                lineterm="",
+            )
         )
+        # Keep judge prompts bounded on huge rewrites while preserving the
+        # evidence that matters.
+        if len(diff_lines) > 400:
+            diff_lines = diff_lines[:400] + [f"... [diff truncated, {len(diff_lines)} lines total]"]
         lines.append("\n".join(diff_lines))
 
     return "\n".join(lines)
@@ -628,12 +637,59 @@ def main() -> None:
                     ).strip()
                     if err_tail:
                         err_tail = err_tail[-1200:]
-                    raise RuntimeError(
-                        f"Provider failed: case={case_id} provider={provider_name} "
-                        f"model={benchmark_model} "
-                        f"exit={provider_result.exit_code}"
-                        + (f" details={err_tail}" if err_tail else "")
+                    # Contain the failure to this case: record it and move on so
+                    # one provider blip (network, auth refresh, OOM kill) cannot
+                    # abort every remaining case in the invocation. The record is
+                    # marked infra-failed for scripts/rerun_failed.py to retry.
+                    log(
+                        f"[octobench] PROVIDER-FAILED case={case_id} "
+                        f"provider={provider_name} exit={provider_result.exit_code}"
+                        + (f" details={err_tail[:200]}" if err_tail else ""),
+                        verbosity,
+                        "normal",
                     )
+                    write_text(logs_dir / "provider.stdout.log", provider_result.stdout or "")
+                    write_text(logs_dir / "provider.stderr.log", provider_result.stderr or "")
+                    write_text(logs_dir / "provider.raw.jsonl", provider_result.raw_output or "")
+                    all_results.append(
+                        {
+                            "case_id": case_id,
+                            "setup": setup_name,
+                            "provider": provider_name,
+                            "model": benchmark_model,
+                            "provider_model": provider_model,
+                            "runner": "provider",
+                            "executor": args.executor,
+                            "infra_failed": True,
+                            "result": {
+                                "stdout": "",
+                                "stderr": f"provider failed (exit={provider_result.exit_code})"
+                                + (f": {err_tail}" if err_tail else ""),
+                                "exit_code": provider_result.exit_code,
+                                "elapsed_ms": provider_result.elapsed_ms,
+                            },
+                            "tokens": {
+                                "input": provider_result.input_tokens,
+                                "cached_input": provider_result.cached_input_tokens,
+                                "output": provider_result.output_tokens,
+                                "reasoning": None,
+                                "total": provider_result.total_tokens,
+                            },
+                            "cost_usd": provider_result.provider_cost_usd,
+                            "scripts": {
+                                "setup": setup_log,
+                                "quality": {"exit_code": 1, "stdout": "", "stderr": "skipped", "elapsed_ms": 0},
+                                "validate": {"exit_code": 1, "stdout": "", "stderr": "skipped", "elapsed_ms": 0},
+                            },
+                            "evidence": "",
+                            "evidence_diff": "",
+                            "provider_evidence": "",
+                            "workdir": str(workdir_abs),
+                            "judge": {"score": 0, "reasoning": "provider infra failure", "issues": [], "confidence": 0.0},
+                            "scoring": {},
+                        }
+                    )
+                    continue
 
                 after = snapshot_files(executor.workspace_host_path())
                 diff = diff_snapshots(before, after)
@@ -682,12 +738,17 @@ def main() -> None:
                 if not pricing:
                     raise RuntimeError(f"Missing pricing for benchmark model: {benchmark_model}")
 
-                eval_cost = compute_cost(
-                    provider_result.input_tokens,
-                    provider_result.cached_input_tokens,
-                    provider_result.output_tokens,
-                    pricing,
-                )
+                # Provider-reported cost wins when present (claude's total_cost_usd
+                # prices 1h cache writes correctly); token-based compute is the
+                # fallback for providers that don't self-report (octomind/codex).
+                eval_cost = provider_result.provider_cost_usd
+                if eval_cost is None:
+                    eval_cost = compute_cost(
+                        provider_result.input_tokens,
+                        provider_result.cached_input_tokens,
+                        provider_result.output_tokens,
+                        pricing,
+                    )
 
                 record = {
                     "case_id": case_id,

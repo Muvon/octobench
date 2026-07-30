@@ -139,6 +139,7 @@ class ClaudeProvider(Provider):
             output_tokens=output_tokens,
             reasoning_tokens=None,
             total_tokens=total_tokens,
+            provider_cost_usd=cost_usd,
             provider_trace={
                 "assistant_messages": assistant_messages[-12:],
                 "tool_intents": tool_intents[-24:],

@@ -1,0 +1,20 @@
+id: dev2_cpp_spdlog_srcloc_lifetime
+name: spdlog buffered source_loc lifetime
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/gabime/spdlog
+  pr: 3633
+  scenario: lifetime-ub
+  base_sha: 8671ca4d492c8ee1cdfd3dd88afb9f88dd268178
+  gold_sha: 03bec982c294c54cb16452d2be083d73843849b9
+  test_paths:
+    - tests/test_ringbuffer.cpp
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  When a log message is buffered for later formatting (async logging, ringbuffer sink, etc.), the source location's filename and function name come out garbled or read freed memory — they still point at the caller's strings, which are gone by the time the message is formatted. `log_msg_buffer` already copies the logger name and payload into its own storage so they survive; the source-location strings need the same treatment (issue #3195). Requirements:
+  - Buffering a message copies the source filename and function name into the buffer's own storage and re-points them there, so formatting later produces the correct filename, line, and function.
+  - Absent source info (null pointers) is handled without dereferencing and stays absent.
+  - Every way a buffer acquires content — construction from a message, copy construction, copy assignment, move assignment — must leave the source strings owned and valid; no path may leave them dangling or double-copied.

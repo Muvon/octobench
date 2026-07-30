@@ -1,0 +1,24 @@
+id: dev_cpp_yamlcpp_binary_emit_styles
+name: yaml-cpp binary emit style manipulators
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/jbeder/yaml-cpp
+  pr: 1447
+  scenario: feature
+  base_sha: 29a6f43950ce22be9f90ea1071e94bcb675c8c51
+  gold_sha: ee52744a3196c32f29536b4671c703146cac9cb6
+  test_paths:
+    - test/integration/emitter_test.cpp
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  When emitting a YAML::Binary value, the emitter always produces the double-quoted base64 form (`!!binary "..."`) no matter which string-style manipulator is active. Regular strings already honor Auto, SingleQuoted, DoubleQuoted, and Literal — binary values should do the same, treating the base64 payload as the string whose style is chosen. The existing default output must not change.
+
+  Requirements:
+  - SingleQuoted emits a single-quoted scalar: `!!binary 'SGVsbG8sIFdvcmxkIQ=='`.
+  - Literal in block context emits a literal block scalar: `!!binary |-` with the base64 on the next line, indented by the current indent plus the configured indent — so the Indent manipulator is respected (e.g. Indent(8) yields deeper indentation).
+  - Literal in flow context falls back to the double-quoted form (literal scalars are not valid in flow).
+  - Auto and DoubleQuoted keep emitting the double-quoted form exactly as before; an empty binary under Auto stays `!!binary ""`.
+  - An empty binary under Literal emits `!!binary |-` followed by an empty content line (a truly empty line — no indentation whitespace).

@@ -1,0 +1,100 @@
+id: dev2_python_pydantic_pipeline_constraints
+name: Pydantic pipeline constraint schema (issue-driven)
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/pydantic/pydantic
+  pr: 13516
+  scenario: schema-validation-divergence
+  prompt_source: original-issue
+  issue: 13507
+  base_sha: d0ffa0951e47fd7349032e4b2ea9a54dc28fd435
+  gold_sha: 60d4c4873e44d587c8d70d7a1c731f7361fe55eb
+  test_paths:
+    - tests/test_pipeline.py
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Resolve the following reported issue.
+
+  # Experimental pipeline: every constraint chained after ge/lt/le is dropped from the JSON schema
+
+  ### Description
+
+  In the experimental pipeline API, chaining constraints silently drops every bound after the first from the generated JSON schema. **Validation stays correct** - only the published schema is wrong, which makes it easy to miss.
+
+  All bounds below are non-zero, so this is not #13450 (falsy zero bounds in `Interval`). Observed identically on released 2.13.4 and on `main` (2.14.0a1).
+
+  | expression | JSON schema | validation |
+  |---|---|---|
+  | `validate_as(int).ge(1).le(100)` | `{"minimum": 1, "type": "integer"}` | 0 reject, 50 accept, 200 reject |
+  | `validate_as(int).le(100).ge(1)` | `{"maximum": 100, "type": "integer"}` | 0 reject, 50 accept, 200 reject |
+  | `validate_as(int).constrain(Interval(ge=1, le=100))` | `{"minimum": 1, "type": "integer"}` | 0 reject, 50 accept, 200 reject |
+  | `validate_as(int).ge(1).le(100).multiple_of(5)` | `{"minimum": 1, "type": "integer"}` | correct |
+  | `validate_as(int).gt(1).lt(100)` *(control)* | `{"exclusiveMinimum": 1, "exclusiveMaximum": 100, ...}` | correct |
+  | `Annotated[int, Ge(1), Le(100)]` *(control)* | `{"minimum": 1, "maximum": 100, ...}` | correct |
+
+  So `.ge(1).le(100).multiple_of(5)` publishes a schema advertising *any integer >= 1*, while the validator rejects 200 and 52. For FastAPI that means the OpenAPI component and every generated client disagree with the server.
+
+  ### Cause
+
+  In `_apply_constraint()`, the `Ge`, `Lt` and `Le` branches apply their fallback function validator **unconditionally** - including when the native core-schema field was just set:
+
+  ```python
+  elif isinstance(constraint, annotated_types.Ge):
+      ge = constraint.ge
+      if s and s['type'] in {'int', 'float', 'decimal'}:
+          s = s.copy()
+          if s['type'] == 'int' and isinstance(ge, int):
+              s['ge'] = ge          # native constraint applied...
+          ...
+
+      def check_ge(v: Any) -> bool:
+          return v >= ge
+
+      s = _check_func(check_ge, f'>= {ge}', s)   # ...and then wrapped anyway
+  ```
+
+  `_check_func` wraps the schema in `function-after`. The next constraint in the chain sees `s['type'] == 'function-after'`, which is not in `{'int', 'float', 'decimal'}`, so it cannot set its own native field and survives only inside an opaque callable that JSON-schema generation cannot read. Core schema for `.ge(1).le(100)`:
+
+  ```
+  {'type': 'function-after',
+   'function': ...,                       # <- le(100) lives in here, invisible to the schema
+   'schema': {'type': 'function-after',
+              'function': ...,            # <- redundant ge check
+              'schema': {'type': 'int', 'ge': 1}}}
+  ```
+
+  `Gt` is the control that works, and only by accident: its fallback sits in an `else:`, so nothing is wrapped when the native constraint applies.
+
+  ### Example Code
+
+  ```python
+  from typing import Annotated
+
+  from pydantic import TypeAdapter
+  from pydantic.experimental.pipeline import validate_as
+
+  ta = TypeAdapter(Annotated[int, validate_as(int).ge(1).le(100)])
+
+  print(ta.json_schema())      # {'minimum': 1, 'type': 'integer'}   <- no maximum
+  ta.validate_python(200)      # ValidationError, as it should be
+
+  # control: the same constraints without the pipeline
+  import annotated_types
+  print(TypeAdapter(Annotated[int, annotated_types.Ge(1), annotated_types.Le(100)]).json_schema())
+  # {'maximum': 100, 'minimum': 1, 'type': 'integer'}
+  ```
+
+  ### Python, Pydantic & OS Version
+
+  ```text
+               pydantic version: 2.13.4
+          pydantic-core version: 2.46.4
+            pydantic-core build: profile=release pgo=false
+                 python version: 3.11.15 (main, Mar  3 2026, 09:26:23) [GCC 13.3.0]
+                       platform: Linux-6.18.5-x86_64-with-glibc2.39
+               related packages: typing_extensions-4.16.0
+                         commit: unknown
+  ```

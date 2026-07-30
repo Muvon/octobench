@@ -118,7 +118,7 @@ def run_cli(prompt: str, workdir: str, meta: Dict) -> RunResult:
     output_tokens = None
     total_tokens = None
     cached_input_tokens = None
-    last_agent_message = None
+    agent_messages: list = []
 
     # If tool emits JSONL events, parse usage and assistant output.
     # Supports Codex event schema and Octomind JSONL schema.
@@ -130,7 +130,14 @@ def run_cli(prompt: str, workdir: str, meta: Dict) -> RunResult:
             try:
                 obj = json.loads(line)
             except Exception:
-                continue
+                # Long assistant chunks can carry raw control chars that break
+                # strict JSON parsing; losing such a chunk beheads the payload.
+                try:
+                    obj = json.loads(
+                        re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", line)
+                    )
+                except Exception:
+                    continue
             usage = obj.get("usage")
             if isinstance(usage, dict):
                 input_tokens = usage.get("input_tokens", input_tokens)
@@ -159,14 +166,18 @@ def run_cli(prompt: str, workdir: str, meta: Dict) -> RunResult:
 
             item = obj.get("item")
             if isinstance(item, dict) and item.get("type") == "agent_message":
-                last_agent_message = item.get("text", last_agent_message)
-            # Octomind JSONL assistant message.
+                text = item.get("text")
+                if isinstance(text, str) and text.strip():
+                    agent_messages.append(text)
+            # Octomind JSONL assistant message. A long answer can arrive split
+            # across several assistant events — keep ALL chunks, not the last
+            # one, or a JSON payload loses its head and fails to parse.
             if obj.get("type") == "assistant":
                 content = obj.get("content")
                 if isinstance(content, str) and content.strip():
-                    last_agent_message = content
-        if last_agent_message:
-            stdout = last_agent_message
+                    agent_messages.append(content)
+        if agent_messages:
+            stdout = "\n\n".join(agent_messages)
 
     token_regexes = meta.get("token_regexes", {})
     combined = stdout + "\n" + stderr + "\n" + proc_stdout
@@ -178,6 +189,16 @@ def run_cli(prompt: str, workdir: str, meta: Dict) -> RunResult:
         total_tokens = _extract_tokens(combined, token_regexes.get("total"))
     if total_tokens is None and input_tokens is not None and output_tokens is not None:
         total_tokens = input_tokens + output_tokens
+
+    # Preserve the raw event stream next to the prompt/output files so judge
+    # truncation issues can be diagnosed from the original jsonl.
+    if meta.get("json_events"):
+        try:
+            with open(os.path.join(io_dir, f"_stream_{io_tag}.jsonl"), "w",
+                      encoding="utf-8") as f:
+                f.write(proc_stdout)
+        except Exception:
+            pass
 
     return RunResult(
         stdout=stdout,

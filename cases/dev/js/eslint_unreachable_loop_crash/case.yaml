@@ -1,0 +1,17 @@
+id: dev_js_eslint_unreachable_loop_crash
+name: ESLint no-unreachable-loop crash
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/eslint/eslint
+  pr: 21116
+  scenario: crash-fix
+  base_sha: 044a627fa3e28ee1410d515acc5378eb4b49f8ba
+  gold_sha: 90910715011211a20d011d807d398a7005127f35
+  test_paths:
+    - tests/lib/rules/no-unreachable-loop.js
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  The no-unreachable-loop rule crashes when the ignore option lists every loop type. With `no-unreachable-loop: ["error", { ignore: ["WhileStatement", "DoWhileStatement", "ForStatement", "ForInStatement", "ForOfStatement"] }]`, linting any code containing a loop (for example `while (a) break;`) throws `Cannot read properties of undefined (reading 'type')` instead of simply reporting nothing. When every loop type is ignored the rule has nothing to check, so it must not crash and must not report anything; configurations ignoring only some loop types must keep behaving exactly as they do today.

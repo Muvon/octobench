@@ -1,0 +1,17 @@
+id: dev_php_carbon_period_end_sync
+name: Carbon period end property sync
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/briannesbitt/Carbon
+  pr: 3333
+  scenario: bug-fix
+  base_sha: 3db26e52db996da1d720d74bbbc99c1300fc0160
+  gold_sha: 2c330722d22555ad20f3bcfdb2c1ba5a56a0b5f5
+  test_paths:
+    - tests/CarbonPeriod/GettersTest.php
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  On PHP 8.2+, reading a period's `->end` property after calling `setEndDate()` still returns the end date from when the period was created (or null) instead of the newly set one, while `getEndDate()` returns the right value. `->end` must reflect whatever `setEndDate()` set, including when the end date is removed again, and the same staleness has to be addressed for the period's start when `setStartDate()` is used. Behavior on PHP versions below 8.2 must stay exactly as it is today.

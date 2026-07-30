@@ -1,0 +1,61 @@
+id: dev2_php_commonmark_fence_tabs
+name: CommonMark fenced-code tab handling (issue-driven)
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/thephpleague/commonmark
+  pr: 1130
+  scenario: parser-tab-arithmetic
+  prompt_source: original-issue
+  issue: 981
+  base_sha: cfb11eca1dce491891141055b945724b25434c74
+  gold_sha: 51b529fd295ade2e641e8a6152e72c16ce9735ac
+  test_paths:
+    - tests/functional/data/fenced_code_tabs.md
+    - tests/functional/data/fenced_code_tabs.html
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Resolve the following reported issue.
+
+  # Code blocks sometimes don't render first character
+
+  ### Version(s) affected
+
+  2.3, 2.4
+
+  ### Description
+
+  Hey there
+  We switched our markdown interpreter to commonmark. While reviewing old texts with the new markdown interpreter I noticed a strange behavior. In a special scenario with code blocks, tabs and lists, the resulting markdown 'forgets' the first character of a given code block.
+  I can reproduce it in a commonmark only project and will give you the code example below.
+
+  ### How to reproduce
+
+  I had a clean folder and only run `composer require league/commonmark`.
+  I created a index.php and filled it with following code:
+  ~~~
+  <?php
+
+  require __DIR__ . '/vendor/autoload.php';
+
+  use League\CommonMark\CommonMarkConverter;
+
+  $converter = new CommonMarkConverter();
+
+  $str = <<<EOD
+  # Stuff
+
+  - Something more:
+  	```
+  	What's happening?
+  	```
+  EOD;
+
+  echo $converter->convert($str);
+  ~~~
+  I ran `php -S localhost:8000 -t .`
+
+  The resulting output is:
+  (screenshot: the rendered code block is missing the first character of each line)

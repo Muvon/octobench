@@ -1,0 +1,22 @@
+id: dev2_php_guzzle_cookie_prefixes
+name: Guzzle secure cookie name prefixes
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/guzzle/guzzle
+  pr: 3894
+  scenario: security-input-validation
+  base_sha: ecfbeb7a08fbbc5cfc0ab49ae56fcc71447160b5
+  gold_sha: 7f8b93d1a9bed5bdd4ecb4e40c4a26898c8826e4
+  test_paths:
+    - tests/Cookie/CookieJarTest.php
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  When the cookie jar extracts cookies from an HTTP response it should honor the `__Secure-` and `__Host-` name prefixes from the cookie spec; today a server (or attacker-controlled response) can set `__Secure-SID` without `Secure`, or `__Host-SID` with a `Domain` or non-root `Path`, and the jar stores it. Requirements:
+  - A response cookie whose name starts with `__Secure-` (prefix matched case-insensitively) must carry the Secure attribute, else it is ignored.
+  - A response cookie whose name starts with `__Host-` must be Secure, host-only (no Domain), scoped to path `/`, and the original Set-Cookie header must actually contain a `Path=` attribute (a bare `Path` token without `=` does not count — note the jar defaults a missing Path, so the parsed cookie alone cannot tell you this).
+  - Prefix matching is case-insensitive but cookie names stay case-sensitive: the stored name keeps its original casing, and differently-cased names remain distinct cookies.
+  - Rejected prefixed cookies are ignored ENTIRELY — in particular an invalid prefixed cookie with Max-Age=0 must not delete an existing valid cookie of the same name.
+  - Only response extraction validates prefixes; cookies added directly to the jar or restored from persistence are unchanged. Names merely containing the prefix substring mid-name are not prefixed.

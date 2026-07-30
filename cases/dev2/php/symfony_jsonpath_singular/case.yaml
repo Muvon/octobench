@@ -1,0 +1,22 @@
+id: dev2_php_symfony_jsonpath_singular
+name: Symfony JsonPath singular-query filters
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/symfony/symfony
+  pr: 65005
+  scenario: parser-spec-compliance
+  base_sha: 64418e15e4e806178c39cded5362a6c06ea43331
+  gold_sha: b785a298870b3e421b24972a6eb7cc39c162b57a
+  test_paths:
+    - src/Symfony/Component/JsonPath/Tests/JsonCrawlerTest.php
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  The JsonPath crawler lets invalid filter comparisons through. RFC 9535 (§2.3.5.2) says both operands of a comparison inside a filter selector must be SINGULAR queries — a leading `@` (or `$`) followed only by name selectors (`.name`, `['name']`, `["name"]`) and index selectors (`[0]`, `[-1]`); `@` alone is singular. But queries like `$[?(@..a == 1)]`, `$[?(@[*] == 1)]`, and `$[?(@.b.* == 1)]` currently return results instead of throwing — the existing check is a negative heuristic that only catches unions, slices, and the literal `@.*`, so descendant segments, bracket wildcards, and wildcards below the top level slip past. Worse, wrapping the filter in parentheses bypasses the check entirely: `$[?@..a==1]` throws but `$[?(@..a==1)]` returns results.
+
+  Fix it so:
+  - Every non-singular comparison operand is rejected with a JsonCrawlerException whose message contains "non-singular query is not comparable" — descendant segments (`@..a`), wildcards at any depth (`@[*]`, `@.*`, `@.b.*`, `@.b[*].a`), unions, slices, and nested filter selectors (`@[?@.a]`) all included.
+  - Bare and parenthesised filter expressions are validated identically.
+  - Non-singular queries remain legal as FUNCTION arguments (`count(@..a)`, `count(@[*])`) — functions accept nodelists; only comparison operands must be singular.

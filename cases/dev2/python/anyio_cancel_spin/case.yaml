@@ -1,0 +1,17 @@
+id: dev2_python_anyio_cancel_spin
+name: AnyIO cancel-scope CPU spin
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/agronholm/anyio
+  pr: 1217
+  scenario: concurrency-livelock
+  base_sha: 6bbc6c33caabc13af5bc4256f745027cf8d5d7b8
+  gold_sha: dbba29d1ade7936f18fb71ba24aa92978673482a
+  test_paths:
+    - tests/test_taskgroups.py
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  On the asyncio backend, if a cancel scope ends up containing a task that has already finished (reachable through improper cancel scope nesting — a task group entered but never properly exited, so its host task completes without unwinding), cancelling that scope pins the event loop at 100% CPU: the cancellation delivery keeps rescheduling itself forever because it never recognizes the finished task as done. Fix the spin: the skip belongs inside the delivery pass itself — delivery still runs and simply skips any already-finished task entirely (neither cancelling it nor counting it as a reason to retry), leaving no pending reschedule callback behind. Delivery to still-running tasks keeps working exactly as before. (Issue #1111.)

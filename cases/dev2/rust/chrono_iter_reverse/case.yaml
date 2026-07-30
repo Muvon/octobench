@@ -1,0 +1,21 @@
+id: dev2_rust_chrono_iter_reverse
+name: Chrono reversed date iterators
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/chronotope/chrono
+  pr: 1809
+  scenario: bug-fix
+  base_sha: 7fa24eac9514db65eb8bddf7fadeca71b68e414a
+  gold_sha: 7b6436f65e0c7ec2f9a7cdea88af1f3851a01f6f
+  test_paths:
+    - src/naive/date/tests.rs
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Reversing the day and week iterators on NaiveDate gives wrong results. Doing `some_date.iter_days().take(4).rev()`, expecting the last four dates of the forward run in reverse, instead yields dates BEFORE the start date — the iterator walks backwards from the start rather than reversing the bounded window. Same problem for `iter_weeks()`. Requirements:
+  - For any start date and any n, `.iter_days().take(n).rev()` and `.iter_weeks().take(n).rev()` must yield exactly the forward sequence reversed.
+  - Reverse iteration must respect the same upper bound as forward iteration: a range that forward-iterates only k elements before hitting NaiveDate::MAX must also yield only k when reversed — never dates below the start.
+  - size_hint/len must stay consistent with what remains in the range when consumed from either end.
+  - Forward iteration and its termination at NaiveDate::MAX are unchanged. Update the iterator doc examples to demonstrate the corrected double-ended behavior.

@@ -1,0 +1,30 @@
+id: dev_rust_rayon_par_array_windows
+name: Rayon parallel array windows
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/rayon-rs/rayon
+  pr: 1293
+  scenario: feature
+  base_sha: 56bbf0623b9ad3cd6e91e169c5a8a1c10b319b4b
+  gold_sha: c9ae0472072c60cc9d911c16fd42cd1eb84a5d0a
+  test_paths:
+    - tests/producer_split_at.rs
+    - tests/clones.rs
+    - tests/debug.rs
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Rayon already has `par_windows` mirroring `slice::windows`, but there is no parallel equivalent of `slice::array_windows` (the const-generic version yielding `&[T; N]`). Add a `par_array_windows` method to ParallelSlice so users can iterate overlapping fixed-size windows in parallel, the same way they already can with `par_windows`.
+
+  Requirements:
+  - `par_array_windows::<N>()` takes the window length as a const generic parameter (no runtime size argument) and yields `&[T; N]` items.
+  - It is an indexed parallel iterator: exact length, splittable, works with indexed consumers/collect like the existing `par_windows`.
+  - The number of windows matches `slice::array_windows` semantics: `len().saturating_sub(N - 1)`, and N must be at least 1.
+  - The public iterator type is named `ArrayWindows`, exported from the slice module alongside the existing `Windows` type, and implements Clone and Debug consistently with it.
+  - No mutable variant is needed.
+
+  Acceptance checks:
+  - `[1, 2, 3].par_array_windows().collect::<Vec<_>>()` yields `[&[1, 2], &[2, 3]]`.
+  - Parallel splits at every point produce exactly the same sequence as sequential `array_windows`.
