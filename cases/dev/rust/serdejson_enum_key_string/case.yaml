@@ -4,6 +4,8 @@ category: dev
 difficulty: medium
 meta:
   repo: https://github.com/serde-rs/json
+  pr_url: https://github.com/serde-rs/json/pull/1324
+  issue_url: https://github.com/serde-rs/json/issues/979
   pr: 1324
   scenario: parser-validation
   prompt_source: original-issue

@@ -4,6 +4,7 @@ category: dev
 difficulty: complex
 meta:
   repo: https://github.com/agronholm/anyio
+  pr_url: https://github.com/agronholm/anyio/pull/1208
   pr: 1208
   scenario: encoding-security
   base_sha: eb562e6462ee46b1904e50b02ce00a858cdeb200

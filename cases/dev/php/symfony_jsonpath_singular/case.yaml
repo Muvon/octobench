@@ -4,6 +4,7 @@ category: dev
 difficulty: complex
 meta:
   repo: https://github.com/symfony/symfony
+  pr_url: https://github.com/symfony/symfony/pull/65005
   pr: 65005
   scenario: parser-spec-compliance
   base_sha: 64418e15e4e806178c39cded5362a6c06ea43331

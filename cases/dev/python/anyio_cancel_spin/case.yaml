@@ -4,6 +4,7 @@ category: dev
 difficulty: complex
 meta:
   repo: https://github.com/agronholm/anyio
+  pr_url: https://github.com/agronholm/anyio/pull/1217
   pr: 1217
   scenario: concurrency-livelock
   base_sha: 6bbc6c33caabc13af5bc4256f745027cf8d5d7b8

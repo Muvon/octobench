@@ -4,6 +4,7 @@ category: dev
 difficulty: medium
 meta:
   repo: https://github.com/eslint/eslint
+  pr_url: https://github.com/eslint/eslint/pull/21116
   pr: 21116
   scenario: crash-fix
   base_sha: 044a627fa3e28ee1410d515acc5378eb4b49f8ba

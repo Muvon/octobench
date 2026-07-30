@@ -4,6 +4,7 @@ category: dev
 difficulty: simple
 meta:
   repo: https://github.com/twigphp/Twig
+  pr_url: https://github.com/twigphp/Twig/pull/4856
   pr: 4856
   scenario: simple-edit
   base_sha: 2fb736d03319099b4847f73b0bddb8b883408854

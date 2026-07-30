@@ -4,6 +4,7 @@ category: dev
 difficulty: complex
 meta:
   repo: https://github.com/pinojs/pino-pretty
+  pr_url: https://github.com/pinojs/pino-pretty/pull/671
   pr: 671
   scenario: security-output-sanitization
   base_sha: a93ed108418d64c089ba9474cc96685dc2e417f2

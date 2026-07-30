@@ -4,6 +4,7 @@ category: dev
 difficulty: complex
 meta:
   repo: https://github.com/gabime/spdlog
+  pr_url: https://github.com/gabime/spdlog/pull/3633
   pr: 3633
   scenario: lifetime-ub
   base_sha: 8671ca4d492c8ee1cdfd3dd88afb9f88dd268178

@@ -4,6 +4,7 @@ category: dev
 difficulty: complex
 meta:
   repo: https://github.com/guzzle/guzzle
+  pr_url: https://github.com/guzzle/guzzle/pull/3894
   pr: 3894
   scenario: security-input-validation
   base_sha: ecfbeb7a08fbbc5cfc0ab49ae56fcc71447160b5

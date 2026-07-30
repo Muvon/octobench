@@ -4,6 +4,7 @@ category: dev
 difficulty: medium
 meta:
   repo: https://github.com/tokio-rs/bytes
+  pr_url: https://github.com/tokio-rs/bytes/pull/842
   pr: 842
   scenario: resource-lifecycle
   base_sha: 002df10b8c610788b2730ec1234934e81aaa2880

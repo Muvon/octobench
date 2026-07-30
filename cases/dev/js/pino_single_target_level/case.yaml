@@ -4,6 +4,8 @@ category: dev
 difficulty: medium
 meta:
   repo: https://github.com/pinojs/pino
+  pr_url: https://github.com/pinojs/pino/pull/2432
+  issue_url: https://github.com/pinojs/pino/issues/1996
   pr: 2432
   scenario: transport-config-boundary
   prompt_source: original-issue

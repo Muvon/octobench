@@ -4,6 +4,7 @@ category: dev
 difficulty: complex
 meta:
   repo: https://github.com/nodejs/undici
+  pr_url: https://github.com/nodejs/undici/pull/5534
   pr: 5534
   scenario: feature
   base_sha: 3c662a598cae8ea6dc5b605a2a0de0de11647437

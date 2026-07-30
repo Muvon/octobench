@@ -4,6 +4,7 @@ category: dev
 difficulty: medium
 meta:
   repo: https://github.com/catchorg/Catch2
+  pr_url: https://github.com/catchorg/Catch2/pull/3086
   pr: 3086
   scenario: bug-fix
   base_sha: 8492fd444e42f331f48611d2b5ef11c8ce338423

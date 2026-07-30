@@ -4,6 +4,8 @@ category: dev
 difficulty: medium
 meta:
   repo: https://github.com/jbeder/yaml-cpp
+  pr_url: https://github.com/jbeder/yaml-cpp/pull/1451
+  issue_url: https://github.com/jbeder/yaml-cpp/issues/1251
   pr: 1451
   scenario: parser-spec-compliance
   prompt_source: original-issue

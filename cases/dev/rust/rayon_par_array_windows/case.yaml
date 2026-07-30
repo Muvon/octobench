@@ -4,6 +4,7 @@ category: dev
 difficulty: complex
 meta:
   repo: https://github.com/rayon-rs/rayon
+  pr_url: https://github.com/rayon-rs/rayon/pull/1293
   pr: 1293
   scenario: feature
   base_sha: 56bbf0623b9ad3cd6e91e169c5a8a1c10b319b4b

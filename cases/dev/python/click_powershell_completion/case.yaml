@@ -4,6 +4,7 @@ category: dev
 difficulty: complex
 meta:
   repo: https://github.com/pallets/click
+  pr_url: https://github.com/pallets/click/pull/3637
   pr: 3637
   scenario: feature
   base_sha: b551fe85714c906565303fae98136d7c72b252ea

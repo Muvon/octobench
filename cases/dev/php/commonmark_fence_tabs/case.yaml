@@ -4,6 +4,8 @@ category: dev
 difficulty: complex
 meta:
   repo: https://github.com/thephpleague/commonmark
+  pr_url: https://github.com/thephpleague/commonmark/pull/1130
+  issue_url: https://github.com/thephpleague/commonmark/issues/981
   pr: 1130
   scenario: parser-tab-arithmetic
   prompt_source: original-issue

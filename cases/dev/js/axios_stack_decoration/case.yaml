@@ -1,0 +1,21 @@
+id: dev3_js_axios_stack_decoration
+name: Axios stack decoration destroys request errors (human-prompt)
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/axios/axios
+  pr_url: https://github.com/axios/axios/pull/11109
+  issue_url: https://github.com/axios/axios/issues/11108
+  pr: 11109
+  issue: 11108
+  scenario: error-handling-robustness
+  prompt_source: human-prompt
+  base_sha: 712e02373f1c5ac72fdf5da16f04838338ba817e
+  gold_sha: a75bf44647e5132e39b778730394b0a2b983265c
+  test_paths:
+    - tests/unit/core/Axios.test.js
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Our APM agent overrides `Error.prepareStackTrace` to return call-site objects instead of a string, and now every failed axios request rejects with `TypeError: dummy.stack.indexOf is not a function` instead of the real error (the ECONNREFUSED, the 401, whatever actually happened). That cosmetic stack-decoration step when a request fails should never be able to replace the actual request error, no matter what a stack-trace hook does — can you make it bulletproof?

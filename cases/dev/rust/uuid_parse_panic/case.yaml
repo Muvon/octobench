@@ -4,6 +4,7 @@ category: dev
 difficulty: medium
 meta:
   repo: https://github.com/uuid-rs/uuid
+  pr_url: https://github.com/uuid-rs/uuid/pull/886
   pr: 886
   scenario: crash-fix
   base_sha: d11965705f88ae2546e0d277dac8f52f47e5694f

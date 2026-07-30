@@ -4,6 +4,7 @@ category: dev
 difficulty: medium
 meta:
   repo: https://github.com/briannesbitt/Carbon
+  pr_url: https://github.com/briannesbitt/Carbon/pull/3333
   pr: 3333
   scenario: bug-fix
   base_sha: 3db26e52db996da1d720d74bbbc99c1300fc0160

@@ -4,6 +4,7 @@ category: dev
 difficulty: simple
 meta:
   repo: https://github.com/pallets/werkzeug
+  pr_url: https://github.com/pallets/werkzeug/pull/3147
   pr: 3147
   scenario: bug-fix
   base_sha: b97e13cc74d8a45dca260d4037edd7d1f5094042

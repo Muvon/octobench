@@ -90,8 +90,9 @@ trusted open-source repos. The pipeline, end to end:
      are overwritten), runs those tests. The gold test file usually carries old
      + new tests, so one run covers fail-to-pass and regressions.
    - `quality.sh`: cheap objective build/lint only.
-   - `case.yaml` `meta:` records repo/base_sha/gold_sha/test_paths (harness
-     ignores it; tooling reads it).
+   - `case.yaml` `meta:` records repo/base_sha/gold_sha/test_paths plus
+     provenance links — `pr_url` always, `issue_url` when the case derives
+     from a reported issue (harness ignores meta; tooling and humans read it).
 5. **Prove fail-to-pass before benching.** `scripts/verify_case.sh <case_dir>`
    (agent image): setup → validate must FAIL at base → apply gold source (first-
    parent diff, test paths excluded) → validate must PASS. A case that fails

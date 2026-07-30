@@ -4,6 +4,7 @@ category: dev
 difficulty: medium
 meta:
   repo: https://github.com/chronotope/chrono
+  pr_url: https://github.com/chronotope/chrono/pull/1809
   pr: 1809
   scenario: bug-fix
   base_sha: 7fa24eac9514db65eb8bddf7fadeca71b68e414a

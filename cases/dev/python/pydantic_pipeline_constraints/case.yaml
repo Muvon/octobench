@@ -4,6 +4,8 @@ category: dev
 difficulty: complex
 meta:
   repo: https://github.com/pydantic/pydantic
+  pr_url: https://github.com/pydantic/pydantic/pull/13516
+  issue_url: https://github.com/pydantic/pydantic/issues/13507
   pr: 13516
   scenario: schema-validation-divergence
   prompt_source: original-issue

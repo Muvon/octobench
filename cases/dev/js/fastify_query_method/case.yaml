@@ -4,6 +4,7 @@ category: dev
 difficulty: complex
 meta:
   repo: https://github.com/fastify/fastify
+  pr_url: https://github.com/fastify/fastify/pull/6832
   pr: 6832
   scenario: feature
   base_sha: de3752df84bb8dd35a8226bb467f05862f4da57c
