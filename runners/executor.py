@@ -220,6 +220,15 @@ class DockerExecutor(Executor):
         _cb = os.environ.get("CODEX_BIN")
         if _cb and Path(_cb).exists():
             mounts += ["-v", f"{Path(_cb).resolve()}:/usr/local/bin/codex:ro"]
+        # octobench: opencode is not baked into the image — binary and its
+        # provider config (custom ollama endpoint) are mounted when set.
+        _oc = os.environ.get("OPENCODE_BIN")
+        if _oc and Path(_oc).exists():
+            mounts += ["-v", f"{Path(_oc).resolve()}:/usr/local/bin/opencode:ro"]
+        _occ = os.environ.get("OPENCODE_CONFIG_JSON")
+        if _occ and Path(_occ).exists():
+            mounts += ["-v", f"{Path(_occ).resolve()}:"
+                             "/root/.config/opencode/opencode.json:ro"]
         # octobench: staged muvon tap mounted over the container tap cache so
         # role edits under test reach fresh containers without publishing.
         # Read-only is safe: octomind's silent `git pull` on it fails and the

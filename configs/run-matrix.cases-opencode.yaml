@@ -1,0 +1,3 @@
+runs:
+  - provider: opencode
+    model: glm-5.2

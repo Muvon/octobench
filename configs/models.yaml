@@ -172,6 +172,7 @@ models:
       output: 4.40
     providers:
       octomind: ollama:glm-5.2
+      opencode: ollama/glm-5.2
 
   glm-5.1:                       # historical: octohub:glm served 5.1 before 2026-07
     pricing:
