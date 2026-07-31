@@ -1,0 +1,22 @@
+id: dev3_cpp_redis_acl_effective_keys
+name: Redis ACL effective-key validation
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/redis/redis
+  pr_url: https://github.com/redis/redis/pull/15478
+  pr: 15478
+  scenario: security-bug-fix
+  prompt_source: human-prompt
+  prompt_style: behavior-rich
+  base_sha: ba99faa230643931f91d2d5d68a0393e25fa07f5
+  gold_sha: d3315247fa1cf9ce079eb7b6e77a7d06ac643b2a
+  test_paths:
+    - tests/unit/acl-v2.tcl
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  We found ACL bypasses in commands whose effective keys depend on their arguments. Please make ACL checks cover the keys the command will actually use while preserving normal command parsing and execution.
+
+  In particular, repeated `STORE`/`STOREDIST` options in `GEORADIUS` and `GEORADIUSBYMEMBER` use the last destination, so that final key must be checked. Repeated `STORE` in `SORT` behaves the same way, and an earlier destination may itself be named `BY`, `GET`, or `LIMIT` without confusing the option scan. For `XREAD` and `XREADGROUP`, validate the actual stream keys even when the group or consumer is named `STREAMS` or optional arguments appear before the real `STREAMS` marker. Keep source keys classified as reads and destination keys that are overwritten classified as writes.

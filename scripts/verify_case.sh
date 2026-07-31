@@ -28,7 +28,14 @@ EOF
 
 WS="$(mktemp -d "${TMPDIR:-/tmp}/ob-verify.XXXXXX")"
 NAME="ob-verify-$$"
-cleanup() { docker rm -f "${NAME}" >/dev/null 2>&1; rm -rf "${WS}"; }
+cleanup() {
+  # setup.sh runs as root in the agent image, so the mounted workspace contains
+  # root-owned files. Remove only this verified mktemp workspace from inside the
+  # container before removing the container itself.
+  docker exec "${NAME}" find /workspace -mindepth 1 -delete >/dev/null 2>&1 || true
+  docker rm -f "${NAME}" >/dev/null 2>&1 || true
+  rmdir "${WS}" >/dev/null 2>&1 || true
+}
 trap cleanup EXIT
 
 docker run -d --name "${NAME}" -w /workspace \

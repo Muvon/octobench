@@ -1,0 +1,20 @@
+id: dev3_js_webpack_lazy_backend_shutdown
+name: webpack lazy-backend shutdown lifecycle
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/webpack/webpack
+  pr_url: https://github.com/webpack/webpack/pull/21468
+  pr: 21468
+  scenario: resource-lifecycle
+  prompt_source: human-prompt
+  prompt_style: behavior-rich
+  base_sha: 508e10f54e0c581f6baf4189ee50b6f4ea2e57f5
+  gold_sha: a24f33283f5b073f2e0e845badd1ec469272702b
+  test_paths:
+    - test/LazyCompilationBackend.unittest.js
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  When webpack's lazy-compilation backend shuts down after clients disconnect, the Node process can sit around for two minutes and the backend keeps stale module entries. Please fix the lifecycle so a module remains active until its last client disconnects, then is removed after the idle delay rather than retained or counted below zero. Disconnect timers must not keep Node alive. Disposing the backend must clear pending timers, and socket close events that arrive during disposal must not schedule new ones.

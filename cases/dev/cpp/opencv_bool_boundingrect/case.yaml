@@ -1,0 +1,21 @@
+id: dev3_cpp_opencv_bool_boundingrect
+name: OpenCV boolean-mask bounding rectangle
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/opencv/opencv
+  pr_url: https://github.com/opencv/opencv/pull/29580
+  issue_url: https://github.com/opencv/opencv/issues/29578
+  pr: 29580
+  scenario: crash-fix
+  prompt_source: human-prompt
+  prompt_style: concise
+  base_sha: eccd1c43c4d07816c434548d6ce1cf37126c1945
+  gold_sha: 4bace2fc28191d28dc2d1b54573923853768b86c
+  test_paths:
+    - modules/geometry/test/test_boundingrect.cpp
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Hey — `cv::boundingRect()` throws when I pass it a `cv::Mat_<bool>` mask in OpenCV 5, even though the same mask as `CV_8UC1` works. Boolean masks should produce exactly the same rectangle and never be treated like point arrays. Can you fix the regression?

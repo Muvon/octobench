@@ -1,0 +1,21 @@
+id: dev3_python_celery_flush_concurrent_append
+name: Celery event flush concurrent append
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/celery/celery
+  pr_url: https://github.com/celery/celery/pull/10435
+  issue_url: https://github.com/celery/celery/issues/10434
+  pr: 10435
+  scenario: concurrency-bug-fix
+  prompt_source: human-prompt
+  prompt_style: behavior-rich
+  base_sha: dd7c23862eb08a2cfde7da6926f28410b699c077
+  gold_sha: f85031f61247dae1dcf19ca88cc057edba1534ee
+  test_paths:
+    - t/unit/events/test_events.py
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  We're losing monitoring events under load. `EventDispatcher.flush()` publishes a copied group batch, but if another thread appends while the socket write is happening, the successful flush clears those new events too. A successful flush should remove only the items it actually published; anything appended during publish must remain buffered. If publishing raises, both the original batch and concurrently appended events must remain for retry.

@@ -1,0 +1,22 @@
+id: dev3_js_react_hidden_hydration_hang
+name: React hidden hydration update hang
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/facebook/react
+  pr_url: https://github.com/facebook/react/pull/37135
+  issue_url: https://github.com/vercel/next.js/issues/95848
+  pr: 37135
+  scenario: concurrency-bug-fix
+  prompt_source: human-prompt
+  prompt_style: concise
+  base_sha: 96fcba90138e9f1a73ee1cc4f79a653ec12fc3a9
+  gold_sha: 9a81195bed0ded96e10a13f753dce05bee8cc97b
+  test_paths:
+    - packages/react-dom/src/__tests__/ReactDOMServerPartialHydration-test.internal.js
+    - packages/react-dom/src/__tests__/ReactDOMServerPartialHydrationActivity-test.internal.js
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  We have an SSR page that can stay blank forever if an ordinary effect update changes content before hydration finishes while that content is hidden. I can reproduce it both when an `<Activity>` is hidden and when a parent `<Suspense>` boundary switches to its fallback: the promise resolves, React renders, but the update never commits. Make these updates recover normally; the same flows wrapped in `startTransition` must keep working.

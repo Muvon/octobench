@@ -1,0 +1,21 @@
+id: dev3_rust_rustls_misplaced_extensions
+name: rustls misplaced TLS extension rejection
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/rustls/rustls
+  pr_url: https://github.com/rustls/rustls/pull/3172
+  pr: 3172
+  scenario: protocol-security-fix
+  prompt_source: human-prompt
+  prompt_style: behavior-rich
+  base_sha: b705779b6cc03fbc73b0ee7bbe0dd9832081fa69
+  gold_sha: 7b7f4511a4f8395e67a1d8b0e97e840b0fa117eb
+  test_paths:
+    - rustls/src/client/test.rs
+    - rustls/src/msgs/handshake_test.rs
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Tighten rustls's handling of misplaced TLS extensions to follow RFC 9846. If a recognized extension appears in a handshake message where that extension is not permitted, abort with an `illegal_parameter` alert instead of silently ignoring it. Apply this consistently to TLS 1.3 `ServerHello`, `EncryptedExtensions`, `CertificateRequest`, and `NewSessionTicket`, and reject `oid_filters` and `ech_outer_extensions` in `ClientHello`. Unknown extensions should remain accepted where the protocol permits them, as should recognized extensions that rustls does not process but that are legal in that message. Preserve the existing behavior for `HelloRetryRequest` and `Certificate`.

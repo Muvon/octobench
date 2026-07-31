@@ -1,0 +1,20 @@
+id: dev3_rust_tokio_alt_timer_cancel_race
+name: Tokio alternate-timer cancellation race
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/tokio-rs/tokio
+  pr_url: https://github.com/tokio-rs/tokio/pull/8252
+  pr: 8252
+  scenario: concurrency-resource-leak
+  prompt_source: human-prompt
+  prompt_style: concise
+  base_sha: a46338401b9e0ffc9bd68c31100ee99cee717481
+  gold_sha: 91d3b4c0bccf2234fc3ed19e605e2cd402f19437
+  test_paths:
+    - tokio/src/runtime/time_alt/tests.rs
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  A `Sleep` that loses a `select!` or `timeout()` race can be cancelled before Tokio moves it into the alternate timer wheel, but it still gets inserted and keeps its allocation until the far-away deadline. Cancellation and insertion can happen concurrently: the timer must end up either never inserted or inserted and queued for removal, never stuck in the wheel with no way out.

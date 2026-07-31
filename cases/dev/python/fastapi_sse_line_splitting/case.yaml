@@ -1,0 +1,21 @@
+id: dev3_python_fastapi_sse_line_splitting
+name: FastAPI SSE line preservation
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/fastapi/fastapi
+  pr_url: https://github.com/fastapi/fastapi/pull/15515
+  issue_url: https://github.com/fastapi/fastapi/issues/15500
+  pr: 15515
+  scenario: protocol-bug-fix
+  prompt_source: human-prompt
+  prompt_style: concise
+  base_sha: 31ce3cb8d73a6e20221315a90dd98a117f0101a0
+  gold_sha: 0f3e7bd682a81488919227f2b5f1f7de1718ecdd
+  test_paths:
+    - tests/test_sse.py
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  FastAPI's raw SSE response mangles some event data. A payload ending in `\n` loses the final empty `data:` line, while characters such as a vertical tab or Unicode line separator are incorrectly treated as SSE line breaks. Please make SSE use only `\n`, `\r\n`, and `\r` as separators, preserving trailing empty lines for both data and comments.

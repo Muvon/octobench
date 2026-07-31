@@ -11,7 +11,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       curl ca-certificates git xz-utils unzip python3 sudo \
       build-essential pkg-config libssl-dev \
-      cmake ninja-build \
+      cmake ninja-build tcl \
       python3-venv python3-pip \
       php-cli php-xml php-mbstring php-curl php-zip php-intl php-sqlite3 \
     && rm -rf /var/lib/apt/lists/*

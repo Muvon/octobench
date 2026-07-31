@@ -1,0 +1,20 @@
+id: dev3_php_cakephp_rate_limit_ip
+name: CakePHP safe rate-limit client identity
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/cakephp/cakephp
+  pr_url: https://github.com/cakephp/cakephp/pull/19565
+  pr: 19565
+  scenario: security-bug-fix
+  prompt_source: human-prompt
+  prompt_style: behavior-rich
+  base_sha: 3971a307e0acc5aed8289daa14afb5b72ae0d634
+  gold_sha: 950cbd2c4f15fd2a74049f67051b086347ae113f
+  test_paths:
+    - tests/TestCase/Http/Middleware/RateLimitMiddlewareTest.php
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Our rate limiter can be bypassed by changing `X-Forwarded-For`, because it trusts that client-supplied header by default. Make the safe default use the actual connection's `REMOTE_ADDR`: forwarded headers and a fake HTTP `Remote-Addr` header must not change the identity unless the app explicitly opts into a proxy header. When `ipHeader: x-forwarded-for` is configured, keep supporting proxy chains and use the left-most client address, so the same client stays rate-limited even if later proxy hops change.
