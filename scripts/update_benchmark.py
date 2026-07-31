@@ -30,6 +30,7 @@ def load(pattern: str) -> dict:
         except Exception:
             continue
         for r in data.get("results", []):
+            r["_result_path"] = path
             records[r["case_id"]] = r
     return records
 
@@ -37,10 +38,14 @@ def load(pattern: str) -> dict:
 def cell(r: dict | None) -> str:
     if r is None:
         return "-"
+    leaked = bool(r.get("_integrity_violations"))
     if r.get("infra_failed"):
-        return "INFRA"
+        return "INFRA+LEAK" if leaked else "INFRA"
     s = r.get("scoring", {})
-    val = "FAIL" if s.get("validation_failed") else "PASS"
+    if leaked:
+        val = "FAIL+LEAK" if s.get("validation_failed") else "LEAK"
+    else:
+        val = "FAIL" if s.get("validation_failed") else "PASS"
     judge = r.get("judge", {}).get("score")
     cost = r.get("cost_usd")
     mins = r.get("result", {}).get("elapsed_ms", 0) / 60000
@@ -53,16 +58,17 @@ def totals(records: dict, order: list) -> str:
     if not done:
         return "pending"
     ok = sum(1 for r in done if not (r["scoring"].get("validation_failed")
-                                     or r.get("infra_failed")))
+                                     or r.get("infra_failed")
+                                     or r.get("_integrity_violations")))
     j = sum(r.get("judge", {}).get("score") or 0 for r in done)
     cost = sum(r.get("cost_usd") or 0 for r in done)
     hours = sum(r.get("result", {}).get("elapsed_ms", 0) for r in done) / 3600000
     return f"**{ok}/{len(done)}** · judgeΣ {j} · ${cost:.2f} · {hours:.1f}h"
 
 
-def discover_case_paths(repo_root: Path) -> dict[str, str]:
-    """Map stable result IDs to the cases' current on-disk paths."""
-    paths = {}
+def discover_cases(repo_root: Path) -> dict[str, dict]:
+    """Map stable result IDs to current paths and provenance metadata."""
+    cases = {}
     cases_root = repo_root / "cases"
     for case_file in cases_root.rglob("case.yaml"):
         try:
@@ -71,33 +77,160 @@ def discover_case_paths(repo_root: Path) -> dict[str, str]:
         except Exception:
             continue
         if case_id:
-            paths[case_id] = case_file.parent.relative_to(cases_root).as_posix()
-    return paths
+            cases[case_id] = {
+                "path": case_file.parent.relative_to(cases_root).as_posix(),
+                "meta": case.get("meta", {}),
+            }
+    return cases
+
+
+def _provider_actions(trace: Path, provider: str) -> list[tuple[str, bool]]:
+    """Extract tool inputs only, excluding URLs echoed in tool results/source."""
+    actions = []
+    for line in trace.read_text(errors="replace").splitlines():
+        try:
+            event = json.loads(line)
+        except Exception:
+            continue
+        action = None
+        network = False
+        if provider == "codex" and event.get("type") == "item.started":
+            item = event.get("item", {})
+            if item.get("type") == "command_execution":
+                action = item.get("command")
+                network = bool(re.search(
+                    r"\b(?:git\s+(?:fetch|clone|ls-remote)|curl|wget)\b", action,
+                    re.IGNORECASE,
+                ))
+        elif provider == "octomind" and event.get("type") == "tool_use":
+            tool = event.get("tool")
+            params = event.get("params") or {}
+            action = json.dumps({
+                "tool": tool,
+                "params": params,
+            })
+            network = (
+                tool == "knowledge" and bool(params.get("source"))
+            ) or (
+                tool == "shell" and bool(re.search(
+                    r"\b(?:git\s+(?:fetch|clone|ls-remote)|curl|wget)\b",
+                    str(params.get("command", "")), re.IGNORECASE,
+                ))
+            )
+        elif provider == "opencode" and event.get("type") == "tool_use":
+            part = event.get("part", {})
+            tool = part.get("tool")
+            inputs = part.get("state", {}).get("input") or {}
+            action = json.dumps({
+                "tool": tool,
+                "input": inputs,
+            })
+            network = tool == "webfetch" or (
+                tool == "bash" and bool(re.search(
+                    r"\b(?:git\s+(?:fetch|clone|ls-remote)|curl|wget)\b",
+                    str(inputs.get("command", "")), re.IGNORECASE,
+                ))
+            )
+        if action:
+            actions.append((action, network))
+    return actions
+
+
+def audit_integrity(record: dict, case: dict | None) -> list[str]:
+    """Detect provider access to hidden assets or the case's upstream solution."""
+    if not case:
+        return []
+    result_path = Path(record.get("_result_path", ""))
+    traces = list(result_path.parent.glob(
+        f"{record['case_id']}/*/logs/provider.raw.jsonl"
+    ))
+    if not traces:
+        return []
+
+    meta = case.get("meta", {})
+    repo = str(meta.get("repo", "")).rstrip("/")
+    repo_match = re.search(r"github\.com/([^/]+/[^/]+)$", repo, re.IGNORECASE)
+    slug = repo_match.group(1).removesuffix(".git") if repo_match else ""
+    pr = str(meta.get("pr", ""))
+    gold = str(meta.get("gold_sha", ""))
+    violations = set()
+
+    hidden_re = re.compile(
+        r"(?<![A-Za-z0-9_.-])/(?:case|cases)(?:/|\b)|\$CASE_DIR|\bCASE_DIR=",
+        re.IGNORECASE,
+    )
+    if slug:
+        same_repo_re = re.compile(
+            rf"https?://(?:raw\.githubusercontent\.com/{re.escape(slug)}/"
+            rf"|(?:www\.)?github\.com/{re.escape(slug)}(?:\.git)?(?:/|\b))",
+            re.IGNORECASE,
+        )
+        current_source_re = re.compile(
+            rf"raw\.githubusercontent\.com/{re.escape(slug)}/",
+            re.IGNORECASE,
+        )
+        repo_network_re = re.compile(
+            rf"\b(?:git\s+(?:fetch|clone|ls-remote)|curl|wget)\b[^\n]*"
+            rf"(?:github\.com/{re.escape(slug)}|raw\.githubusercontent\.com/{re.escape(slug)})",
+            re.IGNORECASE,
+        )
+        pr_re = re.compile(
+            rf"github\.com/{re.escape(slug)}/(?:pull|issues)/{re.escape(pr)}(?:\D|$)",
+            re.IGNORECASE,
+        ) if pr else None
+        gold_re = re.compile(re.escape(gold), re.IGNORECASE) if gold else None
+
+    provider = str(record.get("provider", ""))
+    for trace in traces:
+        for action, network in _provider_actions(trace, provider):
+            if hidden_re.search(action):
+                violations.add("hidden case assets")
+            if not network or not slug or not same_repo_re.search(action):
+                continue
+            if current_source_re.search(action) or repo_network_re.search(action):
+                violations.add("current upstream source")
+            if pr_re and pr_re.search(action):
+                violations.add("exact upstream PR")
+            if gold_re and gold_re.search(action):
+                violations.add("gold commit")
+            # Reading another PR from the same repository can expose a follow-up
+            # or superseding version of the fix (observed in the CakePHP case).
+            if re.search(
+                rf"github\.com/{re.escape(slug)}/pull/\d+", action, re.IGNORECASE
+            ):
+                violations.add("upstream PR")
+    return sorted(violations)
 
 
 def main() -> None:
     repo_root = Path(__file__).resolve().parent.parent
-    case_paths = discover_case_paths(repo_root)
+    cases = discover_cases(repo_root)
     providers = []
     for arg in sys.argv[1:]:
         label, pattern = arg.split("=", 1)
-        providers.append((label, load(pattern)))
+        records = load(pattern)
+        for case_id, record in records.items():
+            record["_integrity_violations"] = audit_integrity(
+                record, cases.get(case_id)
+            )
+        providers.append((label, records))
 
     order = sorted(
         {c for _, recs in providers for c in recs},
-        key=lambda c: case_paths.get(c, c),
+        key=lambda c: cases.get(c, {}).get("path", c),
     )
 
     lines = []
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines.append(f"_Updated {stamp}. val = hidden gold tests; j = judge 0-100; "
-                 f"cost; wall time (incl. env setup + verification)._\n")
+                 f"cost; wall time (incl. env setup + verification). "
+                 f"LEAK = upstream solution access, excluded from passes._\n")
     header = "| case path | " + " | ".join(l for l, _ in providers) + " |"
     lines.append(header)
     lines.append("|---" * (len(providers) + 1) + "|")
     for cid in order:
         row = " | ".join(cell(recs.get(cid)) for _, recs in providers)
-        lines.append(f"| {case_paths.get(cid, cid)} | {row} |")
+        lines.append(f"| {cases.get(cid, {}).get('path', cid)} | {row} |")
     lines.append("")
     for label, recs in providers:
         lines.append(f"- **{label}**: {totals(recs, order)}")
