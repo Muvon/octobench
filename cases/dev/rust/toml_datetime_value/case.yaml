@@ -1,0 +1,22 @@
+id: dev3_rust_toml_datetime_value
+name: TOML datetime lost through Value round-trip (human-prompt)
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/toml-rs/toml
+  pr_url: https://github.com/toml-rs/toml/pull/1194
+  issue_url: https://github.com/toml-rs/toml/issues/440
+  pr: 1194
+  issue: 440
+  scenario: deserialization-round-trip
+  prompt_source: human-prompt
+  base_sha: 4ec099fed591a172f82007cb2f9d605985bbecee
+  gold_sha: 89f55411d47ee9fb349ab0704f287aa82aa12258
+  test_paths:
+    - crates/toml/tests/serde/general.rs
+    - crates/toml_edit/tests/serde/general.rs
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  If I parse a TOML datetime into a `toml::Value` and then call `.try_into::<toml::value::Datetime>()` on it, I get `invalid type: string "1979-05-27T07:32:00Z", expected a TOML datetime` instead of getting the datetime back. Can you make that conversion work? Converting the same value into a `serde_json::Value` should still produce a plain JSON string the way it does today.

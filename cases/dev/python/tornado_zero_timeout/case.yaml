@@ -1,0 +1,21 @@
+id: dev3_python_tornado_zero_timeout
+name: Tornado zero timeout hangs (human-prompt)
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/tornadoweb/tornado
+  pr_url: https://github.com/tornadoweb/tornado/pull/3621
+  issue_url: https://github.com/tornadoweb/tornado/issues/3271
+  pr: 3621
+  issue: 3271
+  scenario: falsy-boundary
+  prompt_source: human-prompt
+  base_sha: affd7939a7985d3eef5b7bec39697287007a5328
+  gold_sha: 18e15a5e0093b398a216fb9f85af69a3279b6e64
+  test_paths:
+    - tornado/test/queues_test.py
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  On an empty tornado Queue, `q.get(timeout=timedelta(seconds=0))` just hangs forever instead of raising TimeoutError right away — same thing with plain `timeout=0`. A nonzero timeout works fine. Can you fix it?

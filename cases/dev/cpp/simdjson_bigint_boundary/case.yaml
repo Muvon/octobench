@@ -1,0 +1,20 @@
+id: dev3_cpp_simdjson_bigint_boundary
+name: simdjson 20-digit positive big integers (human-prompt)
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/simdjson/simdjson
+  pr_url: https://github.com/simdjson/simdjson/pull/2793
+  pr: 2793
+  scenario: parser-boundary
+  prompt_source: human-prompt
+  base_sha: 8e6bac94877f2d3d026000d36ce81e0aaf38d26f
+  gold_sha: e3720ba824500473a20d095779afc129511c832f
+  test_paths:
+    - tests/dom/big_integer_tests.cpp
+    - tests/ondemand/ondemand_number_tests.cpp
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Hey — `{"val":18446744073709551616}` comes back from the parser as an invalid number, but if I add another digit (`999999999999999999999`) it's reported as a big integer just fine. Huge negative values work too. Can you sort out why 20-digit positives are the odd ones out?

@@ -1,0 +1,21 @@
+id: dev3_php_flysystem_mimetype_null
+name: Flysystem mimeType TypeError on null (human-prompt)
+category: dev
+difficulty: simple
+meta:
+  repo: https://github.com/thephpleague/flysystem
+  pr_url: https://github.com/thephpleague/flysystem/pull/1901
+  issue_url: https://github.com/thephpleague/flysystem/issues/1855
+  pr: 1901
+  issue: 1855
+  scenario: error-handling
+  prompt_source: human-prompt
+  base_sha: 48ea21da9107519a161fc1cc03e19d1905d92cea
+  gold_sha: af41ef031c70b94664addbda174c5e9d4529ac21
+  test_paths:
+    - src/FilesystemTest.php
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  `Filesystem::mimeType()` explodes with a raw `TypeError` when the adapter can't work out the type and returns a `FileAttributes` with a null mimeType. Make it fail cleanly instead — throw `UnableToRetrieveMetadata` like the rest of the metadata lookups do.

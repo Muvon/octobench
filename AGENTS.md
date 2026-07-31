@@ -65,6 +65,15 @@ trusted open-source repos. The pipeline, end to end:
    runs the tap agent `developer:reverse-spec` on the gold commit and emits the
    as-it-arrived Task Prompt + Clarified Spec. Draft specs live in
    `cases/_specs/` (gitignored — working material, not repo content).
+   Two alternative prompt scenarios exist alongside the reverse-spec default:
+   `prompt_source: original-issue` (the issue text verbatim, trimmed of
+   fix-leaking sections) and `prompt_source: human-prompt` (a 1-3 sentence
+   casual developer ask). Human-prompt cases carry the strictest selection
+   bar: the correct behavior must be unambiguous from the symptom plus the
+   repo's existing conventions — crash fixes and obviously-wrong-behavior
+   only, never features, and the prompt should state the *invariant* (what
+   must never happen), not just the repro, when tests cover failure modes
+   beyond the literal reproduction.
 3. **Curate the instruction** (`case.yaml` `instruction:`) by the
    **derivability rule**: everything the hidden tests assert must be derivable
    from the instruction alone.
