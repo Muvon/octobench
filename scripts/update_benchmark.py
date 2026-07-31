@@ -19,6 +19,8 @@ import re
 import sys
 from pathlib import Path
 
+import yaml
+
 
 def load(pattern: str) -> dict:
     records = {}
@@ -34,7 +36,7 @@ def load(pattern: str) -> dict:
 
 def cell(r: dict | None) -> str:
     if r is None:
-        return "—"
+        return "-"
     if r.get("infra_failed"):
         return "INFRA"
     s = r.get("scoring", {})
@@ -58,7 +60,24 @@ def totals(records: dict, order: list) -> str:
     return f"**{ok}/{len(done)}** · judgeΣ {j} · ${cost:.2f} · {hours:.1f}h"
 
 
+def discover_case_paths(repo_root: Path) -> dict[str, str]:
+    """Map stable result IDs to the cases' current on-disk paths."""
+    paths = {}
+    cases_root = repo_root / "cases"
+    for case_file in cases_root.rglob("case.yaml"):
+        try:
+            case = yaml.safe_load(case_file.read_text())
+            case_id = case.get("id")
+        except Exception:
+            continue
+        if case_id:
+            paths[case_id] = case_file.parent.relative_to(cases_root).as_posix()
+    return paths
+
+
 def main() -> None:
+    repo_root = Path(__file__).resolve().parent.parent
+    case_paths = discover_case_paths(repo_root)
     providers = []
     for arg in sys.argv[1:]:
         label, pattern = arg.split("=", 1)
@@ -66,25 +85,25 @@ def main() -> None:
 
     order = sorted(
         {c for _, recs in providers for c in recs},
-        key=lambda c: (c.split("_")[0], c.split("_")[1], c),
+        key=lambda c: case_paths.get(c, c),
     )
 
     lines = []
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines.append(f"_Updated {stamp}. val = hidden gold tests; j = judge 0-100; "
                  f"cost; wall time (incl. env setup + verification)._\n")
-    header = "| case | " + " | ".join(l for l, _ in providers) + " |"
+    header = "| case path | " + " | ".join(l for l, _ in providers) + " |"
     lines.append(header)
     lines.append("|---" * (len(providers) + 1) + "|")
     for cid in order:
         row = " | ".join(cell(recs.get(cid)) for _, recs in providers)
-        lines.append(f"| {cid.replace('dev_', 'dev/').replace('dev2_', 'dev2/')} | {row} |")
+        lines.append(f"| {case_paths.get(cid, cid)} | {row} |")
     lines.append("")
     for label, recs in providers:
         lines.append(f"- **{label}**: {totals(recs, order)}")
     section = "\n".join(lines)
 
-    bench = Path(__file__).resolve().parent.parent / "BENCHMARK.md"
+    bench = repo_root / "BENCHMARK.md"
     text = bench.read_text()
     new = re.sub(
         r"(<!-- RESULTS:BEGIN[^>]*-->\n).*?(<!-- RESULTS:END -->)",

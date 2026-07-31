@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -90,37 +91,66 @@ def _is_gitignored(path: Path, workdir: Path, rules: list[tuple[Path, str, bool,
 
 def snapshot_files(workdir: Path) -> Dict[str, Dict]:
     files = {}
-    rules = _load_gitignore_rules(workdir)
-    for path in workdir.rglob("*"):
-        if path.is_file():
-            rel = str(path.relative_to(workdir))
-            if (
-                rel.startswith("_provider_output_")
-                or rel.startswith("_prompt_")
-                or rel.startswith("_output_")
-            ):
-                continue
-            if _is_gitignored(path, workdir, rules):
-                continue
-            try:
-                data = path.read_bytes()
-            except Exception:
-                continue
+    # Cases are git worktrees. Ask git for exactly the tracked and non-ignored
+    # untracked files instead of walking through dependency/build directories
+    # only to discard every file in them. This preserves the snapshot's content
+    # semantics while avoiding multi-minute traversals of node_modules, vendor,
+    # target, build, and .git object stores.
+    listed = subprocess.run(
+        ["git", "-c", "safe.directory=*", "ls-files", "-z", "--cached", "--others",
+         "--exclude-standard"],
+        cwd=workdir,
+        capture_output=True,
+    )
+    if listed.returncode == 0:
+        relative_paths = [
+            Path(raw.decode("utf-8", errors="surrogateescape"))
+            for raw in listed.stdout.split(b"\0")
+            if raw
+        ]
+    else:
+        # Non-git custom cases retain the previous behavior, but never descend
+        # into git's internal object database.
+        rules = _load_gitignore_rules(workdir)
+        relative_paths = []
+        for root, dirs, names in os.walk(workdir):
+            root_path = Path(root)
+            dirs[:] = [
+                name for name in dirs
+                if name != ".git" and not _is_gitignored(root_path / name, workdir, rules)
+            ]
+            relative_paths.extend((root_path / name).relative_to(workdir) for name in names)
+
+    for relative_path in relative_paths:
+        rel = str(relative_path)
+        if (
+            rel.startswith("_provider_output_")
+            or rel.startswith("_prompt_")
+            or rel.startswith("_output_")
+        ):
+            continue
+        path = workdir / relative_path
+        if not path.is_file():
+            continue
+        try:
+            data = path.read_bytes()
+        except Exception:
+            continue
+        content = None
+        try:
+            text = data.decode("utf-8")
+            # Real repos have real-sized sources; content feeds the judge's
+            # evidence diff, so a tight cap starves the judge of the very
+            # code it must grade (observed: empty zero-confidence verdicts).
+            if len(text) <= 200_000:
+                content = text
+        except Exception:
             content = None
-            try:
-                text = data.decode("utf-8")
-                # Real repos have real-sized sources; content feeds the judge's
-                # evidence diff, so a tight cap starves the judge of the very
-                # code it must grade (observed: empty zero-confidence verdicts).
-                if len(text) <= 200_000:
-                    content = text
-            except Exception:
-                content = None
-            files[rel] = {
-                "size": len(data),
-                "sha256": hashlib.sha256(data).hexdigest(),
-                "content": content,
-            }
+        files[rel] = {
+            "size": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "content": content,
+        }
     return files
 
 
