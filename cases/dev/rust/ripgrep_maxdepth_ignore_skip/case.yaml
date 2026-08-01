@@ -1,0 +1,34 @@
+id: dev5_rust_ripgrep_maxdepth_ignore_skip
+name: ripgrep loads ignore files it can never reach
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/BurntSushi/ripgrep
+  pr_url: https://github.com/BurntSushi/ripgrep/pull/3496
+  pr: 3496
+  issue_url: https://github.com/BurntSushi/ripgrep/issues/2565
+  scenario: traversal-work-skipping
+  prompt_source: acceptance-story
+  lane: B
+  behavior_category: filesystem-and-path-handling
+  merged_at: 2026-07-29T15:00:00Z
+  base_sha: dffd776a737dc19a48b758dd6a621de113794121
+  gold_sha: 435f59fc4b43af3ab32f34d53fa34978f393fe52
+  test_paths:
+    - crates/ignore/src/walk.rs
+  test_graft: cfg-test-module   # tests live inside the production file
+  verified: false   # fail-to-pass NOT yet executed; run scripts/verify_case.sh
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  **Goal.** As someone searching a large tree with a depth limit, I do not want ripgrep to be affected by ignore files sitting in directories it is never going to look inside.
+
+  We hit this on a repository that has a generated, syntactically broken `.ignore` file deep in a build output directory. Searching with a depth limit that stops above it still reports an error about that file, and the walk spends time reading ignore files whose rules cannot apply to anything it will visit.
+
+  **Acceptance criteria**
+
+  - **Given** a directory at the configured maximum depth that contains a malformed ignore file, **when** the tree is walked, **then** the entry for that directory must carry no error, and the set of paths yielded must be exactly what it is without the malformed file present.
+  - **Given** the same walk, **then** ignore files in directories the walk does descend into must keep taking effect exactly as before, at every depth up to the limit.
+  - **Given** a directory that is skipped for any other reason, **then** its ignore files must likewise not influence the results, and the walk must still traverse and terminate normally.
+  - **Given** no depth limit at all, **then** every ignore file in the tree is still read and applied, and malformed ones are still reported as errors.

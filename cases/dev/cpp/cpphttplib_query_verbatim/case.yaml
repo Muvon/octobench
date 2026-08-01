@@ -1,0 +1,34 @@
+id: dev5_cpp_cpphttplib_query_verbatim
+name: cpp-httplib re-encodes the query when path encoding is disabled
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/yhirose/cpp-httplib
+  pr_url: https://github.com/yhirose/cpp-httplib/pull/2479
+  pr: 2479
+  scenario: config-to-wire-format
+  prompt_source: acceptance-story
+  lane: B
+  behavior_category: configuration-precedence
+  merged_at: 2026-07-02T01:18:00Z
+  base_sha: 0ae93881b44bf94437843403bfcdc4f50445992e
+  gold_sha: 3fe32b63b42d7b273cd4d76d69df0097560375d6
+  test_paths:
+    - test/test.cc
+  docker_requires:
+    - libcurl4-openssl-dev   # test/CMakeLists.txt does find_package(CURL REQUIRED)
+  verified: false   # fail-to-pass NOT yet executed; run scripts/verify_case.sh
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  **Goal.** As an integrator sending pre-encoded request targets to a strict RFC 3986 server, I need the client's path-encoding switch to govern the whole request target, so that bytes I encoded myself arrive unchanged.
+
+  Today, turning path encoding off on a client only stops the path from being re-encoded; the query string is still decoded and re-encoded behind my back. That round-trip rewrites sub-delimiters and turns `%20` into `+`, which the server then decodes as a literal `+` rather than a space — so binary query payloads arrive corrupted.
+
+  **Acceptance criteria**
+
+  - **Given** a client with path encoding disabled, **when** I issue a GET for a target whose query is already percent-encoded (for example one containing `%20`, `%2C`, `%24`, `%3B`, `%00` and `%FF`), **then** the server must observe the request target byte-for-byte as I supplied it, and the request must complete with a 200.
+  - **Given** the same client, **then** the request's parsed parameters must still be populated from that query, so handlers and callers that read parameters keep working.
+  - **Given** a client with path encoding left at its default (enabled), **when** I issue requests with paths and queries that need encoding, **then** the existing encoding and normalization behaviour must be completely unchanged — this must not become a global opt-out.
+  - **Given** a target with no query part at all, **then** behaviour is unchanged in both modes and no stray separator is appended.

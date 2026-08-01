@@ -1,0 +1,33 @@
+id: dev5_python_poetry_show_outdated_explicit_source
+name: poetry show --outdated skips explicit-priority sources
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/python-poetry/poetry
+  pr_url: https://github.com/python-poetry/poetry/pull/10982
+  pr: 10982
+  issue_url: https://github.com/python-poetry/poetry/issues/10425
+  scenario: cli-output-contract
+  prompt_source: acceptance-story
+  lane: B
+  behavior_category: cli-exit-status-and-output
+  merged_at: 2026-08-01T07:56:00Z
+  base_sha: 3a95c37c5d5ec600556f519e60e4340f35bbcac1
+  gold_sha: 62018d105562e1365bf79607edcc29ed794e4635
+  test_paths:
+    - tests/console/commands/test_show.py
+  verified: false   # fail-to-pass NOT yet executed; run scripts/verify_case.sh
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  **Goal.** As a developer who gets some packages from a private index that is declared as an explicitly-selected source, I need `poetry show --outdated` to tell me when those packages have newer versions, in both the table output and the JSON output.
+
+  Today a package pinned to a source whose priority is `explicit` is silently skipped by the outdated check, so it never appears as outdated even when the private index clearly has a newer release.
+
+  **Acceptance criteria**
+
+  - **Given** a project with an explicitly-selected source, a dependency pinned to that source, an older version installed and locked, and a newer version available only on that source, **when** I run the outdated check, **then** the package is listed with its current version, the newer version, and its description.
+  - **Given** the same situation, **when** I ask for JSON output, **then** the entry reports the same current version, latest version, description and installed status.
+  - **Given** the same package is declared more than once — different environment markers pointing at different explicitly-selected sources — **then** the latest version reported must come from the source recorded in the lock file for the environment actually in use, not from whichever declaration happens to come first.
+  - **Given** packages that come from the default repository, or that are pinned to a direct URL or VCS origin, **then** the outdated check behaves exactly as it does today.

@@ -1,0 +1,34 @@
+id: dev5_js_vite_hmr_restart_stale
+name: Vite crashes when the server restarts during a hot update
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/vitejs/vite
+  pr_url: https://github.com/vitejs/vite/pull/22992
+  pr: 22992
+  scenario: restart-race
+  prompt_source: acceptance-story
+  lane: B
+  behavior_category: retry-restart-after-partial-failure
+  merged_at: 2026-07-24T05:49:00Z
+  base_sha: 95a3cdab83e1125b03d2e8dd942fb6b64209e5fa
+  gold_sha: b1186c36d06bb94941c58e8272fc4acb8512c93b
+  test_paths:
+    - packages/vite/src/node/server/__tests__/hmr.spec.ts
+  verified: false   # fail-to-pass NOT yet executed; HIGHEST harness risk in batch
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  **Goal.** As a developer running the dev server, I need an in-flight hot update to be abandoned cleanly when the server restarts underneath it, so that editing a file at the same moment a config or `.env` change triggers a restart does not take the dev server down.
+
+  Right now, if a plugin's hot-update hook awaits and the server restarts during that await, the update keeps running against the environments that existed before the restart. It then crashes with a `TypeError` about setting a property of `undefined` while it is trying to report the original error.
+
+  **Acceptance criteria**
+
+  - **Given** a dev server whose plugin restarts the server from inside its hot-update hook and then throws, **when** a file update is processed, **then** handling that update must settle normally — no rejection and no crash escaping to the caller.
+  - **Given** the same restart-mid-update situation, **when** the server is configured with a custom handler for dispatching hot updates to environments, **then** that handler must not be invoked at all for the stale update.
+  - **Given** an ordinary file update with no restart, **then** hot-update plugin hooks, module filtering and the resulting update dispatch must behave exactly as before.
+  - **Given** an update whose plugin hook throws without any restart, **then** the error must still be recorded and surfaced the way it is today.
+
+  Do not fix this by suppressing errors generally, and do not change the public shape of the hot-update hooks.

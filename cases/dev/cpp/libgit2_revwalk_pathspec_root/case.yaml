@@ -1,0 +1,27 @@
+id: dev5_cpp_libgit2_revwalk_pathspec_root
+name: libgit2 revwalk drops root commits under a pathspec
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/libgit2/libgit2
+  pr_url: https://github.com/libgit2/libgit2/pull/7291
+  pr: 7291
+  scenario: history-traversal-bug-fix
+  prompt_source: support-ticket
+  lane: A
+  behavior_category: filesystem-and-path-handling
+  merged_at: 2026-07-18T08:12:00Z
+  base_sha: 32b564e63f9639eaf5ee90fb7a95b3a650156cbd
+  gold_sha: 9e1c61e0924de72d44ecabe43ccb02820ca68981
+  test_paths:
+    - tests/libgit2/revwalk/pathspec.c
+  verified: false   # fail-to-pass NOT yet executed; run scripts/verify_case.sh
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  We use libgit2 to build a "file history" view in our internal review tool. For each path we create a revwalk, attach a pathspec containing that one path, push HEAD, and list the commits that come back.
+
+  On a small test repository, `git log -- README` from the command line lists two commits, but our walk only yields one. The commit that goes missing is always the repository's very first commit — the one with no parents. The same thing happens with a glob pathspec such as `*.txt`: we get every matching commit except the root one. If a path is not present in the root commit at all, the root commit is correctly absent, so the filter is not simply ignoring everything.
+
+  A revwalk restricted by a pathspec should return exactly the commits `git log -- <path>` returns, in the same order, including root commits, and it should then finish normally with the usual "iteration over" status. Please fix the walk so the root commit is included whenever it actually contains a path matching the pathspec, for both literal paths and glob patterns.
