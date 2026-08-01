@@ -1,0 +1,39 @@
+id: dev5_python_pytest_no_summary_hook_scope
+name: pytest --no-summary silences plugin terminal-summary hooks
+category: dev
+difficulty: simple
+meta:
+  repo: https://github.com/pytest-dev/pytest
+  pr_url: https://github.com/pytest-dev/pytest/pull/14730
+  pr: 14730
+  issue_url: https://github.com/pytest-dev/pytest/issues/14724
+  scenario: cli-output-contract
+  prompt_source: support-ticket
+  lane: A
+  behavior_category: cli-exit-status-and-output
+  merged_at: 2026-07-23T09:36:00Z
+  base_sha: 85003621822f9c10063940068ccacc9c12b8c73f
+  gold_sha: 6f1b078537cf4ab14d0a7b29972c4e73f23a9011
+  test_paths:
+    - testing/test_terminal.py
+  author_note: >-
+    Approved by core maintainer nicoddemus. PR author shows a contribution
+    pattern consistent with AI assistance and carries no Co-authored-by
+    trailer; documented alternate is pytest #14692.
+  verified: false   # fail-to-pass NOT yet executed; run scripts/verify_case.sh
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Our CI runs pytest with `--no-summary` because the failure sections are very long and we read failures from the JUnit XML instead. After upgrading, the coverage report that our plugin prints at the end of the run disappeared from the console.
+
+  We reproduced it without coverage: put this in a `conftest.py`
+
+  ```python
+  def pytest_terminal_summary(terminalreporter, exitstatus, config):
+      terminalreporter.write_line("MY PLUGIN SUMMARY")
+  ```
+
+  and run any test file with `--no-summary`. The line is never printed. Without `--no-summary` it is printed. Dropping `--no-summary` is not an option for us — we do want pytest's own failure/error sections suppressed.
+
+  `--no-summary` should only suppress pytest's own summary sections. Plugins that implement the terminal-summary hook must still run and still be able to write to the terminal.

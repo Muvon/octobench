@@ -1,0 +1,36 @@
+id: dev5_js_hono_csp_dual_policy
+name: Hono CSP nonce leaks across enforced and report-only headers
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/honojs/hono
+  pr_url: https://github.com/honojs/hono/pull/5147
+  pr: 5147
+  scenario: http-header-contract
+  prompt_source: support-ticket
+  lane: A
+  behavior_category: public-http-validation
+  merged_at: 2026-07-24T08:48:00Z
+  base_sha: c85aead088659b98b8d05a1187a07d064e12ffe6
+  gold_sha: 402eb3abe561914f41ee0f8e37f1d7f211f1ee51
+  test_paths:
+    - src/middleware/secure-headers/index.test.ts
+  verified: false   # fail-to-pass NOT yet executed; run scripts/verify_case.sh
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  We turn on the secure-headers middleware with both a normal Content Security Policy and a report-only policy, because we are trialling a stricter policy before enforcing it. As soon as either of the two policies uses a nonce, every request to the app returns a 500 instead of our page.
+
+  Roughly what we configure:
+
+  ```ts
+  app.use('/*', secureHeaders({
+    contentSecurityPolicy: { defaultSrc: ["'self'"] },
+    contentSecurityPolicyReportOnly: { scriptSrc: ["'self'", NONCE] },
+  }))
+  ```
+
+  With only one of the two policies configured, nonces work fine. It also breaks the other way round — a nonce in the enforced policy plus a plain report-only policy fails the same way.
+
+  What we expect: each of the two CSP response headers should carry only its own directives, whether it is static or built with a nonce, and configuring both at once should never fail the request. When both policies use a nonce, they should both get the nonce generated for that request.

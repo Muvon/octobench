@@ -1,0 +1,35 @@
+id: dev5_php_dbal_sqlite_alter_preserves_constraints
+name: DBAL SQLite alterTable drops indexes and foreign keys of an introspected table
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/doctrine/dbal
+  pr_url: https://github.com/doctrine/dbal/pull/7392
+  pr: 7392
+  scenario: schema-migration-compat
+  prompt_source: support-ticket
+  lane: A
+  behavior_category: backward-compat-two-representations
+  merged_at: 2026-07-24T13:40:00Z
+  base_sha: 6d8aa68d21f903101b6632e76a40a8626e61c56a
+  gold_sha: 34b62998bf626326184bc25f58b39518d04928ce
+  test_paths:
+    - tests/Functional/Schema/SchemaManagerFunctionalTestCase.php
+  verified: false   # fail-to-pass NOT yet executed; run scripts/verify_case.sh
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  We run migrations against SQLite in our test suite. The migration reads the current table with the schema manager's introspection API, edits one column through the table editor, compares old against new, and applies the resulting diff.
+
+  ```php
+  $old = $sm->introspectTableByUnquotedName('products');
+  $new = $old->edit()
+      ->modifyColumnByUnquotedName('qty', fn (ColumnEditor $e) => $e->setTypeName(Types::STRING)->setLength(32))
+      ->create();
+  $sm->alterTable($sm->createComparator()->compareTables($old, $new));
+  ```
+
+  After that runs, the rows are all still there, but **every index and foreign key on the table is gone** — including a unique index on a column we never touched. No exception, no deprecation, nothing in the logs. If we build the same "old" table object by hand instead of introspecting it, the indexes and foreign keys survive.
+
+  Altering an introspected table should preserve its indexes and foreign keys exactly as altering a hand-built table does, as long as the alteration does not change the columns they refer to.

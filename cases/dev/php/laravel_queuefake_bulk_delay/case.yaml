@@ -1,0 +1,35 @@
+id: dev5_php_laravel_queuefake_bulk_delay
+name: Laravel QueueFake ignores job delays on bulk push
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/laravel/framework
+  pr_url: https://github.com/laravel/framework/pull/60916
+  pr: 60916
+  scenario: test-double-parity
+  prompt_source: acceptance-story
+  lane: B
+  behavior_category: backward-compat-two-modes
+  merged_at: 2026-07-29T14:35:00Z
+  base_sha: 91eee4b8a7c4f4301700fa359de92898528bb917
+  gold_sha: af9d320df90c0a69c230d35c17370e7db6a4035d
+  test_paths:
+    - tests/Support/SupportTestingQueueFakeTest.php
+  review_note: >-
+    No GitHub review record; laravel/framework merges by maintainer push.
+    CI was green (30/30) on the merge commit.
+  verified: false   # fail-to-pass NOT yet executed; run scripts/verify_case.sh
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  **Goal.** As an application developer writing tests, I need the fake queue to honour job delays during bulk dispatch the same way a real queue connection does, so that a test suite that passes against the fake reflects what production will do.
+
+  Today, bulk-pushing onto the faked queue pushes every job for immediate processing, ignoring both the delay attribute on a job class and a delay set at runtime on the job instance. Real connections respect both.
+
+  **Acceptance criteria**
+
+  - **Given** a faked queue, **when** I bulk-push a job class that declares a delay attribute together with a job that declares none, onto a named connection queue, **then** exactly one of them is recorded as delayed on that queue and the other is recorded as pushed immediately.
+  - **Given** a faked queue, **when** I bulk-push a job instance on which I set a delay at runtime, **then** it is recorded as delayed on the target queue.
+  - **Given** either of the above, **then** the queue name and the payload data passed to the bulk call must reach the recorded job unchanged, and the existing assertions for "was this job pushed", "was it pushed on this queue" and push counts must keep working for delayed jobs too.
+  - **Given** a bulk push of jobs that declare no delay at all, **then** behaviour is identical to today — nothing becomes delayed.
