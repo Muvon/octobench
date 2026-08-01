@@ -7,7 +7,7 @@
 #   • Validate config: octomind config --validate
 
 # Configuration version (DO NOT MODIFY - used for automatic upgrades)
-version = 1
+version = 2
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SYSTEM-WIDE SETTINGS
@@ -788,6 +788,12 @@ enabled = true
 tokens_threshold = 5000
 # Model that does the narrowing (cheap + fast recommended).
 model = "ollama:qwen3.5:397b"
+
+# Delegate gate: handoff quality check before a subagent is spawned.
+[supervisor.delegate]
+enabled = true
+model = "ollama:qwen3.5:397b"
+max_revisions = 2
 
 [[roles]]
 name = "judge"
