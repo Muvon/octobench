@@ -10,4 +10,5 @@ git fetch -q --depth 1 origin "${GOLD_SHA}"
 git checkout -q "${GOLD_SHA}" -- "${TEST_PATHS[@]}"
 
 # -p no:randomly keeps ordering deterministic if pytest-randomly is installed.
-python -m pytest -q "${TEST_PATHS[@]}" -k outdated -p no:randomly
+# -o addopts='' drops poetry's pyproject addopts (demands pytest-xdist's -n).
+python -m pytest -q -o addopts='' "${TEST_PATHS[@]}" -k outdated -p no:randomly

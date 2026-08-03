@@ -14,3 +14,6 @@ git remote remove origin
 
 corepack enable
 pnpm install --frozen-lockfile --reporter=silent
+# vitest resolves `vite` to the workspace package; its dist/ must exist or
+# every spec dies at import time with ERR_MODULE_NOT_FOUND.
+pnpm --filter vite run build > /dev/null 2>&1

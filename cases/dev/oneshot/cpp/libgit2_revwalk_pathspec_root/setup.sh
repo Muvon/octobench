@@ -16,5 +16,5 @@ git remote remove origin
 cmake -S . -B build -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DBUILD_TESTS=ON -DBUILD_CLI=OFF -DBUILD_EXAMPLES=OFF \
-  -DUSE_HTTPS=OFF -DUSE_SSH=OFF > /dev/null
+  -DUSE_HTTPS=OFF -DUSE_SSH=OFF -DUSE_NTLMCLIENT=OFF > /dev/null
 cmake --build build --target libgit2_tests -j"$(nproc)" > /dev/null

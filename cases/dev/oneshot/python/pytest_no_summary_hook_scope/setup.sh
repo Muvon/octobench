@@ -12,4 +12,8 @@ git checkout -q "${BASE_SHA}"
 git checkout -q -B main
 git remote remove origin
 
+# setuptools_scm has no version source in a shallow no-tag checkout; without a
+# pretend version pytest installs as 0.1.dev and its own pyproject minversion
+# check rejects it at collection time.
+export SETUPTOOLS_SCM_PRETEND_VERSION_FOR_PYTEST=9.0.0.dev0
 pip install -q -e .
