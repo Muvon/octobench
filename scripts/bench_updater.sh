@@ -20,7 +20,7 @@ while true; do
     # Safety net: sweep every results file for degenerate judge verdicts that
     # any dead chain step may have left behind, then regenerate one last time.
     eval "$(grep '^export ' ~/.zshrc)"
-    export OCTOBENCH_JUDGE_MODEL=ollama:minimax-m3
+    export OCTOBENCH_JUDGE_MODELS="openrouter:thinkingmachines/inkling-small,openrouter:minimax/minimax-m3,openrouter:deepseek/deepseek-v4-flash-0731"
     for rj in results-full-*/*/results.json; do
       .venv/bin/python scripts/rejudge.py "$rj" >> /tmp/bench-update.log 2>&1 || true
     done

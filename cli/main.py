@@ -387,12 +387,19 @@ def parse_providers(arg: str | None) -> List[str]:
 def default_judge_cfg(repo_root: Path) -> Dict:
     # Judge runs as the `judge` role defined in the octomind config (the upstream
     # baseline default.toml extended only with this role). Model is passed via -m
-    # so the judge is explicit and reproducible; override with OCTOBENCH_JUDGE_MODEL.
-    judge_model = os.environ.get("OCTOBENCH_JUDGE_MODEL", "octohub:minimax")
+    # so the judge is explicit and reproducible; override with OCTOBENCH_JUDGE_MODEL,
+    # or set OCTOBENCH_JUDGE_MODELS (comma-separated) for a panel — each model
+    # judges independently and the recorded score/confidence is their mean.
+    panel = os.environ.get("OCTOBENCH_JUDGE_MODELS", "")
+    judge_models = [m.strip() for m in panel.split(",") if m.strip()] or [
+        os.environ.get("OCTOBENCH_JUDGE_MODEL", "octohub:minimax")
+    ]
+    judge_model = judge_models[0]
     return {
         "name": "octomind_judge",
         "runner": "cli",
         "model": judge_model,
+        "models": judge_models,
         "stdin_prompt": True,
         "command": ["octomind", "run", "judge", "-m", judge_model, "--format=jsonl"],
         "json_events": True,

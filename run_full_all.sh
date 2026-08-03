@@ -6,7 +6,7 @@
 set -eo pipefail
 cd /home/box/work/muvon/octobench
 eval "$(grep "^export " ~/.zshrc)"
-export OCTOBENCH_JUDGE_MODEL=ollama:minimax-m3
+export OCTOBENCH_JUDGE_MODELS="openrouter:thinkingmachines/inkling-small,openrouter:minimax/minimax-m3,openrouter:deepseek/deepseek-v4-flash-0731"
 
 # Wait for any in-flight bench (round-2 tail) to drain first — the claude
 # credential file mount assumes a single concurrent claude run.
@@ -26,7 +26,7 @@ for p in claude octomind; do
   for rj in results-full-$p/*/results.json; do
     [ -f "$rj" ] || continue
     .venv/bin/python scripts/rerun_failed.py "$rj" "$matrix" 2 >> /tmp/full-driver.log 2>&1 || true
-    OCTOBENCH_JUDGE_MODEL=ollama:minimax-m3 .venv/bin/python scripts/rejudge.py "$rj" >> /tmp/full-driver.log 2>&1 || true
+    OCTOBENCH_JUDGE_MODELS="openrouter:thinkingmachines/inkling-small,openrouter:minimax/minimax-m3,openrouter:deepseek/deepseek-v4-flash-0731" .venv/bin/python scripts/rejudge.py "$rj" >> /tmp/full-driver.log 2>&1 || true
   done
 done
 

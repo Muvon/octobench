@@ -116,9 +116,16 @@ from the instruction (no grading on undisclosed prose/formatting picks).
 ## Scoring
 
 Per case: hidden-test validation (hard pass/fail, failure costs a 25-point
-penalty) + LLM judge score 0-100 (judge = octomind `judge` role, model from
-`OCTOBENCH_JUDGE_MODEL`) weighted 0.85 with an efficiency component weighted
-0.15. Costs: claude reports its own `total_cost_usd` (correct 1h-cache-write
+penalty) + LLM judge score 0-100 (judge = octomind `judge` role) weighted 0.85
+with an efficiency component weighted 0.15. The judge is a **3-model panel**
+(`OCTOBENCH_JUDGE_MODELS`, comma-separated — currently
+thinkingmachines/inkling-small, minimax/minimax-m3 and
+deepseek/deepseek-v4-flash-0731 via OpenRouter): each model judges the same
+evidence independently and in parallel, the recorded score/confidence is their
+mean, and per-judge verdicts are kept in the record under `judge.judges` (a
+judge that fails to produce a verdict is excluded from the mean, never zeroed
+into it). `OCTOBENCH_JUDGE_MODEL` (singular) still selects a single-model
+judge. Costs: claude reports its own `total_cost_usd` (correct 1h-cache-write
 pricing); other providers are priced from token counts × `configs/models.yaml`.
 
 ## Reproduce
