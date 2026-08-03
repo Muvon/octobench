@@ -110,7 +110,7 @@ EOS
 set -euo pipefail
 ex=(":(exclude,icase)*changelog*" ":(exclude)*.md")
 while IFS= read -r t; do [[ -n "\$t" ]] && ex+=(":(exclude)\$t"); done <<< '${TEST_PATHS}'
-git diff '${GOLD_SHA}^1' '${GOLD_SHA}' -- . "\${ex[@]}" > /tmp/gold.patch
+git diff --binary '${GOLD_SHA}^1' '${GOLD_SHA}' -- . "\${ex[@]}" > /tmp/gold.patch
 if git apply --index /tmp/gold.patch 2>/dev/null \
    || git apply --3way --index /tmp/gold.patch; then
   git -c user.email=verify@octobench -c user.name=verify \

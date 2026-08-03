@@ -173,21 +173,31 @@ Cost/token accounting across resumed turns:
 
 ## Available Cases
 
-10 cases across 5 languages (2 per language), all turns fail-to-pass proven
+20 cases across 5 languages (4 per language), all turns fail-to-pass proven
 in the agent image:
 
-| Language | Repo | Turns |
-|----------|------|-------|
-| Python   | pydantic | 5 |
-| Python   | pytest | 5 |
-| JavaScript | fastify | 5 |
-| JavaScript | axios | 5 |
-| C++      | fmt | 7 |
-| C++      | simdjson | 5 |
-| PHP      | guzzle | 5 |
-| PHP      | symfony | 5 |
-| Rust     | clap | 5 |
-| Rust     | tokio | 5 |
+| Language | Repo | Turns | Domain |
+|----------|------|-------|--------|
+| Python   | pydantic | 5 | model machinery |
+| Python   | pytest | 5 | fixture subsystem |
+| Python   | mypy | 5 | type-checker narrowing |
+| Python   | aiohttp | 6 | multipart header hardening |
+| JavaScript | fastify | 5 | routing/content-type |
+| JavaScript | axios | 5 | HTTP client errors |
+| JavaScript | vue | 5 | reactivity core |
+| JavaScript | nest | 5 | DI container |
+| C++      | fmt | 7 | formatter edges |
+| C++      | simdjson | 5 | JSON parser robustness |
+| C++      | ada | 7 | URL parsing / URLPattern |
+| C++      | cli11 | 8 | CLI parsing/config/help |
+| PHP      | guzzle | 5 | HTTP client hardening |
+| PHP      | symfony | 5 | structured-data pipeline |
+| PHP      | phpspreadsheet | 6 | spreadsheet object model |
+| PHP      | doctrine_orm | 6 | query layer / mapping validation |
+| Rust     | clap | 5 | CLI rendering surface |
+| Rust     | tokio | 5 | waker correctness |
+| Rust     | gitoxide | 6 | git-format conformance |
+| Rust     | ruff | 6 | ty type-checker correctness |
 
 ## Creating a New Long-Run Case
 
