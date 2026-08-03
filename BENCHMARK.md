@@ -70,15 +70,17 @@ _Updated 2026-07-31 09:25 UTC. val = hidden gold tests; j = judge 0-100; cost; w
 - **glm-opencode**: **30/40** · judgeΣ 3209 · $225.88 · 5.6h
 <!-- RESULTS:END -->
 
-**Cost interpretation — glm ran WITHOUT prompt caching.** The glm-5.2 columns
-(octomind and opencode) went through Ollama cloud, which has no prompt caching:
-every agent turn re-buys its full context at the list input price ($1.40/M).
-The opus column, by contrast, benefits massively from Anthropic’s 1h caching —
-in these runs ~97% of its context traffic billed as cache reads at $0.50/M
-(a tenth of its $5/M input price). glm’s dollar figures are therefore its
-worst case: on a cache-enabled endpoint its input bill would shrink several
-fold, making its cost position substantially stronger than even these numbers
-show. gpt-5.6-sol (codex) also benefits from OpenAI’s implicit caching.
+**Cost interpretation — caching differs by era.** Results recorded before
+2026-08 ran glm-5.2 through Ollama cloud, which has no prompt caching: every
+agent turn re-bought its full context at the list input price ($1.40/M), so
+those glm dollar figures are its worst case. The opus column, by contrast,
+benefits massively from Anthropic’s 1h caching — ~97% of its context traffic
+billed as cache reads at $0.50/M (a tenth of its $5/M input price) — and
+gpt-5.6-sol (codex) benefits from OpenAI’s implicit caching. Since 2026-08
+glm-5.2 runs through Z.ai, which DOES serve prompt caching (cache reads
+billed at $0.26/M, a fifth of list input) — confirmed in run token logs — so
+newer glm results are cache-priced like the other providers and are not
+directly cost-comparable to the ollama-era rows.
 
 Run artifacts live in `results-full-<provider>/<timestamp>/results.json` and
 `results-delta4-<provider>/<timestamp>/results.json`, with per-case logs (agent
@@ -152,9 +154,10 @@ python scripts/update_benchmark.py \
 Provider-specific env used in our runs: octomind ran a staged tap
 (`OCTOMIND_TAP_CACHE`) and a binary override with the unfinished-handback
 pre-gate (`OCTOMIND_BIN`); codex needed `CODEX_BIN` pointing at >= 0.145.0 for
-gpt-5.6-sol. Ollama cloud (`OLLAMA_API_KEY`) has no prompt caching — factor
-that into cost comparisons (anthropic caching re-reads context at 0.1× input
-price).
+gpt-5.6-sol. glm-5.2 now runs via Z.ai (`ZAI_API_KEY`), which serves prompt
+caching (cache reads at $0.26/M); pre-2026-08 results used Ollama cloud
+(`OLLAMA_API_KEY`), which has none — factor the era into cost comparisons
+(anthropic caching re-reads context at 0.1× input price).
 
 ## Case collection (adding more)
 

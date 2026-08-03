@@ -1,0 +1,34 @@
+id: example_longrun
+name: Example long-run sequence
+language: rust
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/example/repo
+  base_sha: 0000000000000000000000000000000000000000
+# Each turn is one user message in the same session. The agent's source changes
+# persist across turns (realistic continuous workflow). Validation checks out
+# only the gold test files for that turn, overwriting any agent edits to tests.
+# gold_sha per turn MUST be the PR's true merge commit, reachable from the
+# repo's default branch (never a PR branch-head SHA); pr_url records provenance.
+turns:
+  - name: "Turn 1 short title"
+    instruction: |
+      Describe the first task the agent should solve.
+    gold_sha: 1111111111111111111111111111111111111111
+    pr_url: https://github.com/example/repo/pull/1
+    test_paths:
+      - path/to/test_file.rs
+    test_command: |
+      cargo test -p mycrate --lib test_name
+
+  - name: "Turn 2 short title"
+    instruction: |
+      Describe the second task. The agent continues in the same session,
+      with full context of what it did in turn 1.
+    gold_sha: 2222222222222222222222222222222222222222
+    test_paths:
+      - path/to/test_file.rs
+    test_command: |
+      cargo test -p mycrate --lib another_test
