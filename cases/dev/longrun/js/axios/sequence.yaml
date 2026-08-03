@@ -1,0 +1,116 @@
+id: longrun_js_axios
+name: axios core fixes (5-turn sequence)
+language: javascript
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/axios/axios
+  base_sha: ff60b43277c32a5b2f7589c917db16d8e043c0d4
+  prs: [11059, 11067, 11087, 11109, 11094]
+turns:
+  - name: "Synthesize AxiosError message from AggregateError.errors"
+    instruction: |
+      When `AxiosError.from()` wraps an `AggregateError` (thrown by Node on
+      dual-stack/Happy-Eyeballs connection failures), the resulting `AxiosError`
+      has an empty message because `AggregateError.message` is empty — the
+      detail lives in `AggregateError.errors[]`.
+
+      In `lib/core/AxiosError.js`, modify `AxiosError.from()` so that when
+      `error.message` is empty AND `error.errors` is a non-empty array, it
+      synthesizes a message by joining the `.message` (or stringified value) of
+      each entry with `'; '`. If all entries are empty/unstringifiable,
+      fall back to `error.name` or the string `'AggregateError'`.
+
+      Use a `stringifySafely` helper that wraps `String(value)` in try/catch
+      returning `''` on failure, since error entries may have throwing
+      `Symbol.toPrimitive`.
+
+      An explicit `AggregateError` message must be preserved unchanged.
+    gold_sha: a93b1c90d919542987cc38591d10eed949a345d0
+    pr_url: https://github.com/axios/axios/pull/11059
+    test_paths:
+      - tests/unit/core/AxiosError.test.js
+    test_command: |
+      npx vitest run tests/unit/core/AxiosError.test.js
+
+  - name: "Add Cloudflare 520 status code to HttpStatusCode"
+    instruction: |
+      The `HttpStatusCode` enum in `lib/helpers/HttpStatusCode.js` is missing
+      the Cloudflare status code 520 (Web Server Returns An Unknown Error).
+      The enum currently jumps from 511 (`NetworkAuthenticationRequired`)
+      directly to 521 (`WebServerIsDown`).
+
+      Add `WebServerReturnsAnUnknownError: 520` between 511 and 521. The
+      reverse lookup `HttpStatusCode[520]` must return
+      `'WebServerReturnsAnUnknownError'`.
+    gold_sha: 3041b8fd1daf17404d1bad1f9d94026ea5ab400b
+    pr_url: https://github.com/axios/axios/pull/11067
+    test_paths:
+      - tests/unit/helpers/HttpStatusCode.test.js
+    test_command: |
+      npx vitest run tests/unit/helpers/HttpStatusCode.test.js
+
+  - name: "Trim trailing ejected interceptor handlers"
+    instruction: |
+      `InterceptorManager` stores handlers in an array. When interceptors are
+      ejected, their slots are set to `null` (tombstones) but never removed.
+      In long-running apps that add+eject interceptors repeatedly, the array
+      grows unboundedly.
+
+      In `lib/core/InterceptorManager.js`, add a `trimHandlers` function that
+      pops trailing `null` entries from the end of the `handlers` array. Call
+      it after each `eject()` so trailing tombstones are cleaned up. Interior
+      tombstones (with active handlers after them) must be preserved.
+
+      Also ensure that `forEach` skips `null` entries as before.
+    gold_sha: 712e02373f1c5ac72fdf5da16f04838338ba817e
+    pr_url: https://github.com/axios/axios/pull/11087
+    test_paths:
+      - tests/unit/core/InterceptorManager.test.js
+    test_command: |
+      npx vitest run tests/unit/core/InterceptorManager.test.js
+
+  - name: "Tolerate non-string stack in error decoration"
+    instruction: |
+      In `lib/core/Axios.js`, the request error handler decorates errors with
+      stack traces by calling `Error.captureStackTrace` or creating a new
+      `Error`, then slicing the stack string. When instrumentation tools
+      override `Error.prepareStackTrace` to return non-string values (e.g.
+      structured call-site objects), the `dummy.stack.indexOf('\n')` call
+      throws because `indexOf` doesn't exist on non-strings.
+
+      Fix the stack decoration logic to check `typeof dummyStack === 'string'`
+      before calling `.indexOf` and `.slice`. If the stack is not a string,
+      treat it as empty (`''`). The `try/catch` around the decoration should
+      remain so that unwritable `stack` properties are still tolerated.
+    gold_sha: a75bf44647e5132e39b778730394b0a2b983265c
+    pr_url: https://github.com/axios/axios/pull/11109
+    test_paths:
+      - tests/unit/core/Axios.test.js
+    test_command: |
+      npx vitest run tests/unit/core/Axios.test.js
+
+  - name: "Reject navigation-canceled XHR requests as ECONNABORTED"
+    instruction: |
+      In Firefox 152, when a navigation cancels an XHR request, only
+      `readystatechange` and `loadend` fire with `status === 0`. The XHR
+      adapter's `onreadystatechange` handler treats status 0 as a success
+      with an empty response, instead of rejecting.
+
+      In `lib/adapters/xhr.js`, inside the `onreadystatechange` handler, when
+      `request.status === 0`, reject with `AxiosError('Request aborted',
+      AxiosError.ECONNABORTED, config, request)` unless the request URL uses
+      the `file:` protocol. To determine the protocol, check the request URL
+      scheme; for relative URLs (no scheme), fall back to `platform.origin`'s
+      scheme. Also check `request.responseURL` — if it starts with `file:`,
+      treat it as a file read and allow status 0.
+
+      Create a helper `lib/helpers/normalizeURLForProtocolCheck.js` that
+      strips whitespace and normalizes the URL for the protocol check.
+    gold_sha: c3f553c740ebf3dff5e22dae24e9caaafafddd2d
+    pr_url: https://github.com/axios/axios/pull/11094
+    test_paths:
+      - tests/unit/adapters/xhr.test.js
+    test_command: |
+      npx vitest run tests/unit/adapters/xhr.test.js

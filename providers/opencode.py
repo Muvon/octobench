@@ -25,6 +25,7 @@ class OpencodeProvider(Provider):
         provider_model: str,
         session_name: str,
         executor: "Executor",
+        resume_session_id: Optional[str] = None,
     ) -> ProviderRunResult:
         cmd = [
             "opencode",

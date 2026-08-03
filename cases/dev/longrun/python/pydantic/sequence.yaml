@@ -1,0 +1,115 @@
+id: longrun_python_pydantic
+name: Pydantic core model fixes (5-turn sequence)
+language: python
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/pydantic/pydantic
+  base_sha: f59e929c999e8b2efc7b12fd0bc1685c1a186be3
+  prs: [13438, 13456, 13483, 13495, 13516]
+turns:
+  - name: "Thread-safe model_rebuild"
+    instruction: |
+      `BaseModel.model_rebuild()` is not thread-safe. When two threads call `model_rebuild()`
+      concurrently on the same incomplete model, or when rebuilding one model triggers a nested
+      rebuild of another (e.g. via `__class_getitem__` during generic parametrization), class
+      attributes are mutated while other threads may read them for validation/serialization,
+      causing races.
+
+      Make model rebuilds thread-safe by serializing them with a global reentrant lock
+      (`threading.RLock()`). The lock must be reentrant because rebuilding a model can trigger
+      the rebuild of another (e.g. a generic origin rebuilt during parametrization in
+      `__class_getitem__()`). It must be global (not per-class) to avoid deadlock when two
+      threads each hold their class's lock and request the other's. Check
+      `__pydantic_complete__` before acquiring the lock to avoid blocking on already-complete
+      models, and re-check inside the lock since another thread may have completed the rebuild
+      while we waited. Apply the same locking to `rebuild_dataclass()` in `pydantic/dataclasses.py`.
+    gold_sha: bcdee29e0943f0cd1ce9d1da3aeeb2fb87cf0a16
+    pr_url: https://github.com/pydantic/pydantic/pull/13438
+    test_paths:
+      - tests/test_main.py
+    test_command: |
+      python3 -m pytest -o addopts='' tests/test_main.py::test_model_rebuild_nested_during_parametrization tests/test_main.py::test_model_rebuild_already_rebuilt_by_other_thread -xvs
+
+  - name: "RootModel.model_dump signature sync"
+    instruction: |
+      Under `TYPE_CHECKING`, `RootModel.model_dump` does not have the same parameter signature
+      as `BaseModel.model_dump`. The parameters (names, kinds, defaults, annotations) must match
+      exactly between the two — only the return type annotation may differ (`Any` instead of
+      `dict[str, Any]`). The docstrings must also be identical (after `inspect.cleandoc`).
+    gold_sha: 92462ee5a5200e8f21825023b83fccb9d4ee63c5
+    pr_url: https://github.com/pydantic/pydantic/pull/13456
+    test_paths:
+      - tests/test_root_model.py
+    test_command: |
+      python3 -m pytest -o addopts='' tests/test_root_model.py::test_type_checking_model_dump_signature_in_sync_with_base_model -xvs
+
+  - name: "Type variable substitution in __pydantic_extra__"
+    instruction: |
+      When a `Generic` `BaseModel` subclass has `extra='allow'`, the type variable in
+      `__pydantic_extra__` is not properly substituted for the concrete type in subclasses.
+
+      For example, given:
+      ```python
+      T = TypeVar('T')
+      class Model(BaseModel, Generic[T], extra='allow'):
+          __pydantic_extra__: dict[str, T]
+      class Sub(Model[int]):
+          pass
+      ```
+      `Sub.model_json_schema()['additionalProperties']` should be `{'type': 'integer'}` (not
+      `{'type': 'T'}` or similar), and `Sub(extra_value='not_an_int')` should raise
+      `ValidationError`, while `Sub(extra_value='1').model_extra` should be
+      `{'extra_value': 1}`.
+
+      The fix is in the type-variable substitution logic for `__pydantic_extra__` in
+      `pydantic/_internal/_fields.py`.
+    gold_sha: 2294b52862478f3ef0fa0afd3cfdc9acba3881b0
+    pr_url: https://github.com/pydantic/pydantic/pull/13483
+    test_paths:
+      - tests/test_main.py
+    test_command: |
+      python3 -m pytest -o addopts='' tests/test_main.py::test_extra_generic_class_subclass -xvs
+
+  - name: "URL ordering returns NotImplemented for foreign types"
+    instruction: |
+      URL ordering comparisons (`<`, `>`, `<=`, `>=`) against foreign types (strings, integers,
+      `None`, or a different URL type like `HttpUrl` vs `AnyUrl`) silently return `False`
+      instead of raising `TypeError`.
+
+      The comparison methods (`__lt__`, `__gt__`, `__le__`, `__ge__`) in `pydantic/networks.py`
+      should return `NotImplemented` when the other operand is not the same URL type, so Python
+      raises `TypeError`. Equality comparisons (`==`, `!=`) are unaffected — comparing against
+      a different type is well-defined and returns `False`/`True` as appropriate.
+    gold_sha: a187a65467a588ccc00761d80f325b45381ca819
+    pr_url: https://github.com/pydantic/pydantic/pull/13495
+    test_paths:
+      - tests/test_networks.py
+    test_command: |
+      python3 -m pytest -o addopts='' tests/test_networks.py::test_any_url_ordering_not_implemented tests/test_networks.py::test_any_url_ordering_is_consistent -xvs
+
+  - name: "Pipeline constraints with cross-type arguments and transforms"
+    instruction: |
+      In the experimental pipeline API (`pydantic/experimental/pipeline.py`), the constraint
+      methods `ge()`, `le()`, `gt()`, `lt()`, and `multiple_of()` fail in two scenarios:
+
+      1. When the constraint argument type differs from the `validate_as` type (e.g.
+         `validate_as(int).ge(0.0)` or `validate_as(float).multiple_of(2)`), the constraint
+         is not applied correctly.
+      2. When a `transform()` step precedes the constraint, the resulting core schema is
+         non-numeric (wrapped in `function-after`), so the constraint falls back to a function
+         check — but that fallback path was broken for `ge`/`le` (they unconditionally wrapped
+         the schema in `_check_func` even when the native constraint was already set, causing
+         subsequent constraints to see `function-after` instead of the numeric type).
+
+      The fix ensures that when a native numeric constraint can be applied (the schema's `type`
+      is `int`/`float`/`decimal`), the fallback function wrapper is NOT added — only the native
+      field (`ge`/`le`/`gt`/`lt`/`multipleOf`) is set. The function-check fallback is used only
+      when the schema is genuinely non-numeric.
+    gold_sha: 60d4c4873e44d587c8d70d7a1c731f7361fe55eb
+    pr_url: https://github.com/pydantic/pydantic/pull/13516
+    test_paths:
+      - tests/test_pipeline.py
+    test_command: |
+      python3 -m pytest -o addopts='' tests/test_pipeline.py::test_ge_le_gt_lt tests/test_pipeline.py::test_parse_multipleOf tests/test_pipeline.py::test_predicates -xvs

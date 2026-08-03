@@ -1,0 +1,92 @@
+id: longrun_js_fastify
+name: Fastify routing and serialization fixes (5-turn sequence)
+language: js
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/fastify/fastify
+  base_sha: 8b9c07b645a8156c23a1d2619267fc84ea879250
+  prs: [6803, 6830, 6838, 6854, 6881]
+turns:
+  - name: "Double slash when joining nested prefixes"
+    instruction: |
+      When a plugin is registered with a prefix that has a trailing slash (e.g. `/v1/`) and a
+      nested plugin is registered with a prefix that has no leading slash (e.g. `inner`), the
+      joined route prefix contains a double slash (`/v1//inner/route`). The request to
+      `/v1/inner/route` works, but `/v1//inner/route` also matches (returns 200 instead of 404).
+
+      The prefix joining logic in `lib/plugin-override.js` should normalize the joined prefix
+      to avoid double slashes. A request to the double-slash URL should return 404.
+    gold_sha: 2f597a9297a3020a9f30bf5548a8442c28ddb1c1
+    pr_url: https://github.com/fastify/fastify/pull/6803
+    test_paths:
+      - test/route-prefix.test.js
+    test_command: |
+      node --test test/route-prefix.test.js
+
+  - name: "ContentType cache and quoted parameter values"
+    instruction: |
+      The `ContentType` class should cache instances so that `ContentType.from('application/json')`
+      returns the same object on repeated calls. A `ContentType.cache` Map should be accessible
+      for cache inspection.
+
+      Additionally, when a content type has a parameter like `version=2`, the `toString()`
+      output should quote the parameter value: `application/json; version="2"; charset=utf-8`
+      (per RFC 9110). The reply content-type header should reflect this quoted format.
+    gold_sha: 6f63ce9324b7368ac8beff1f385b31addce35c2d
+    pr_url: https://github.com/fastify/fastify/pull/6830
+    test_paths:
+      - test/content-type.test.js
+    test_command: |
+      node --test test/content-type.test.js
+
+  - name: "Normalize method in findRoute"
+    instruction: |
+      `fastify.findRoute({ method: 'get', url: '/artists/:artistId' })` returns null even when
+      a GET route exists, because the method is not uppercased before lookup. The method should
+      be normalized to uppercase in `lib/route.js`'s `findRoute` method.
+
+      Additionally, `findRoute({ url: '/path' })` without a `method` property should return
+      null (not throw or match arbitrarily).
+    gold_sha: 6682c4f9a76cbb60c372ba5cad9dd2fc6e2fdb51
+    pr_url: https://github.com/fastify/fastify/pull/6838
+    test_paths:
+      - test/find-route.test.js
+    test_command: |
+      node --test test/find-route.test.js
+
+  - name: "Reuse cached content types for response serialization"
+    instruction: |
+      When selecting a response serializer, Fastify re-parses the content type from the reply
+      header instead of reusing the already-parsed `ContentType` instance. This causes a
+      mismatch when the reply's content type has parameters (e.g.
+      `application/x-fastify-cache-test+json; version=1`) — the serializer lookup uses a
+      different normalization than what was cached.
+
+      The fix in `lib/schemas.js` should reuse the cached `ContentType` instance (from
+      `ContentType.cache`) when looking up the response serializer, so that parameterized
+      content types match correctly.
+    gold_sha: 97d10c26a3f5ba59a24c630d31c29335da64d540
+    pr_url: https://github.com/fastify/fastify/pull/6854
+    test_paths:
+      - test/schema-serialization.test.js
+    test_command: |
+      node --test test/schema-serialization.test.js
+
+  - name: "Uncatchable throws in writeHead during async hooks"
+    instruction: |
+      When an async hook (`preSerialization` or `onSend`) calls `reply.header()` with an invalid
+      header value (e.g. `'\n'`), the resulting throw inside `writeHead` becomes an uncatchable
+      exception that crashes the process instead of being routed to the error handler.
+
+      The fix in `lib/hooks.js` should ensure that throws from `reply.header()` / `writeHead`
+      during async hook execution are caught and properly forwarded to the `onError` handler,
+      rather than becoming uncatchable. The error handler should be invoked (potentially twice
+      if the hook runs twice during the lifecycle).
+    gold_sha: 01ca8393b9d10a897f0d2daedbe2f9eb90076ef5
+    pr_url: https://github.com/fastify/fastify/pull/6881
+    test_paths:
+      - test/reply-error.test.js
+    test_command: |
+      node --test test/reply-error.test.js

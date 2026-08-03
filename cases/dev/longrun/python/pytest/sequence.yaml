@@ -1,0 +1,279 @@
+id: longrun_python_pytest
+name: pytest fixture subsystem fixes (5-turn sequence)
+language: python
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/pytest-dev/pytest
+  base_sha: 35f21fdcfc9b5817a2aafc449dc5cff5aba83725
+  prs: [14645, 13745, 14764, 14694, 14746]
+turns:
+  - name: "Deduplicate Directory nodes on re-collection to preserve fixture identity"
+    instruction: |
+      In `src/_pytest/main.py`, `Session._collect_one_node` caches one
+      `CollectReport` per collector node in `self._collection_cache`. When
+      several command-line arguments share a common ancestor directory, that
+      ancestor gets collected more than once; the second pass runs with
+      `handle_dupes=False`, which bypasses the cache and builds brand-new child
+      `Directory` nodes for directories already collected. Fixture registration
+      is keyed by node *identity*, so fixtures registered against the
+      first-pass `Directory` nodes become unreachable for items collected under
+      the fresh duplicates. Visible symptom: a `conftest.py` fixture chain is
+      silently dropped from a test's fixture closure, and
+      `@pytest.mark.parametrize` of an indirect parameter belonging to that
+      chain fails validation — but only for certain argument orders.
+
+      Fix this so a test's fixture closure is independent of which unrelated
+      paths were collected earlier in the same session. After a successful
+      re-collection of a node already present in `self._collection_cache`,
+      reconcile the new report's result against the previously cached one: any
+      child that is a `nodes.Directory` whose `path` matches a `Directory`
+      child from the cached result must be replaced by the previously-seen node
+      object, so fixture registration keyed by node identity stays valid.
+      Non-`Directory` children and unseen directories are kept as-is. Store the
+      reconciled report in the cache as usual. Do this as a post-processing
+      step in `_collect_one_node`, not inside `Dir.collect`/`Package.collect` —
+      pushing it into collectors would leak session concerns into node code and
+      miss third-party `Directory` subclasses.
+
+      Expected: given `tests/` containing
+      `components/water_heater/test_water_heater.py`, `components/tts/test_init.py`
+      and `test_config_entries.py`, where `tests/components/conftest.py`
+      defines a chain `cache_dir_side_effect` -> `mock_init_cache_dir` ->
+      `mock_cache_dir` and `tests/components/tts/conftest.py` defines an
+      autouse `mock_cache_dir` override requesting the parent fixture of the
+      same name, running `pytest --collect-only tests/components/water_heater
+      tests/test_config_entries.py tests/components/tts/test_init.py` must
+      collect `test_setup_no_access` (parametrized with
+      `@pytest.mark.parametrize("cache_dir_side_effect", ["error_value"])`
+      even though that is not one of its own arguments) and exit `ExitCode.OK`.
+    gold_sha: a933cf5de4d64192d1d588a851ca4e76eec71efc
+    pr_url: https://github.com/pytest-dev/pytest/pull/14645
+    test_paths:
+      - testing/test_conftest.py
+    test_command: |
+      python -m pytest "testing/test_conftest.py::test_fixture_closure_order_independence_with_parametrize"
+
+  - name: "Warn when fixtures are hidden behind another decorator"
+    instruction: |
+      Fixtures hidden behind another decorator are discovered
+      silently-or-not-at-all, and users get only a confusing
+      "fixture 'x' not found" error. Make `FixtureManager.parsefactories` in
+      `src/_pytest/fixtures.py` detect these cases and emit a `PytestWarning`
+      pointing at the fixture's own source location.
+
+      `parsefactories` iterates `dir(holderobj)` and reads attributes via
+      `safe_getattr`, which runs descriptor binding and therefore hides
+      `staticmethod`/`classmethod` wrappers. Add a raw lookup that reads the
+      entry straight out of `__dict__` — walking `__mro__` for classes so
+      wrappers inherited from a base class are visible, and using `__dict__`
+      directly for modules — and check that raw entry. To decide whether the
+      raw entry hides a fixture, follow its `__wrapped__` chain with
+      `inspect.unwrap`, stopping as soon as the object is a
+      `FixtureFunctionDefinition` (that class sets `__wrapped__` itself via
+      `functools.update_wrapper`). Treat wrapper loops, excessive depth, and
+      objects that raise on attribute access as "not a fixture". Skip objects
+      that look like mocks (a non-`None` `_mock_name` attribute). If the
+      unwrapped result is the raw entry itself, nothing is wrapped and nothing
+      warns.
+
+      The warning must be attributed to the fixture function's own file/line,
+      so resolve down to a real `types.FunctionType` before warning (a fixture
+      declared as `@pytest.fixture` above `@classmethod`/`@staticmethod` stores
+      the descriptor — peel it once via `__func__`). Emit with
+      `warn_explicit_for`. Three messages, depending on the raw entry's type:
+      - `classmethod`: `cannot discover fixture 'NAME' because it is wrapped by @classmethod; place @pytest.fixture above @classmethod`
+      - `staticmethod`: `fixture 'NAME' is wrapped by @staticmethod above @pytest.fixture; place @pytest.fixture above @staticmethod`
+      - anything else: `cannot discover fixture 'NAME' due to being wrapped in decorators`
+
+      Registration rules: on Python 3.9–3.12 `classmethod` chains through
+      descriptors, so `getattr` can still return a `FixtureFunctionDefinition`
+      even when the raw `__dict__` entry is `classmethod(fixture)`. Do not
+      register the fixture in that case — `@classmethod` above
+      `@pytest.fixture` must be undiscoverable on every supported Python, so a
+      test using it errors with "fixture 'x' not found". `@staticmethod` above
+      `@pytest.fixture` still resolves and the test still passes, but always
+      warns. The documented orders — `@pytest.fixture` above `@classmethod`
+      and `@pytest.fixture` above `@staticmethod` — keep working and must not
+      warn at all (verified under `-W error::pytest.PytestWarning`).
+
+      pytest's own bundled plugins must not trip the new warning:
+      `src/_pytest/legacypath.py` declares `testdir`, `tmpdir_factory` and
+      `tmpdir` with `@staticmethod` above `@fixture`. Swap those to `@fixture`
+      above `@staticmethod`, and register `LegacyTmpdirPlugin` /
+      `LegacyTestdirPlugin` as *instances* rather than classes (with the class
+      form the `staticmethod` descriptor survives and
+      `resolve_fixture_function` binds it onto test instances). Guard the
+      pytester registration by plugin name (`has_plugin("legacypath-pytester")`)
+      instead of object identity.
+    gold_sha: 264846d02f5c19ec481fc2f0ffb8892f8f60cd2e
+    pr_url: https://github.com/pytest-dev/pytest/pull/13745
+    test_paths:
+      - testing/python/fixtures.py
+    test_command: |
+      python -m pytest "testing/python/fixtures.py::test_custom_decorated_fixture_warning" "testing/python/fixtures.py::test_custom_decorated_fixture_above_classmethod_warning" "testing/python/fixtures.py::test_classmethod_above_fixture_warning" "testing/python/fixtures.py::test_staticmethod_above_fixture_warning" "testing/python/fixtures.py::test_fixture_above_classmethod_still_works" "testing/python/fixtures.py::test_fixture_above_staticmethod_still_works" "testing/python/fixtures.py::test_classmethod_above_fixture_warning_inherited"
+
+  - name: "Improve deprecation message for class-scoped fixtures as instance methods"
+    instruction: |
+      The `PytestRemovedIn10Warning` emitted for a class-scoped fixture
+      declared as an instance method is a fixed string, so a user with many
+      fixtures cannot tell which one triggered it, and its advice contradicts
+      the decorator ordering pytest actually requires.
+
+      In `src/_pytest/deprecated.py`, turn `CLASS_FIXTURE_INSTANCE_METHOD`
+      into an `UnformattedWarning` over `PytestRemovedIn10Warning` (the helper
+      is already imported and used by other constants in the module) with a
+      `{fixturename!r}` placeholder, reworded to exactly:
+
+      Class-scoped fixtures defined as instance methods are deprecated.
+      Instance attributes set in the {fixturename!r} fixture will NOT be visible to test methods,
+      as each test gets a new instance while the fixture runs only once per class.
+      Use a @classmethod decorator below @pytest.fixture and set attributes on cls instead.
+      See https://docs.pytest.org/en/stable/deprecations.html#class-scoped-fixture-as-instance-method
+
+      In `resolve_fixture_function` in `src/_pytest/fixtures.py`, format the
+      warning with `fixturename=request.fixturename` before passing it to
+      `warnings.warn` (keep `stacklevel=2`). Also add a `__tracebackhide__`
+      callable at the top of `resolve_fixture_function` returning true when the
+      raised exception's type is a subclass of
+      `CLASS_FIXTURE_INSTANCE_METHOD.category`, so that when the warning is
+      turned into an error the traceback does not point at pytest internals.
+
+      Expected: a test class with
+      `@pytest.fixture(scope="class") def fix(self): self.attr = True` and a
+      `test_foo(self, fix)`, run under
+      `-Werror::pytest.PytestRemovedIn10Warning`, yields exactly one error
+      whose output contains
+      `PytestRemovedIn10Warning: Class-scoped fixtures defined as instance methods`.
+      A class-scoped fixture defined with `@classmethod` must still not warn.
+    gold_sha: ced9022c0ca87ae2a0a604c68d2e1c462f8a5c6f
+    pr_url: https://github.com/pytest-dev/pytest/pull/14764
+    test_paths:
+      - testing/deprecated_test.py
+    test_command: |
+      python -m pytest "testing/deprecated_test.py::test_class_scope_instance_method_is_deprecated"
+
+  - name: "Make rootdir conftest fixtures visible to items collected outside the rootdir"
+    instruction: |
+      Since fixture scoping moved from nodeid-prefix matching to node-based
+      matching, a `conftest.py` located directly in the rootdir is attached to
+      its own `Directory` collector. Under the old scheme that conftest
+      received an empty baseid, which matched every collected item, so its
+      fixtures were visible session-wide — including to items collected from
+      *outside* the rootdir (passing a parent of the rootdir as a collection
+      argument, or pointing `--rootdir` at a subdirectory). With node-based
+      scoping those items are no longer descendants of that `Directory`, so
+      the fixtures vanish ("fixture not found"), and doctests relying on
+      `doctest_namespace` injection from such a conftest fail with `NameError`.
+
+      In `src/_pytest/fixtures.py`, restore the old visibility for the rootdir
+      conftest specifically, in both places where pending conftests are
+      flushed:
+      - In the `pytest_make_collect_report` hook, when the collector is a
+        `nodes.Directory` and a pending conftest plugin exists for its path,
+        call `parsefactories` with the `Session` as the node instead of the
+        `Directory` when `collector.path == self.config.rootpath`; otherwise
+        keep scoping it to the `Directory`.
+      - In `_flush_pending_conftests_to_session`, which today only rescues
+        conftests whose directory is not under `rootpath` (those never get a
+        `Directory` collector at all), also treat a pending conftest whose
+        directory *is* exactly `rootpath` as session-scoped: remove it from
+        the pending map and register it against the session.
+
+      Conftests in directories strictly below the rootdir keep their
+      `Directory` scoping — only the rootdir one and ancestors above it become
+      session-wide. Update the docstring to explain this reproduces the set of
+      conftests that previously ended up with an empty baseid.
+
+      Expected, with layout `project/xclim/testing/conftest.py` (the rootdir)
+      and `project/xclim/core/...` (collected, outside the rootdir), invoked
+      from `project/`:
+      - `pytest --rootdir xclim/testing --doctest-modules xclim -v` with a
+        plain `rootdir_fixture` returning `"from-rootdir"` in the rootdir
+        conftest and `xclim/core/test_it.py::test_uses_rootdir(rootdir_fixture)`
+        asserting that value: the test is PASSED and the run ends `1 passed`.
+      - `pytest --rootdir xclim/testing --config-file xclim/testing/conftest.py
+        --doctest-modules xclim` where the rootdir conftest defines a
+        session-scoped autouse fixture injecting
+        `doctest_namespace["my_var"] = 42`, and `xclim/core/mod.py` has a
+        docstring doctest `>>> my_var` expecting `42`: 1 passed.
+    gold_sha: ef052d0bc481af97afb3fbd2aae24d8abce08604
+    pr_url: https://github.com/pytest-dev/pytest/pull/14694
+    test_paths:
+      - testing/test_conftest.py
+      - testing/test_doctest.py
+    test_command: |
+      python -m pytest "testing/test_conftest.py::test_rootdir_conftest_visible_outside_rootdir" "testing/test_doctest.py::TestDoctestNamespaceFixture::test_namespace_fixture_from_rootdir_when_modules_outside_rootdir"
+
+  - name: "Reorder parametrized tests by param value, not index"
+    instruction: |
+      `reorder_items` groups items by higher-than-function-scoped parameters
+      so an expensive fixture is set up once per parameter value. Today the
+      grouping key is `ParamArgKey.param_index` — the parameter's index within
+      its own `parametrize()` call. Two tests parametrized by *separate*
+      `parametrize()` calls with the same value therefore land in different
+      groups, and the fixture is torn down and re-set-up for a value it
+      already has. Switch the grouping to compare parameter *values*.
+
+      In `src/_pytest/fixtures.py`, add a `ParamValueKey` class: a hashable
+      equivalence key for a parameter value, constructed as
+      `ParamValueKey(value, fallback_index)`. It approximates the equality
+      `FixtureDef.execute` uses at runtime for its cache while always being
+      usable as a dict key. Use `__slots__`. Behavior:
+      - If `hash(value)` succeeds, the key compares by value; store the value
+        and its hash.
+      - If `hash(value)` raises `TypeError`, fall back to the
+        parametrize-call index: store `fallback_index` and
+        `hash(fallback_index)` (the historical index-based behavior).
+      - `__eq__` returns `NotImplemented` for non-`ParamValueKey` operands. A
+        by-value key is never equal to a by-index key, even when their hashes
+        collide (e.g. `ParamValueKey(0, 0)` vs `ParamValueKey({}, 0)`, both
+        directions). Two by-index keys compare their indices. Two by-value
+        keys are equal on identity shortcut; otherwise unequal if `type()`
+        differs — so `1`, `True` and `1.0` do not group together — otherwise
+        `bool(a == b)`, with `TypeError`/`ValueError`/`RuntimeError` from an
+        exotic `__eq__` (numpy arrays, objects that raise) swallowed and
+        treated as not equal.
+      - `__repr__` is `ParamValueKey(value=<repr of value>)` for by-value keys
+        and `ParamValueKey(index=<index>)` for by-index keys — e.g.
+        `ParamValueKey('a', 0)` reprs as `ParamValueKey(value='a')`,
+        `ParamValueKey({}, 3)` as `ParamValueKey(index=3)`.
+
+      Replace `ParamArgKey.param_index: int` with `param_key: ParamValueKey`,
+      and in `get_param_argkeys` iterate `callspec.params.items()` instead of
+      `callspec.indices`, building `ParamValueKey(param,
+      callspec.indices[argname])` for each argname whose
+      `callspec._arg2scope[argname]` matches the requested scope. Add a
+      changelog note that test *order* may change and setup/teardown counts
+      can only decrease. Because the runtime cache check in
+      `FixtureDef.execute` stays authoritative, an imprecise key can only
+      cause a suboptimal order, never a wrong fixture value.
+
+      Expected:
+      - Three session-scoped indirect-parametrized tests in separate
+        `parametrize()` calls with values `"dina"`, `"more"`, `"dina"`:
+        `--setup-plan` shows one `SETUP S prepare['dina']` covering
+        `test_1[dina]` and `test_3[dina]`, then `TEARDOWN S prepare['dina']`,
+        then `SETUP S prepare['more']` for `test_2[more]`.
+      - Unhashable values (`{"a": 1}`, `{"b": 2}`) parametrizing a
+        module-scoped fixture across two tests group by index: `fix0` of both
+        tests together under one setup, `fix1` of both under the next.
+      - Mixed hashable and unhashable values on the same fixture only group
+        with their own kind: an unhashable `{"a": 1}` stays alone, while two
+        `"x"` values from separate `parametrize()` calls share one setup.
+      - Values whose `__eq__` raises `ValueError` and whose `__hash__` returns
+        a constant do not break collection or reordering: exit `ExitCode.OK`
+        with 2 passed.
+      - Higher-scope reordering now groups by value: for a module-scoped
+        `arg1`, both `test1` items for a given `arg1` value precede the
+        corresponding `test3` item, and in the issue-519 example each
+        `test_one[arg1vX-*]` pair comes before `test_two[arg1vX-*]`.
+    gold_sha: d02c36266339ec7fab376db2e77d4e55ea165384
+    pr_url: https://github.com/pytest-dev/pytest/pull/14746
+    test_paths:
+      - testing/python/fixtures.py
+      - testing/python/metafunc.py
+      - testing/example_scripts/issue_519.py
+    test_command: |
+      python -m pytest "testing/python/fixtures.py::TestParamValueKey" "testing/python/fixtures.py::TestScopeOrdering::test_reorder_by_param_value_across_parametrize_calls" "testing/python/fixtures.py::TestScopeOrdering::test_reorder_unhashable_params_fall_back_to_index" "testing/python/fixtures.py::TestScopeOrdering::test_reorder_mixed_hashable_unhashable_params" "testing/python/fixtures.py::TestScopeOrdering::test_reorder_params_with_exotic_eq" "testing/python/metafunc.py::TestMetafunc::test_high_scoped_parametrize_reordering" "testing/examples/test_issue519.py::test_519"

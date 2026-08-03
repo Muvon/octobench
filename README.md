@@ -155,7 +155,7 @@ cases/<segment>/<sub_or_lang>/<case_name>/
 Example:
 
 ```
-cases/dev/rust/unexpected_closing_delimiter_fix/
+cases/dev/oneshot/rust/uuid_parse_panic/
 ```
 
 Script behavior:

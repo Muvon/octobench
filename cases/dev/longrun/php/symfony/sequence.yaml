@@ -1,0 +1,162 @@
+id: longrun_php_symfony
+name: symfony structured-data pipeline fixes (5-turn sequence)
+language: php
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/symfony/symfony
+  base_sha: 35781eed5a4b6a179606dbbd7714ef2fdab03317
+  prs: [64697, 65002, 65026, 64696, 65034]
+turns:
+  - name: "Keep the collection value type for iterable constructor parameters"
+    instruction: |
+      Denormalizing into a constructor parameter typed `iterable` throws away
+      the richer type inferred for the matching property, losing the
+      collection's value type.
+
+      Take a class whose constructor is `__construct(iterable $items)` and
+      whose property is declared
+      `/** @var \ArrayObject<DummyDtoItem> */ public \ArrayObject $items;`.
+      Denormalizing `['items' => [['value' => 'foo'], ['value' => 'bar']]]`
+      with a Serializer built from an `ArrayDenormalizer` plus an
+      `ObjectNormalizer` backed by a `PropertyInfoExtractor` (`PhpDocExtractor`
+      + `ReflectionExtractor`) must populate `$items` with `DummyDtoItem`
+      instances carrying 'foo' and 'bar'. Today the items stay raw arrays.
+
+      The decision lives in
+      `AbstractObjectNormalizer::denormalizeParameter()` (in
+      `src/Symfony/Component/Serializer/Normalizer/AbstractObjectNormalizer.php`),
+      in the `isSatisfiedBy()` match that decides whether the constructor
+      parameter's own reflection type should override the inferred property
+      type. The arm for builtin `array`/`iterable` parameter types treats the
+      property type as incompatible unless that type is itself identified as
+      `array` or `iterable` — an `\ArrayObject<DummyDtoItem>` is neither, so
+      the inferred type is discarded. Make that arm also accept a property
+      type satisfied by `CollectionType`, which is already imported in the
+      file.
+    gold_sha: 2b8153197867acd5c21176be8c35d829040b6dbb
+    pr_url: https://github.com/symfony/symfony/pull/64697
+    test_paths:
+      - src/Symfony/Component/Serializer/Tests/Normalizer/AbstractObjectNormalizerTest.php
+    test_command: |
+      ./phpunit src/Symfony/Component/Serializer/Tests/Normalizer/AbstractObjectNormalizerTest.php
+
+  - name: "Fix evaluating filter expressions wrapped in several parentheses"
+    instruction: |
+      `JsonCrawler` mis-parses filter expressions that carry redundant
+      parentheses. In `src/Symfony/Component/JsonPath/JsonCrawler.php`,
+      `evaluateFilterExpression()` strips a wrapping pair of parentheses only
+      once, and it handles a leading `!` before splitting on the logical
+      operators.
+
+      Any number of redundant wrapping pairs must be removed, so
+      `$[?((@.a == 1))]`, `$[?(((@.a == 1)))]` and deeper nestings behave
+      exactly like `$[?@.a == 1]`. Parentheses that do not wrap the whole
+      expression stay untouched, e.g. `(@.a == 1) && (@.b == 2)`.
+
+      `!` binds tighter than `&&` and `||`: `!(@.a == 1) && (@.b == 2)` must
+      be read as `(!(@.a == 1)) && (@.b == 2)`, not as a negation of the
+      whole conjunction. So the logical-operator split has to happen first
+      and the `!` branch after it, and the negated operand must itself go
+      through the same unwrapping so that `!((@.a == 1))` works.
+
+      Apply the same unwrapping and the same `!` handling in
+      `validateFilterExpression()`, so a non-singular query is still rejected
+      however deeply it is wrapped: `$[?((@.* == 1))]`, `$[?(!(@.* == 1))]`
+      and `$[?((@.* == 1) && (@.a == 1))]` must all throw
+      `JsonCrawlerException` mentioning a non-singular query. Function calls
+      inside redundant parentheses must keep working, e.g.
+      `$[?((length(@) == 2))]`.
+    gold_sha: 64418e15e4e806178c39cded5362a6c06ea43331
+    pr_url: https://github.com/symfony/symfony/pull/65002
+    test_paths:
+      - src/Symfony/Component/JsonPath/Tests/JsonCrawlerTest.php
+    test_command: |
+      ./phpunit src/Symfony/Component/JsonPath/Tests/JsonCrawlerTest.php
+
+  - name: "Drop the unbounded process-global key cache in Splitter"
+    instruction: |
+      `Splitter` leaks memory for the lifetime of the process.
+
+      `src/Symfony/Component/JsonStreamer/Read/Splitter.php` holds a
+      `private static array $cache` whose `key` sub-array memoizes the
+      `json_decode()` of every raw dictionary key it has ever seen — see
+      `self::$cache['key'][$value] ??= json_decode($value)` in
+      `createDictBoundaries()`. Dictionary keys come from the parsed payload
+      and are frequently unique, so this map grows without bound and is never
+      released.
+
+      Drop the static cache entirely — both the property and its use — and
+      decode the key inline each time.
+
+      Splitting dictionaries must leave no per-key state behind: after
+      splitting a batch of 100 dictionaries with unique keys, splitting a
+      second batch of 100 further unique keys must not increase the number of
+      values retained in any static property of `Splitter`.
+    gold_sha: 8ff4bc0f2a8cce6fddf688ae4d8c99737ea53868
+    pr_url: https://github.com/symfony/symfony/pull/65026
+    test_paths:
+      - src/Symfony/Component/JsonStreamer/Tests/Read/SplitterTest.php
+    test_command: |
+      ./phpunit src/Symfony/Component/JsonStreamer/Tests/Read/SplitterTest.php
+
+  - name: "Generate unsealed array shapes for any normalizers"
+    instruction: |
+      Generated config array shapes are sealed even when the node accepts
+      arbitrary keys.
+
+      In `src/Symfony/Component/Config/Definition/ArrayShapeGenerator.php`,
+      `doGeneratePhpDoc()` appends the `...<string, mixed>` marker — which
+      makes the shape unsealed — only when `$node->shouldIgnoreExtraKeys()`
+      is true. But a node carrying a
+      `beforeNormalization()->ifTrue(...)->then(...)` rule can be handed a
+      value of any shape: such a rule registers `ExprBuilder::TYPE_ANY` among
+      the node's normalized types, readable via
+      `$node->getNormalizedTypes()`. The generated shape then claims to be
+      sealed and static analysis rejects valid configuration.
+
+      Emit the `...<string, mixed>` line when the node ignores extra keys
+      *or* when its normalized types contain `ExprBuilder::TYPE_ANY`.
+
+      For a root node with a single scalar child `child` plus such a
+      beforeNormalization rule, the generated PHPDoc must contain:
+
+      array{
+       *     child?: scalar|\Symfony\Component\Config\Loader\ParamConfigurator|null,
+       *     ...<string, mixed>
+       * }
+    gold_sha: 295ed61050251c248e6534cc61a69bb83296f551
+    pr_url: https://github.com/symfony/symfony/pull/64696
+    test_paths:
+      - src/Symfony/Component/Config/Tests/Definition/ArrayShapeGeneratorTest.php
+    test_command: |
+      ./phpunit src/Symfony/Component/Config/Tests/Definition/ArrayShapeGeneratorTest.php
+
+  - name: "Handle the email.failed and email.suppressed Resend webhook events"
+    instruction: |
+      The Resend webhook bridge does not understand two delivery event types.
+
+      `ResendPayloadConverter::convert()` in
+      `src/Symfony/Component/Mailer/Bridge/Resend/RemoteEvent/ResendPayloadConverter.php`
+      recognises only `email.sent`, `email.delivered`,
+      `email.delivery_delayed` and `email.bounced` as delivery events.
+      `email.failed` and `email.suppressed` fall through to the engagement
+      branch and blow up with a `ParseException`.
+
+      Treat both as delivery events mapped to `MailerDeliveryEvent::DROPPED`,
+      and give the resulting event a reason taken from the payload:
+      - `email.failed` carries it at `data.failed.reason`;
+      - `email.suppressed` carries it at `data.suppressed.message`;
+      - when neither key is present the reason is the empty string.
+
+      Delivery events that are not dropped keep an empty reason. Everything
+      else about the converted event is unchanged: id from `data.email_id`,
+      recipient from `data.to`, date from `created_at`, metadata from `data`.
+      Leave the engagement event handling alone.
+    gold_sha: 25e0295ae79ab13c08cf44409f3e177de857a25a
+    pr_url: https://github.com/symfony/symfony/pull/65034
+    test_paths:
+      - src/Symfony/Component/Mailer/Bridge/Resend/Tests/RemoteEvent/ResendPayloadConverterTest.php
+    test_command: |
+      ./phpunit src/Symfony/Component/Mailer/Bridge/Resend/Tests/RemoteEvent/ResendPayloadConverterTest.php

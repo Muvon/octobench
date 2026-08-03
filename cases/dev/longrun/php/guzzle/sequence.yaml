@@ -1,0 +1,178 @@
+id: longrun_php_guzzle
+name: Guzzle HTTP client hardening (5-turn sequence)
+language: php
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/guzzle/guzzle
+  base_sha: 74df5f7b7f1dc15fd9048475f43adf90f17d5b8c
+  prs: [3875, 3888, 3893, 3894, 3895]
+turns:
+  - name: "Stop re-applying delay option on redirects"
+    instruction: |
+      When following a redirect, the `delay` request option is re-applied to the
+      redirected request. If the original request had `delay => 1`, the redirect
+      also waits 1 second, which is incorrect — the delay should only apply to
+      the initial request, not to followed redirects.
+
+      The fix is in `src/RedirectMiddleware.php`. When modifying the request for
+      a redirect, the `delay` option should be removed from the options array
+      passed to the next handler, similar to how `auth` is already stripped for
+      cross-host redirects.
+    gold_sha: ed97dbaf654117fb62ad259aada863224cab0798
+    pr_url: https://github.com/guzzle/guzzle/pull/3875
+    test_paths:
+      - tests/RedirectMiddlewareTest.php
+    test_command: |
+      vendor/bin/phpunit tests/RedirectMiddlewareTest.php
+
+  - name: "Canonicalize IPv6 hosts in Digest and cookie identities"
+    instruction: |
+      Guzzle keys host-scoped state (the Digest challenge cache, the cookie
+      jar) on raw host text, so equivalent spellings of one IPv6 address
+      fragment that state, and a PSR-7 implementation reporting a noncanonical
+      spelling misses preemptive auth and cookie matches for the same address.
+
+      Add an internal `GuzzleHttp\HostIdentity` helper in `src/HostIdentity.php`
+      with three static methods, and route every host comparison through it:
+
+      - `canonicalHost(string $host): string` — a bracketed valid IPv6 literal
+        becomes its RFC 5952 form (`[2001:0DB8:0:0:0:0:0:1]` → `[2001:db8::1]`,
+        `[::FFFF:7F00:1]` → `[::ffff:127.0.0.1]`); everything else — bare
+        unbracketed IPv6 text, IPvFuture (`[v1.AB]`), zone-bearing
+        (`[fe80::1%25ETH0]`), unparseable (`[::1`) — is only ASCII-case-folded.
+      - `canonicalCookieDomain(string $domain): string` — same, except a bare
+        unbracketed IPv6 address canonicalizes within its unbracketed form
+        (`2001:0DB8:0:0:0:0:0:1` → `2001:db8::1`) so bare and bracketed
+        identities stay distinct; bare zone-bearing text (`fe80::1%ETH0`) is
+        case-folded only.
+      - `canonicalHostHeader(string $header): string` — canonicalizes only when
+        the whole value is a single bracketed host plus an optional valid
+        decimal port 0–65535 (`[2001:0DB8::1]:8080` → `[2001:db8::1]:8080`);
+        anything else (`[::1]x`, `[::0:1], [::1]`, an empty/non-numeric/65536
+        port, trailing text) is case-folded only.
+
+      `AuthMiddleware::digestCacheKey()` must build both its host and `Host`
+      header dimensions through the helper, so one address under different
+      spellings shares a cache entry while a different address does not.
+      `SetCookie` must store `Domain` canonicalized on construction and in
+      `setDomain()`, and `matchesDomain()` must compare canonical identities.
+      `CookieJar` must canonicalize the request host in `extractCookies()`,
+      `withCookieHeader()` and `clear()`: a host-only cookie is stored under
+      the canonical domain and matched for any equivalent spelling, jar entries
+      with equivalent bare IPv6 domains collapse into one (later value wins),
+      and `withCookieHeader()` returns the request untouched when nothing
+      matches. Finally, RFC 6265 DNS suffix matching must require both cookie
+      domain and request host to be valid, non-literal, nonnumeric host names:
+      literal-like, malformed, zone-bearing and numeric hosts — including a
+      curl-style hexadecimal rightmost label such as `0x7f000001` or
+      `0177.0.0.0x1` — are exact-match-only, while a non-hex `0x` name such as
+      `0xname` keeps ordinary suffix matching.
+    gold_sha: 6df3f2d5fd54197f13c0390941f5bd6d4f65ce42
+    pr_url: https://github.com/guzzle/guzzle/pull/3888
+    test_paths:
+      - tests/HostIdentityTest.php
+      - tests/Cookie/SetCookieTest.php
+      - tests/Cookie/CookieJarTest.php
+      - tests/AuthMiddlewareTest.php
+    test_command: |
+      vendor/bin/phpunit tests/HostIdentityTest.php tests/Cookie/SetCookieTest.php tests/Cookie/CookieJarTest.php tests/AuthMiddlewareTest.php
+
+  - name: "Protect secure cookies from insecure responses"
+    instruction: |
+      Guzzle's cookie jar stores whatever a response sends, even when the
+      request was made over plain HTTP, so anyone on an insecure connection can
+      plant `Secure` cookies or displace secure state an HTTPS response
+      established. Tighten the extraction policy in
+      `GuzzleHttp\Cookie\CookieJar::extractCookies()` so a response received
+      over a non-`https` request URI can never write secure cookie state:
+
+      - Ignore an incoming `Set-Cookie` carrying the `Secure` attribute unless
+        the request URI scheme is `https`. This holds for strict and
+        non-strict jars alike; over `https` the cookie is stored as before
+        with its `Secure` attribute intact.
+      - Ignore an incoming cookie from a non-`https` request when it would
+        overlay a cookie already in the jar that is marked `Secure` and has
+        not expired. It overlays when the names are equal, both cookies have a
+        domain, the two domains RFC 6265 domain-match in either direction —
+        the stored domain matching the incoming one or the incoming domain
+        matching the stored one, so a stored `example.com` cookie protects an
+        incoming host-only `child.example.com` cookie and a stored host-only
+        `child.example.com` cookie protects an incoming `Domain=example.com`
+        one — and the stored cookie's path covers the incoming cookie's path
+        (a stored `/login` covers an incoming `/login/en`).
+      - The rejection covers deletions: an insecure `Max-Age=0` for a
+        protected name must leave the stored secure cookie in place rather
+        than remove it.
+      - Cookies that do not overlay are unaffected. Against a stored secure
+        cookie on `/login`, an insecure cookie on the parent path `/` or on
+        the sibling path `/foo` is still stored, alongside the secure one.
+      - A stored secure cookie that has already expired protects nothing, and
+        a response over `https` keeps replacing an existing cookie of the same
+        identity exactly as it does now.
+      - Domain matching here is the same RFC 6265 host/suffix matching the jar
+        already uses, with IP literals and numeric or invalid hosts
+        exact-match-only; expose it from `GuzzleHttp\HostIdentity` so both
+        directions can be tested rather than duplicating what
+        `SetCookie::matchesDomain()` does.
+      - Only extraction from responses changes. Direct `setCookie()` calls,
+        jar construction from arrays, and already-persisted records keep
+        behaving as they do today.
+    gold_sha: ecfbeb7a08fbbc5cfc0ab49ae56fcc71447160b5
+    pr_url: https://github.com/guzzle/guzzle/pull/3893
+    test_paths:
+      - tests/Cookie/CookieJarTest.php
+    test_command: |
+      vendor/bin/phpunit tests/Cookie/CookieJarTest.php
+
+  - name: "Enforce secure cookie name prefixes"
+    instruction: |
+      Cookie name prefixes (`__Secure-` and `__Host-`) are not currently validated.
+      Per the Cookie Prefix draft, these prefixes impose security constraints:
+
+      - `__Secure-`: the cookie must have the `Secure` attribute.
+      - `__Host-`: the cookie must have `Secure`, must have `Path=/`, and must
+        NOT have a `Domain` attribute.
+
+      When a cookie with a prefix does not meet these requirements, it should be
+      rejected (not stored in the jar). Mixed-case prefixes (e.g. `__SeCuRe-`,
+      `__HoSt-`) must also be recognized. An invalid prefixed cookie that has
+      `Max-Age=0` (deletion) must not delete a previously-stored valid cookie
+      with the same name.
+
+      The fix is in `src/Cookie/CookieJar.php` in the `extractCookies` method
+      (or the validation logic it calls).
+    gold_sha: 7f8b93d1a9bed5bdd4ecb4e40c4a26898c8826e4
+    pr_url: https://github.com/guzzle/guzzle/pull/3894
+    test_paths:
+      - tests/Cookie/CookieJarTest.php
+    test_command: |
+      vendor/bin/phpunit tests/Cookie/CookieJarTest.php
+
+  - name: "Validate Basic authentication credentials"
+    instruction: |
+      The `auth` request option with Basic authentication (`['username', 'password']`
+      or `['username', 'password', 'basic']`) does not validate the credentials.
+      Two cases should throw `GuzzleHttp\Exception\InvalidArgumentException`:
+
+      1. A username containing a colon (`:`) — colons are the delimiter in
+         `user:pass` Basic auth encoding.
+      2. Credentials containing ASCII control characters (NUL `\0`, unit
+         separator `\x1F`, delete `\x7F`).
+
+      The error messages should be:
+      - `'Basic authentication username must not contain a colon'`
+      - `'Basic authentication credentials must not contain ASCII control characters'`
+
+      Valid credentials with special characters (colons in passwords, spaces,
+      non-ASCII like `£`) should continue to work and produce the correct
+      Base64-encoded `Authorization: Basic` header.
+
+      The fix is in `src/AuthMiddleware.php`.
+    gold_sha: 4416ad3532378d7b18a0bdcdcf077d912ff24de2
+    pr_url: https://github.com/guzzle/guzzle/pull/3895
+    test_paths:
+      - tests/AuthMiddlewareTest.php
+    test_command: |
+      vendor/bin/phpunit tests/AuthMiddlewareTest.php

@@ -28,6 +28,10 @@ class ProviderRunResult:
     # Full raw agent output (the complete jsonl/event trace from the CLI) — saved
     # verbatim per run so the agent's every step/tool-call can be analyzed.
     raw_output: Optional[str] = None
+    # Session ID for multi-turn resumption. Set by the provider on the first
+    # turn; passed back as resume_session_id on subsequent turns so the agent
+    # continues in the same conversation context.
+    session_id: Optional[str] = None
 
 
 class Provider(ABC):
@@ -41,6 +45,7 @@ class Provider(ABC):
         provider_model: str,
         session_name: str,
         executor: "Executor",
+        resume_session_id: Optional[str] = None,
     ) -> ProviderRunResult:
         raise NotImplementedError
 

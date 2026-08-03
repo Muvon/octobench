@@ -109,7 +109,6 @@ def _extract_from_jsonl(
         raw_out = last_cost_meta.get("output_tokens")
         raw_cached = last_cost_meta.get("cache_read_tokens", last_cost_meta.get("cached_tokens"))
         raw_reasoning = last_cost_meta.get("reasoning_tokens")
-        raw_total = last_cost_meta.get("session_tokens")
         try:
             if raw_in is not None:
                 input_tokens = int(raw_in)
@@ -119,12 +118,13 @@ def _extract_from_jsonl(
                 cached_tokens = int(raw_cached)
             if raw_reasoning is not None:
                 reasoning_tokens = int(raw_reasoning)
-            if raw_total is not None:
-                total_tokens = int(raw_total)
         except Exception:
             pass
 
-    if total_tokens is None and input_tokens is not None and output_tokens is not None:
+    # Always compute total from per-request fields, never from session_tokens
+    # (which is cumulative across resumed sessions — summing it across turns
+    # would double-count in multi-turn runs).
+    if input_tokens is not None and output_tokens is not None:
         total_tokens = input_tokens + output_tokens + (cached_tokens or 0) + (reasoning_tokens or 0)
 
     final_text = full_assistant[-1] if full_assistant else ""
@@ -151,6 +151,7 @@ class OctomindProvider(Provider):
         provider_model: str,
         session_name: str,
         executor: "Executor",
+        resume_session_id: Optional[str] = None,
     ) -> ProviderRunResult:
         # Run octomind's stock coding agent (`developer:general`) exactly as a real
         # user would. OCTOMIND_CONFIG_PATH (from the executor: host path or the
@@ -180,6 +181,10 @@ class OctomindProvider(Provider):
                 provider_model,
                 "--format=jsonl",
             ]
+            # Multi-turn: resume the named session. --name with an existing
+            # session name auto-resumes in octomind, but -r is explicit.
+            if resume_session_id:
+                main_cmd.extend(["-r", resume_session_id])
 
         start = time.time()
         main = executor.run(
@@ -217,6 +222,7 @@ class OctomindProvider(Provider):
             output_tokens=output_tokens,
             reasoning_tokens=reasoning_tokens,
             total_tokens=total_tokens,
+            session_id=session_name,
             provider_trace={
                 "assistant_messages": assistant_messages,
                 "tool_intents": tool_intents,

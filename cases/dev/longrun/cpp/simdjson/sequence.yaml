@@ -1,0 +1,168 @@
+id: longrun_cpp_simdjson
+name: simdjson parser robustness fixes (5-turn sequence)
+language: cpp
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/simdjson/simdjson
+  base_sha: 396ca141fd737f96744210eedc81573a93f3d26b
+  prs: [2720, 2775, 2793, ebe5e1bf3c, 2801]
+turns:
+  - name: "Fix get_string() crash on incomplete JSON with allow_incomplete_json"
+    instruction: |
+      With `SIMDJSON_EXPERIMENTAL_ALLOW_INCOMPLETE_JSON` defined, an On Demand
+      parser should be able to walk a truncated document as far as the input
+      allows instead of reading past the end of the buffer.
+
+      Add `ondemand::parser::iterate_allow_incomplete_json(padded_string_view)`
+      (include/simdjson/generic/ondemand/parser.h and parser-inl.h). It
+      behaves like `iterate()` but marks the resulting json_iterator as
+      permitted to run to the end of the input without a complete document;
+      the parser must remember the document length for that check.
+
+      Carry the flag on json_iterator
+      (include/simdjson/generic/ondemand/json_iterator.h): an
+      `allow_incomplete_json()` accessor and a
+      `remaining_input_length(const uint8_t *)` helper giving the bytes left
+      from a position to the end of the document. Guard the new members with
+      the same macro.
+
+      Use it in value_iterator's string parsing
+      (include/simdjson/generic/ondemand/value_iterator-inl.h): when the
+      string is allowed to be incomplete, bound the scan by the remaining
+      input length, and if no closing quote is found before the end of input
+      return `STRING_ERROR` rather than reading on.
+
+      Expected behaviour: for `{"key":"` the `.key` string lookup returns
+      STRING_ERROR; for `{"key":"ok","incomplete":"` the `.key` lookup
+      succeeds and yields "ok" while the `.incomplete` lookup returns
+      STRING_ERROR. No crash, no read past the buffer.
+    gold_sha: 1ae93a70d4ca0a3744a9955bba768e4a31d96610
+    pr_url: https://github.com/simdjson/simdjson/pull/2720
+    test_paths:
+      - tests/ondemand/ondemand_json_path_tests.cpp
+    test_command: |
+      cmake --build build --target ondemand_json_path_tests -j"$(nproc)" && ctest --test-dir build -R '^ondemand_json_path_tests$' --output-on-failure
+
+  - name: "Parse DOM documents without padding (experimental)"
+    instruction: |
+      `dom::parser` can only parse buffers that carry SIMDJSON_PADDING
+      readable bytes past the end of the document. The only way around it
+      today is `parse(buf, len, true)`, which copies the entire input into a
+      padded buffer.
+
+      Add an experimental in-place path that parses a buffer of exactly `len`
+      bytes without that copy and without ever reading past `buf + len`:
+      - `dom::parser::parse_unpadded(const uint8_t*, size_t)` plus
+        `const char*` and `std::string_view` overloads, declared in
+        include/simdjson/dom/parser.h and defined in parser-inl.h. Rvalue
+        overloads are deleted, as for `parse`.
+      - `dom::parser::parse_into_document_unpadded(document&, const uint8_t*, size_t)`,
+        the unpadded counterpart of `parse_into_document`.
+      Capacity growth, error codes (MEMALLOC when allocation fails, CAPACITY
+      when len exceeds max_capacity) and lifetime rules match
+      `parse(buf, len, false)`: the input is read, never modified, and must
+      outlive navigation of the result.
+
+      Give the stage 2 string parser and tape builder (src/generic/stage2/) a
+      bounded tail path — a small scratch copy of the final bytes — so no
+      read crosses `buf + len`, and expose whatever the DOM implementation
+      needs for it on internal::dom_parser_implementation.
+
+      Expected behaviour: for every input, parse_unpadded must produce
+      exactly the same element tree or the same error as parsing the
+      identical document with padding. That includes numbers,
+      true/false/null, strings, backslash escapes and surrogate pairs whose
+      last byte lands at any offset relative to the padding boundary;
+      malformed atoms and truncated values at the very end; empty and
+      whitespace-only input; and NaN/Infinity when SIMDJSON_ENABLE_NAN_INF is
+      enabled. Register the new test file in tests/dom so it builds as the
+      `unpadded_tests` target.
+    gold_sha: 0fa2ff0bccf7e830a678a6d7bff6e9a2cddd7b98
+    pr_url: https://github.com/simdjson/simdjson/pull/2775
+    test_paths:
+      - tests/dom/unpadded_tests.cpp
+      - tests/dom/CMakeLists.txt
+    test_command: |
+      cmake --build build --target unpadded_tests -j"$(nproc)" && ctest --test-dir build -R '^unpadded_tests$' --output-on-failure
+
+  - name: "Treat 20-digit positive overflow as BIGINT_NUMBER"
+    instruction: |
+      When parsing a 20-digit positive integer that overflows `uint64_t`
+      (e.g. `18446744073709551616`), the parser incorrectly returns
+      `INVALID_NUMBER` instead of `BIGINT_NUMBER`. The negative overflow
+      case (e.g. `-18446744073709551616`) already correctly returns
+      `BIGINT_NUMBER`.
+
+      In `include/simdjson/generic/numberparsing.h`, the digit-count check
+      for `longest_digit_count` (20 digits) returns `BIGINT_NUMBER` for
+      negative overflow but `INVALID_NUMBER` for positive overflow. Fix
+      the asymmetry: both signs should return `BIGINT_NUMBER` when the
+      20-digit value overflows.
+    gold_sha: e3720ba824500473a20d095779afc129511c832f
+    pr_url: https://github.com/simdjson/simdjson/pull/2793
+    test_paths:
+      - tests/dom/big_integer_tests.cpp
+      - tests/ondemand/ondemand_number_tests.cpp
+    test_command: |
+      cmake --build build --target big_integer_tests ondemand_number_tests -j"$(nproc)" && ctest --test-dir build -R '^(big_integer_tests|ondemand_number_tests)$' --output-on-failure
+
+  - name: "Reuse parser buffers when the requested capacity shrinks"
+    instruction: |
+      `ondemand::parser::allocate` in
+      include/simdjson/generic/ondemand/parser-inl.h takes its no-op fast
+      path only when the requested capacity equals the current one exactly.
+      Any change in batch_size therefore forces a fresh allocation of
+      string_buf and the stage 1 buffers, including when the request is
+      smaller than what the parser already holds and the buffers in hand are
+      large enough.
+
+      This is the common case for iterate_many: a slice that runs to the next
+      delimiter rarely has the same length twice, so the fast path never
+      fires and the parser reallocates on essentially every batch.
+
+      Treat the parser's capacity as a high-water mark: reallocate only when
+      the requested capacity is larger than the current one, and keep the
+      existing buffers otherwise. capacity() then reports the largest
+      capacity ever allocated rather than the last value requested. That
+      matches the documented contract ("If the parser's current capacity is
+      less than batch_size, it will allocate enough capacity") and every
+      consumer, which all test capacity() < json.length(); the DOM parser
+      already guards its allocation this way.
+
+      Expected behaviour: after iterating a newline-delimited document with
+      iterate_many at a large batch size, capacity() equals that batch size;
+      repeating the iteration at a series of smaller batch sizes leaves
+      capacity() unchanged at the high-water mark and every document still
+      parses without error; a subsequent larger batch size grows capacity()
+      to the new value.
+    gold_sha: ebe5e1bf3c06f3ab3fdf352d70f541fb820aa7a0
+    pr_url: https://github.com/simdjson/simdjson/commit/ebe5e1bf3c06f3ab3fdf352d70f541fb820aa7a0
+    test_paths:
+      - tests/ondemand/ondemand_document_stream_tests.cpp
+    test_command: |
+      cmake --build build --target ondemand_document_stream_tests -j"$(nproc)" && ctest --test-dir build -R '^ondemand_document_stream_tests$' --output-on-failure
+
+  - name: "Fix throw on unterminated bracket-quoted JSONPath keys in wildcard walks"
+    instruction: |
+      When `at_path_with_wildcard()` receives a path with an unterminated
+      bracket-quoted key (e.g. `$["a*` — the `]` is missing), the function
+      `get_next_key_and_json_path` in `include/simdjson/jsonpathutil.h`
+      advances the index past the end of the string without checking for a
+      closing bracket-quote. Since callers are `noexcept`, this throws
+      `std::out_of_range` and aborts the process.
+
+      Add bounds checking in `get_next_key_and_json_path`: after finding an
+      opening bracket-quote (`["` or `['`), require a matching closing quote
+      and `]` before advancing. If either is missing, return
+      `INVALID_JSON_POINTER`. Also treat empty parsed keys as
+      `INVALID_JSON_POINTER` in the ondemand wildcard walkers to avoid
+      infinite recursion on malformed paths.
+    gold_sha: 8c06c443301c30301be69268772d5f76d19fc17f
+    pr_url: https://github.com/simdjson/simdjson/pull/2801
+    test_paths:
+      - tests/dom/json_path_tests.cpp
+      - tests/ondemand/ondemand_wildcard_tests.cpp
+    test_command: |
+      cmake --build build --target json_path_tests ondemand_wildcard_tests -j"$(nproc)" && ctest --test-dir build -R '^(json_path_tests|ondemand_wildcard_tests)$' --output-on-failure

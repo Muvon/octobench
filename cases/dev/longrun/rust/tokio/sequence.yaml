@@ -1,0 +1,109 @@
+id: longrun_rust_tokio
+name: tokio async runtime fixes (5-turn sequence)
+language: rust
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/tokio-rs/tokio
+  base_sha: fe258f5e6d39a604b67d3cf54559d5918a3f353a
+  prs: [8109, 8274, 8260, 8279, 8222]
+turns:
+  - name: "Implement Peekable::size_hint"
+    instruction: |
+      `Peekable<T>` in `tokio-stream/src/stream_ext/peekable.rs` implements
+      `Stream` but does not override `size_hint`. The default implementation
+      returns `(0, None)`, which is incorrect when items have been peeked or
+      when the inner stream has a known size.
+
+      Implement `size_hint` for `Peekable<T>`: delegate to the inner stream's
+      `size_hint`, then add 1 to both bounds if an item is currently buffered
+      in `self.peek` (i.e. `self.peek.is_some()`). Use `saturating_add` for
+      the lower bound and `checked_add` for the upper bound to avoid overflow.
+    gold_sha: 4638b65f9c6557c8567fdc3e3bf0557f04e36d85
+    pr_url: https://github.com/tokio-rs/tokio/pull/8109
+    test_paths:
+      - tokio-stream/tests/stream_peekable.rs
+    test_command: |
+      cargo test -p tokio-stream --test stream_peekable
+
+  - name: "Wake DelayQueue consumer after reset to expired time"
+    instruction: |
+      In `tokio-util/src/time/delay_queue.rs`, the `reset_at` method inserts
+      an item at a new time and resets the internal `Sleep` to the next
+      deadline. However, when the item is reset to a time that has already
+      expired, the consumer waiting on `poll_next` is not woken — the existing
+      `Sleep::reset` path does not fire the waker for already-expired entries.
+
+      After inserting the item and calling `reset` on the delay, check whether
+      the inserted item has `expired == true`. If so, take the waker from
+      `self.waker` and call `.wake()` on it.
+
+      Also handle the case where `next_deadline()` returns `None`: set
+      `self.delay = None`. And when `next_deadline()` returns `Some` but
+      `self.delay` is `None`, create a new `Sleep` pinned to that deadline.
+    gold_sha: 6e8475dd605e334e0f97cbe15e09306ee0472ac6
+    pr_url: https://github.com/tokio-rs/tokio/pull/8274
+    test_paths:
+      - tokio-util/tests/time_delay_queue.rs
+    test_command: |
+      cargo test -p tokio-util --features full --test time_delay_queue
+
+  - name: "Wake mpsc receiver when queued reserve fails or is cancelled on closed channel"
+    instruction: |
+      In `tokio/src/sync/mpsc/bounded.rs`, the `reserve_many` method acquires
+      permits from the semaphore. If the reservation is cancelled or fails
+      after partially acquiring permits, the inner `Acquire` future returns
+      those permits on drop — but unlike `Permit`/`PermitIterator`, it does
+      not notify the receiver. This means a `recv()` blocked on the channel
+      becoming idle (all permits returned, channel closed) never wakes up.
+
+      Add a guard struct (e.g. `WakeReceiverOnDrop`) that, on drop, checks
+      whether the semaphore `is_closed() && is_idle()` and if so calls
+      `self.chan.wake_rx()`. Create the guard before calling
+      `semaphore.acquire(n).await`. On success, `std::mem::forget` the guard
+      (the caller takes over permit management). On failure or drop, the guard
+      fires and wakes the receiver.
+    gold_sha: dac81bf8c8de0a3e35f1626643674ba9faf9569c
+    pr_url: https://github.com/tokio-rs/tokio/pull/8260
+    test_paths:
+      - tokio/tests/sync_mpsc.rs
+    test_command: |
+      cargo test -p tokio --features full --test sync_mpsc
+
+  - name: "Don't replace JoinQueue waker in try_join_next"
+    instruction: |
+      In `tokio-util/src/task/join_queue.rs`, the `try_poll_handle` method
+      polls pending join handles with a noop waker. This can replace the real
+      waker registered by `poll_join_next`, leaving the caller asleep even
+      after the task completes.
+
+      Add an `is_finished()` check at the start of `try_poll_handle`: if the
+      handle is not finished, return `None` immediately without polling it.
+      Only poll handles that have already finished.
+    gold_sha: 5e16ee00faae5b81a58f70b734577b800e0b203b
+    pr_url: https://github.com/tokio-rs/tokio/pull/8279
+    test_paths:
+      - tokio-util/tests/task_join_queue.rs
+    test_command: |
+      cargo test -p tokio-util --features full --test task_join_queue
+
+  - name: "Don't skip the driver when before_park schedules work"
+    instruction: |
+      In `tokio/src/runtime/scheduler/current_thread/mod.rs`, the `Context`'s
+      park logic checks `has_pending_work` after calling `before_park`. If
+      `before_park` scheduled work (setting the woken flag), the runtime skips
+      parking entirely — but it also skips polling the I/O/timer driver. Under
+      a runtime driven by repeated short `block_on` calls (e.g. an external
+      event loop), this stalls timers and I/O.
+
+      In the `else` branch (when there IS pending work), instead of doing
+      nothing, call `park_internal` with a zero-duration timeout
+      (`Some(Duration::from_millis(0))`) to poll the driver once without
+      blocking. Also call `core.submit_metrics(handle)` in this branch.
+    gold_sha: eacb98e18901fcbe011bfceddbc31853f1bf0c27
+    pr_url: https://github.com/tokio-rs/tokio/pull/8222
+    test_paths:
+      - tokio/tests/rt_common_before_park.rs
+    test_command: |
+      cargo test -p tokio --features full --test rt_common_before_park

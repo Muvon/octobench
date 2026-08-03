@@ -33,6 +33,7 @@ class ClaudeProvider(Provider):
         provider_model: str,
         session_name: str,
         executor: "Executor",
+        resume_session_id: Optional[str] = None,
     ) -> ProviderRunResult:
         # stream-json (+ --verbose, required with -p) emits the full event trace:
         # assistant messages with tool_use blocks, user tool_result blocks, and a
@@ -47,6 +48,8 @@ class ClaudeProvider(Provider):
             provider_model,
             "--dangerously-skip-permissions",
         ]
+        if resume_session_id:
+            cmd.extend(["--resume", resume_session_id])
 
         # Authenticate as a real user via the login credentials (Keychain on macOS,
         # mounted ~/.claude/.credentials.json in containers) — NOT an API key. Blank
@@ -63,6 +66,7 @@ class ClaudeProvider(Provider):
         total_tokens: Optional[int] = None
         duration_ms: Optional[int] = None
         cost_usd: Optional[float] = None
+        session_id: Optional[str] = resume_session_id
 
         assistant_messages: list[str] = []
         tool_intents: list[str] = []
@@ -107,6 +111,7 @@ class ClaudeProvider(Provider):
                 result_text = str(obj.get("result", "")).strip()
                 duration_ms = obj.get("duration_ms")
                 cost_usd = obj.get("total_cost_usd")
+                session_id = obj.get("session_id") or session_id
                 usage = obj.get("usage")
                 if isinstance(usage, dict):
                     try:
@@ -140,6 +145,7 @@ class ClaudeProvider(Provider):
             reasoning_tokens=None,
             total_tokens=total_tokens,
             provider_cost_usd=cost_usd,
+            session_id=session_id,
             provider_trace={
                 "assistant_messages": assistant_messages[-12:],
                 "tool_intents": tool_intents[-24:],

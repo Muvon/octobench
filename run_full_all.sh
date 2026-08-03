@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Overnight full-bench driver: both providers in parallel over cases/dev,
+# Overnight full-bench driver: both providers in parallel over cases/dev/oneshot,
 # then infra-failure reruns, then degenerate-judge repair.
 # Survives the controlling session: run under nohup; progress in /tmp/full-*.log,
 # completion marker /tmp/FULL-BENCH-DONE.

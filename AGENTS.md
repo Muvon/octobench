@@ -46,7 +46,13 @@ python3 -m cli.main run --cases cases --providers codex,octomind --verbosity nor
 
 ## Real-Commit Case Harvesting (cases/dev)
 
-`cases/dev/<lang>/<case>/` cases are reverse-engineered from REAL merged PRs in
+`cases/dev/` splits into `oneshot/<lang>/<case>/` (one instruction, one
+validation; `case.yaml`, run via `cli.main`) and `longrun/<lang>/<repo>/`
+(multi-turn sequences of related PRs in one agent session; `sequence.yaml`,
+run via `cli.longrun` — see `docs/LONGRUN.md`). Discovery is by manifest
+filename, so both live in one tree without interference.
+
+`cases/dev/oneshot/<lang>/<case>/` cases are reverse-engineered from REAL merged PRs in
 trusted open-source repos. The pipeline, end to end:
 
 1. **Mine candidates.** Search merged PRs in respected, actively-maintained

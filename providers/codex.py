@@ -20,32 +20,53 @@ class CodexProvider(Provider):
         provider_model: str,
         session_name: str,
         executor: "Executor",
+        resume_session_id: Optional[str] = None,
     ) -> ProviderRunResult:
         # Paths must be valid inside the executor's environment (host cwd or the
         # container's /workspace); the result file is read back via the host mount.
         ws = executor.container_workspace()
         out_name = f"_provider_output_{session_name}.txt"
         output_file = f"{ws}/{out_name}"
-        cmd = [
-            "codex",
-            "exec",
-            "--json",
-            "-m",
-            provider_model,
-            "-C",
-            ws,
-            # danger-full-access (not workspace-write): codex's sandboxed modes wrap
-            # every shell command in bubblewrap (bwrap), which isn't present and can't
-            # run in the unprivileged container — so commands fail before starting. The
-            # container is already the isolation boundary (like claude's IS_SANDBOX=1),
-            # so we let codex run commands directly.
-            "-s",
-            "danger-full-access",
-            "--skip-git-repo-check",
-            "--output-last-message",
-            output_file,
-            "-",
-        ]
+        if resume_session_id:
+            # `codex exec resume <SESSION_ID>` continues a prior session.
+            cmd = [
+                "codex",
+                "exec",
+                "resume",
+                resume_session_id,
+                "--json",
+                "-m",
+                provider_model,
+                "-C",
+                ws,
+                "-s",
+                "danger-full-access",
+                "--skip-git-repo-check",
+                "--output-last-message",
+                output_file,
+                "-",
+            ]
+        else:
+            cmd = [
+                "codex",
+                "exec",
+                "--json",
+                "-m",
+                provider_model,
+                "-C",
+                ws,
+                # danger-full-access (not workspace-write): codex's sandboxed modes wrap
+                # every shell command in bubblewrap (bwrap), which isn't present and can't
+                # run in the unprivileged container — so commands fail before starting. The
+                # container is already the isolation boundary (like claude's IS_SANDBOX=1),
+                # so we let codex run commands directly.
+                "-s",
+                "danger-full-access",
+                "--skip-git-repo-check",
+                "--output-last-message",
+                output_file,
+                "-",
+            ]
 
         start = time.time()
         proc = executor.run(cmd, input_text=prompt)
@@ -65,6 +86,7 @@ class CodexProvider(Provider):
         cached_input_tokens: Optional[int] = None
         output_tokens: Optional[int] = None
         total_tokens: Optional[int] = None
+        session_id: Optional[str] = resume_session_id
         assistant_messages: list[str] = []
         tool_intents: list[str] = []
         tool_results: list[str] = []
@@ -133,6 +155,10 @@ class CodexProvider(Provider):
                     input_tokens = max(input_tokens - cached_input_tokens, 0)
                 if input_tokens is not None and output_tokens is not None:
                     total_tokens = input_tokens + (cached_input_tokens or 0) + output_tokens
+            # Extract session ID for multi-turn resumption.
+            raw_session_id = obj.get("session_id") or obj.get("session")
+            if isinstance(raw_session_id, str):
+                session_id = raw_session_id
             item = obj.get("item")
             if isinstance(item, dict) and item.get("type") == "agent_message":
                 text = item.get("text")
@@ -164,6 +190,7 @@ class CodexProvider(Provider):
             output_tokens=output_tokens,
             reasoning_tokens=None,
             total_tokens=total_tokens,
+            session_id=session_id,
             provider_trace={
                 "assistant_messages": assistant_messages,
                 "tool_intents": tool_intents,

@@ -26,7 +26,7 @@ Use this path pattern:
 `cases/<segment>/<sub_or_lang>/<case_name>/`
 
 Example:
-`cases/dev/rust/minimax_provider_feature/`
+`cases/dev/oneshot/rust/uuid_parse_panic/`
 
 ### 2. Add required files
 Each case should include:
@@ -41,8 +41,8 @@ Optional:
 You can start from `templates/case.yaml`.
 
 Reference examples (current cases):
-- `cases/dev/rust/minimax_provider_feature/case.yaml`
-- `cases/dev/rust/unexpected_closing_delimiter_fix/case.yaml`
+- `cases/dev/oneshot/rust/uuid_parse_panic/case.yaml`
+- `cases/dev/oneshot/js/fastify_query_method/case.yaml`
 
 ### 3. Write a strong `case.yaml`
 At minimum:
@@ -75,8 +75,8 @@ Rules:
 - It is valid to intentionally break or modify files after checkout if the case requires it.
 
 Reference `setup.sh` examples:
-- `cases/dev/rust/minimax_provider_feature/setup.sh`
-- `cases/dev/rust/unexpected_closing_delimiter_fix/setup.sh`
+- `cases/dev/oneshot/rust/uuid_parse_panic/setup.sh`
+- `cases/dev/oneshot/js/fastify_query_method/setup.sh`
 
 #### `quality.sh` expectations
 `quality.sh` should check implementation quality signals (build/lint/tests), not final task correctness.
@@ -91,8 +91,8 @@ Avoid:
 - Running unrelated full-suite checks that create noisy output with little signal.
 
 Reference `quality.sh` examples:
-- `cases/dev/rust/minimax_provider_feature/quality.sh`
-- `cases/dev/rust/unexpected_closing_delimiter_fix/quality.sh`
+- `cases/dev/oneshot/rust/uuid_parse_panic/quality.sh`
+- `cases/dev/oneshot/js/fastify_query_method/quality.sh`
 
 #### `validate.sh` expectations
 `validate.sh` should verify required behavior for the case (acceptance criteria).
@@ -107,8 +107,8 @@ Avoid:
 - Verbose output that obscures the actual validation failure.
 
 Reference `validate.sh` examples:
-- `cases/dev/rust/minimax_provider_feature/validate.sh`
-- `cases/dev/rust/unexpected_closing_delimiter_fix/validate.sh`
+- `cases/dev/oneshot/rust/uuid_parse_panic/validate.sh`
+- `cases/dev/oneshot/js/fastify_query_method/validate.sh`
 
 Script conventions:
 - Use `$CASE_DIR` to access case assets and fixtures.

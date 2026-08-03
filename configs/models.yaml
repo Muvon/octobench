@@ -171,8 +171,8 @@ models:
       cached_input: 0.26
       output: 4.40
     providers:
-      octomind: ollama:glm-5.2
-      opencode: ollama/glm-5.2
+      octomind: zai:glm-5.2
+      opencode: zai/glm-5.2
 
   glm-5.1:                       # historical: octohub:glm served 5.1 before 2026-07
     pricing:
@@ -221,7 +221,7 @@ models:
       cached_input: 0.06
       output: 1.20
     providers:
-      octomind: octohub:minimax
+      octomind: ollama:minimax-m3
 
   minimax-m2.7:
     pricing:

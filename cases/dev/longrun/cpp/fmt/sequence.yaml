@@ -1,0 +1,139 @@
+id: longrun_cpp_fmt
+name: fmtlib formatting fixes (7-turn sequence)
+language: cpp
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/fmtlib/fmt
+  base_sha: 1be298e1bd68957e4cd352e1f676f00e07dcfb57
+  prs: [4797, 4813, 4825, 4819, 9d13c41ce6, 4844, 4839]
+turns:
+  - name: "Report errors when printing to a broken pipe"
+    instruction: |
+      When `fmt::print(FILE*, ...)` writes to a pipe whose read end has been
+      closed, the internal buffered-file flush ignores the failure: `flush()`
+      in `include/fmt/format-inl.h` calls `fflush` (and `fflush_unlocked` in
+      the glibc file wrapper) without checking the return value. Depending on
+      the platform this silently drops data, hangs, or trips an assertion.
+
+      Make both flush paths check the return value and, when it is nonzero,
+      throw `fmt::system_error` carrying `errno` with the message
+      `"fflush failed"`.
+
+      Expected: with `SIGPIPE` ignored, printing a payload larger than the
+      stream buffer (e.g. 1 MB) to the write end of a pipe whose read end is
+      closed must throw `std::system_error` (EPIPE surfaces through the flush)
+      instead of hanging or asserting.
+    gold_sha: 979c94dff814b3d5c15415c4426a54e66b388ae1
+    pr_url: https://github.com/fmtlib/fmt/pull/4797
+    test_paths:
+      - test/format-test.cc
+    test_command: |
+      cmake --build build --target format-test -j"$(nproc)" && ctest --test-dir build -R '^format-test$' --output-on-failure
+
+  - name: "uint128 fallback bitwise not operator"
+    instruction: |
+      The fallback `uint128` implementation (used when `__int128` is not available) is missing
+      the bitwise NOT operator (`operator~`). The `uint128` type in `include/fmt/format.h`
+      should support `~uint128(hi, lo)` returning the bitwise complement of both halves.
+    gold_sha: 588b3a0f8f6a8bcf2a959cae882d5b2703e86737
+    pr_url: https://github.com/fmtlib/fmt/pull/4813
+    test_paths:
+      - test/format-test.cc
+    test_command: |
+      cmake --build build --target format-test -j"$(nproc)" && ctest --test-dir build -R '^format-test$' --output-on-failure
+
+  - name: "is_contiguous false positive with phantom subscript operator"
+    instruction: |
+      The `is_contiguous` type trait in `include/fmt/base.h` incorrectly identifies a container
+      as contiguous when it has a phantom `operator const char*()` conversion, even though it
+      does not provide contiguous storage via `data()` returning a pointer to the buffer.
+
+      A container that has `size()`, `data()`, `resize()`, `push_back()`, and
+      `operator const char*()` should NOT be considered contiguous by `is_contiguous` — the
+      implicit conversion to `const char*` creates a false positive. The trait should check
+      for the subscript operator `operator[]` returning a reference to `value_type`, not just
+      rely on the presence of `data()`.
+    gold_sha: 0e601c34de26fe5b46f4c62dab2039efcb0acaed
+    pr_url: https://github.com/fmtlib/fmt/pull/4825
+    test_paths:
+      - test/base-test.cc
+    test_command: |
+      cmake --build build --target base-test -j"$(nproc)" && ctest --test-dir build -R '^base-test$' --output-on-failure
+
+  - name: "Add formatter for std::exception_ptr"
+    instruction: |
+      `{fmt}` does not support formatting `std::exception_ptr` values. Add a
+      `formatter<std::exception_ptr>` specialization in `include/fmt/std.h`
+      that inherits from `formatter<std::exception>`.
+
+      A null `std::exception_ptr` should format as the string `"nullptr"`.
+      A non-null `std::exception_ptr` should rethrow the stored exception via
+      `std::rethrow_exception` and delegate to `formatter<std::exception>::format`
+      to produce the exception message.
+
+      With the `:t` format spec (requires RTTI), it should produce the
+      demangled type name followed by the message, e.g.
+      `"my_ns1::my_ns2::my_exception: My Exception"`, matching the behavior
+      of `formatter<std::exception>` with `:t`.
+    gold_sha: 6dac6cad052d6593f5fa07529d912f3bd0d6bb11
+    pr_url: https://github.com/fmtlib/fmt/pull/4819
+    test_paths:
+      - test/std-test.cc
+    test_command: |
+      cmake --build build --target std-test -j"$(nproc)" && ctest --test-dir build -R '^std-test$' --output-on-failure
+
+  - name: "Format null std::exception_ptr as none"
+    instruction: |
+      The `std::exception_ptr` formatter added in `include/fmt/std.h` renders a
+      null `exception_ptr` as `"nullptr"`. That reads like a raw pointer value;
+      an empty exception slot is better described as absent.
+
+      Change the null case to format as `"none"` instead. Non-null behavior is
+      unchanged: the stored exception is rethrown and delegated to
+      `formatter<std::exception>::format`, and a non-`std::exception` payload
+      still formats as `"unknown exception"`.
+    gold_sha: 9d13c41ce61329cc85c7c3c67c859ffe2b0e6178
+    pr_url: https://github.com/fmtlib/fmt/commit/9d13c41ce61329cc85c7c3c67c859ffe2b0e6178
+    test_paths:
+      - test/std-test.cc
+    test_command: |
+      cmake --build build --target std-test -j"$(nproc)" && ctest --test-dir build -R '^std-test$' --output-on-failure
+
+  - name: "Nested exceptions in std::exception formatter"
+    instruction: |
+      The `std::exception` formatter in `include/fmt/std.h` does not unwind nested exceptions.
+      When an exception is thrown with `std::throw_with_nested`, formatting the outer
+      exception with `fmt::format("{}", ex)` should produce a colon-separated chain of all
+      nested exception messages, e.g. `"outer: inner"` for one level of nesting, or
+      `"level 1: level 2: level 3"` for multiple levels.
+
+      The formatter should use `std::rethrow_exception` with `ex.nested_ptr()` to access
+      nested exceptions recursively. This should work both when formatting an `std::exception`
+      directly and when formatting via `std::exception_ptr`.
+    gold_sha: 1a99c2630cdf07f4e18924adc5e10650aaf67bc6
+    pr_url: https://github.com/fmtlib/fmt/pull/4844
+    test_paths:
+      - test/std-test.cc
+    test_command: |
+      cmake --build build --target std-test -j"$(nproc)" && ctest --test-dir build -R '^std-test$' --output-on-failure
+
+  - name: "Out-of-range integers with 'c' presentation type"
+    instruction: |
+      Formatting an integer with the `:c` presentation type uses the magnitude
+      (`abs_value`) and never range-checks, so negative values are silently
+      mangled and out-of-range values are silently truncated.
+
+      In `include/fmt/format.h`, the `write_int` function's `chr` case should
+      check whether the value is in the representable range for the character
+      type. Negative values and values exceeding the character type's unsigned
+      maximum should report a `format_error` with the message
+      `"character value out of range"`. All character types should be treated
+      as unsigned for portability.
+    gold_sha: 7852fc384ce4232284fc685f66f70ed99b0c2cd4
+    pr_url: https://github.com/fmtlib/fmt/commit/7852fc384ce4232284fc685f66f70ed99b0c2cd4
+    test_paths:
+      - test/format-test.cc
+    test_command: |
+      cmake --build build --target format-test -j"$(nproc)" && ctest --test-dir build -R '^format-test$' --output-on-failure

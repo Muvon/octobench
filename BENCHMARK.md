@@ -87,7 +87,7 @@ alongside.
 
 ## What a case is
 
-Each case in `cases/dev/<language>/<case>/` reconstructs a real merged PR as a
+Each case in `cases/dev/oneshot/<language>/<case>/` reconstructs a real merged PR as a
 task (see `AGENTS.md` → "Real-Commit Case Harvesting" for the full pipeline and
 rules):
 
@@ -129,11 +129,11 @@ logins — see `runners/executor.py` `AUTH_ENV_KEYS`):
 docker build -f docker/Dockerfile.agent -t octobench-agent:latest docker
 
 # 2. Prove every case fail-to-pass (optional but recommended)
-for c in cases/dev/*/*; do scripts/verify_case.sh "$c"; done
+for c in cases/dev/oneshot/*/*; do scripts/verify_case.sh "$c"; done
 
 # 3. Run per provider (see run_full_*.sh for the exact wrappers used)
 export OCTOBENCH_JUDGE_MODEL=ollama:minimax-m3
-python -m cli.main run --cases cases/dev --config configs/run-matrix.cases-claude.yaml \
+python -m cli.main run --cases cases/dev/oneshot --config configs/run-matrix.cases-claude.yaml \
   --executor docker --image octobench-agent:latest --out results-full-claude
 # same with run-matrix.cases-octomind.yaml / run-matrix.cases-codex.yaml
 

@@ -1,0 +1,192 @@
+id: longrun_rust_clap
+name: clap rendering-surface fixes (5-turn sequence)
+language: rust
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/clap-rs/clap
+  base_sha: 70752392a8ca7ea877c651622a2247b2ccc0fb5e
+  prs: [6414, 6441, 6400, 6413, 6454]
+turns:
+  - name: "Don't emit usage placeholder for plain positionals in bash completions"
+    instruction: |
+      In `clap_complete/src/aot/shells/bash.rs`, `all_options_for_path()`
+      builds the `opts="..."` word list that the generated bash completion
+      script feeds to `compgen -W`. For each positional argument it writes the
+      argument's possible values when it has any, and otherwise falls back to
+      writing the positional's usage placeholder (e.g. `[positional]`,
+      `[file]`, `[term]...`, `[command_with_args]...`).
+
+      Those placeholders are wrong: bash treats `[...]` in a word list as a
+      glob character class and expands it, so the user gets nonsense
+      completions.
+
+      Change the generation so a positional with no possible values
+      contributes nothing at all to `opts`. Positionals that do have possible
+      values must keep emitting each possible value name exactly as before,
+      unchanged.
+
+      As a result, every generated `opts=` line must contain only short flags,
+      long flags, the possible values of positionals, and subcommand names, in
+      the order they are already emitted. Filename completion for bare
+      positionals is already handled by the script's `-o default` fallback, so
+      nothing replaces the removed placeholder.
+    gold_sha: 04b9fbb83a88a3dac4c33b5589c8aa79f7c965f7
+    pr_url: https://github.com/clap-rs/clap/pull/6414
+    test_paths:
+      - clap_complete/tests/snapshots/aliases.bash
+      - clap_complete/tests/snapshots/feature_sample.bash
+      - clap_complete/tests/snapshots/special_commands.bash
+      - clap_complete/tests/snapshots/sub_subcommands.bash
+      - clap_complete/tests/snapshots/subcommand_last.bash
+      - clap_complete/tests/snapshots/two_multi_valued_arguments.bash
+      - clap_complete/tests/snapshots/value_hint.bash
+      - clap_complete/tests/snapshots/value_terminator.bash
+    test_command: |
+      cargo test -p clap_complete --test testsuite bash::
+
+  - name: "Label a single alias as singular in help output"
+    instruction: |
+      In `clap_builder/src/output/help_template.rs`, help output labels alias
+      lists with a hard-coded plural, so `[aliases: --visible]` is printed
+      even when there is only one alias.
+
+      Make the label agree in number with the number of aliases actually
+      shown: print `[alias: ...]` when exactly one alias is listed, and keep
+      `[aliases: ...]` for two or more. Factor the suffix choice into a small
+      helper instead of duplicating the conditional.
+
+      This must apply to both places that render alias lists: the per-argument
+      spec values (visible short and long argument aliases), and the
+      subcommand listing (visible subcommand aliases and visible short/long
+      flag aliases).
+
+      Expected renderings:
+        -o, --opt <opt>  [alias: --visible]                   (one long arg alias)
+        -o, --opt <opt>  [alias: -v]                          (one short arg alias)
+        -f, --flag       [aliases: --v_flg, --flag2, --flg3]  (three, unchanged)
+        -f, --flag       [aliases: -a, -b, -🦆, --flag1]      (four, unchanged)
+        reticulate  Reticulate the splines [alias: ret]       (one subcommand alias)
+        [NAME]  App name [default: clap] [alias: --app-name]
+
+      Separator, ordering and styling of the alias list are unchanged.
+    gold_sha: 1d302a9bb4d9f323bb96e93f6234a7338589504b
+    pr_url: https://github.com/clap-rs/clap/pull/6441
+    test_paths:
+      - tests/builder/arg_aliases.rs
+      - tests/builder/arg_aliases_short.rs
+      - tests/derive/issues.rs
+      - tests/ui/arg_required_else_help_stderr.toml
+      - tests/ui/h_flag_stdout.toml
+      - tests/ui/help_cmd_stdout.toml
+      - tests/ui/help_flag_stdout.toml
+    test_command: |
+      cargo test -p clap --features "deprecated derive cargo env unicode string wrap_help unstable-ext" --test builder arg_aliases && cargo test -p clap --features "deprecated derive cargo env unicode string wrap_help unstable-ext" --test derive issues::issue_418
+
+  - name: "Skip last(true) arguments in nushell completions"
+    instruction: |
+      `clap_complete_nushell` emits completions for arguments declared with
+      `Arg::last(true)` — the ones that may only appear after a `--`
+      separator. Nushell has no way to express that, and the emitted entries
+      produce broken `export extern` signatures.
+
+      In `clap_complete_nushell/src/lib.rs`, skip such arguments entirely:
+        - in `append_argument()`, when the argument is positional and
+          `arg.is_last_set()` is true, emit nothing for it — no `name: type`
+          and no `...name: type` entry in the `export extern` signature;
+        - in `generate_completion()`, where `cmd.get_arguments()` is iterated
+          to write the value-completion definitions, skip any argument with
+          `is_last_set()`, so no `def "nu-complete <cmd> <arg>"` block is
+          produced for it.
+
+      For a command whose subcommands each pair a normal argument with a
+      `.last(true)` one, the generated module must contain only the normal
+      argument: a required positional yields `arg: string`; a `num_args(1..)`
+      positional yields `...args: string`; a positional with
+      `value_parser(["bash", "zsh", "fish"])` yields a `nu-complete` def
+      listing exactly those values plus `arg: string@"nu-complete ..."`; a
+      positional with `ValueHint::AnyPath` yields `arg: path`, or
+      `...args: path` when variadic. The `.last(true)` partner must appear
+      nowhere — neither as a parameter nor as a `nu-complete` definition.
+    gold_sha: 308f18b1cf37a6ed56fe089eb90724540c14af78
+    pr_url: https://github.com/clap-rs/clap/pull/6400
+    test_paths:
+      - clap_complete_nushell/tests/common.rs
+      - clap_complete_nushell/tests/nushell.rs
+      - clap_complete_nushell/tests/snapshots/last_args.nu
+    test_command: |
+      cargo test -p clap_complete_nushell --test nushell last_args
+
+  - name: "Allow attribute values to be expressions starting with a string literal"
+    instruction: |
+      `clap_derive` rejects attribute values that are expressions beginning
+      with a string literal. For example
+      `#[arg(default_value_t = "output.obj".to_string())]` fails to compile:
+      the attribute parser peeks for a string literal after `=` and, when it
+      sees one, consumes only the literal and leaves the trailing
+      `.to_string()` unparsed.
+
+      Rework attribute value parsing in `clap_derive/src/attr.rs`:
+        - after `=`, always parse the value as a full `syn::Expr`; drop the
+          special-cased string-literal peek, and remove the now-redundant
+          `AttrValue::LitStr` variant along with its `ToTokens` arm, so
+          `AttrValue` carries only the expression and call forms;
+        - `lit_str_or_abort()` must still yield a `&LitStr` for attributes
+          that require a literal: accept an `Expr::Lit` whose literal is a
+          `Lit::Str` and return it. For a literal of any other kind, or any
+          other expression such as `"snake_case".to_owned()`, abort with the
+          message "attribute `{name}` can only accept string literals",
+          spanned on the offending expression itself. The `name(...)` call
+          form keeps aborting with that same message spanned on the attribute
+          name.
+
+      Afterwards a struct using
+      `default_value_t = "./tests/cube/main.kda".to_string()` and
+      `default_value_t = "output.obj".to_string()` must compile, parse to
+      those values when no arguments are supplied, still honour explicit
+      `--source` / `--output` overrides, and render
+      `[default: ./tests/cube/main.kda]` and `[default: output.obj]` in its
+      long help.
+    gold_sha: 99a401805ec244103fd50ffaeb6f60da1904641b
+    pr_url: https://github.com/clap-rs/clap/pull/6413
+    test_paths:
+      - tests/derive/default_value.rs
+    test_command: |
+      cargo test -p clap --features "deprecated derive cargo env unicode string wrap_help unstable-ext" --test derive default_value::default_value_t_string_expr
+
+  - name: "Render partially-optional values with brackets"
+    instruction: |
+      `Arg`'s `Display` implementation renders every value name of a
+      multi-value argument as required (`<NAME>`), even when `num_args`
+      permits fewer values than there are names. An option declared with
+      `num_args(1..=2)` and `value_names(["FOO", "BAR"])` renders as
+      `--example <FOO> <BAR>` although only FOO is actually required.
+
+      In `clap_builder/src/builder/arg.rs`, where the value names are
+      formatted, decide per value-name index `n` whether to render `[NAME]`
+      instead of `<NAME>`, using `num_vals.min_values()` as the minimum:
+        - for a positional: optional when the argument is not required, or
+          when `min_values() <= n`;
+        - otherwise (options taking values): optional when `min_values()` is
+          not 0 and `min_values() <= n`. Keep rendering `<NAME>` when
+          `min_values() == 0`, because the caller already brackets a fully
+          optional value and the output must not become `[[NAME]]`.
+
+      Expected renderings:
+        --example, num_args(1..=2), names FOO,BAR             -> --example <FOO> [BAR]
+        the same plus require_equals and value_delimiter(',') -> --example=<FOO> [BAR]
+        --example, num_args(1..=3), names A,B                 -> --example <A> [B]...
+        -o, num_args(1..), names file,name                    -> -o <file> [name]...
+        positional, num_args(0..).required(true)              -> [pos]...
+
+      Help output follows: an option declared `.long("example")`,
+      `.num_args(1..=2)`, `.value_names(["FOO", "BAR"])` appears as
+      `--example <FOO> [BAR]` in the `Options:` section. Update any existing
+      unit-test expectations that still encode the old all-required rendering.
+    gold_sha: d0a3980fa7d7235c1591f48acec47669426be0bf
+    pr_url: https://github.com/clap-rs/clap/pull/6454
+    test_paths:
+      - tests/builder/help.rs
+    test_command: |
+      cargo test -p clap --features "deprecated derive cargo env unicode string wrap_help unstable-ext" --test builder help::partially_optional_value_names
