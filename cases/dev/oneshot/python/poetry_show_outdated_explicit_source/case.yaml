@@ -16,7 +16,7 @@ meta:
   gold_sha: 62018d105562e1365bf79607edcc29ed794e4635
   test_paths:
     - tests/console/commands/test_show.py
-  verified: false   # fail-to-pass NOT yet executed; run scripts/verify_case.sh
+  verified: true   # fail-to-pass proven 2026-08-03 via scripts/verify_case.sh (agent image)
 system_prompt: |
   You are an autonomous software engineer working in an existing repository at the current directory.
   Resolve the requested task completely, as the project's maintainers would. When done, stop.

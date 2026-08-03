@@ -14,10 +14,13 @@ meta:
   merged_at: 2026-07-29T15:00:00Z
   base_sha: dffd776a737dc19a48b758dd6a621de113794121
   gold_sha: 435f59fc4b43af3ab32f34d53fa34978f393fe52
-  test_paths:
-    - crates/ignore/src/walk.rs
+  # Held-out tests live INSIDE crates/ignore/src/walk.rs (validate.sh grafts
+  # gold's #[cfg(test)] module itself). test_paths stays EMPTY so
+  # verify_case.sh applies the full gold file — excluding walk.rs would strip
+  # the fix along with the tests and leave an empty patch.
+  test_paths: []
   test_graft: cfg-test-module   # tests live inside the production file
-  verified: false   # fail-to-pass NOT yet executed; run scripts/verify_case.sh
+  verified: true   # fail-to-pass proven 2026-08-03 via scripts/verify_case.sh (agent image)
 system_prompt: |
   You are an autonomous software engineer working in an existing repository at the current directory.
   Resolve the requested task completely, as the project's maintainers would. When done, stop.

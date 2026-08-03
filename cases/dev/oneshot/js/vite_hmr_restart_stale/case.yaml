@@ -15,7 +15,7 @@ meta:
   gold_sha: b1186c36d06bb94941c58e8272fc4acb8512c93b
   test_paths:
     - packages/vite/src/node/server/__tests__/hmr.spec.ts
-  verified: false   # fail-to-pass NOT yet executed; HIGHEST harness risk in batch
+  verified: true   # fail-to-pass proven 2026-08-03 via scripts/verify_case.sh (agent image)
 system_prompt: |
   You are an autonomous software engineer working in an existing repository at the current directory.
   Resolve the requested task completely, as the project's maintainers would. When done, stop.

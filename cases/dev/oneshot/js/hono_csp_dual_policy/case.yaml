@@ -15,7 +15,7 @@ meta:
   gold_sha: 402eb3abe561914f41ee0f8e37f1d7f211f1ee51
   test_paths:
     - src/middleware/secure-headers/index.test.ts
-  verified: false   # fail-to-pass NOT yet executed; run scripts/verify_case.sh
+  verified: true   # fail-to-pass proven 2026-08-03 via scripts/verify_case.sh (agent image)
 system_prompt: |
   You are an autonomous software engineer working in an existing repository at the current directory.
   Resolve the requested task completely, as the project's maintainers would. When done, stop.

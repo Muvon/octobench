@@ -17,7 +17,7 @@ meta:
     - test/test.cc
   docker_requires:
     - libcurl4-openssl-dev   # test/CMakeLists.txt does find_package(CURL REQUIRED)
-  verified: false   # fail-to-pass NOT yet executed; run scripts/verify_case.sh
+  verified: true   # fail-to-pass proven 2026-08-03 via scripts/verify_case.sh (agent image)
 system_prompt: |
   You are an autonomous software engineer working in an existing repository at the current directory.
   Resolve the requested task completely, as the project's maintainers would. When done, stop.
