@@ -1,0 +1,215 @@
+id: longrun_rust_gitoxide
+name: gitoxide git-format conformance fixes (6-turn sequence)
+language: rust
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/GitoxideLabs/gitoxide
+  base_sha: 5708de4346e9c800ed01a8c4d7cdbe3ab86b1740
+  prs: [2856, 2857, 2860, 2858, 2863, 2866]
+turns:
+  - name: "Keep the value when a line continuation is followed by an empty line"
+    instruction: |
+      In the gix-config event parser
+      (`gix-config/src/parse/from_bytes/mod.rs`), a value that ends in a
+      line continuation (a backslash followed by a newline) and then runs
+      into an empty line emits the wrong event. `value()` handles an empty
+      remaining span by always dispatching `Event::Value(Span::default())`.
+      That is wrong once a partial value has already been emitted: the
+      continuation opened a multi-line value, so the empty remainder
+      terminates it and must be reported as `Event::ValueDone`.
+
+      Dispatch `Event::ValueDone(Span::default())` when a partial value was
+      already found, and keep dispatching `Event::Value(Span::default())`
+      otherwise.
+
+      For the input `hello\<NL>` the events must be
+      value-not-done("hello"), newline, value-done(""), and the newline is
+      consumed as part of the continuation so the remainder is empty. For
+      `hello\<NL><NL>b = c` only the first newline is consumed and
+      `<NL>b = c` is left in the remainder; for `hello\<NL>; comment`
+      everything past the consumed newline stays in the remainder.
+
+      At the `File` level this means `core.k` resolves to exactly `abc` for
+      a value written as `k = abc\` followed by an empty line, a comment
+      line, end of input, a new section, or a CRLF line ending. A
+      continuation into a *non-empty* line keeps its current behaviour:
+      `k = abc\<NL><TAB>k = def` is still the single value
+      `abc<TAB>k = def`.
+    gold_sha: b95db7ca8f7037e0ba570e2329bdbe4dc10a24c8
+    pr_url: https://github.com/GitoxideLabs/gitoxide/pull/2856
+    test_paths:
+      - gix-config/src/parse/from_bytes/tests.rs
+      - gix-config/tests/config/file/access/read_only.rs
+    test_command: |
+      cargo test -p gix-config
+
+  - name: "Don't reject mailmap lines with content after the second email"
+    instruction: |
+      `gix-mailmap`'s line parser is stricter than Git's. `parse_line` in
+      `gix-mailmap/src/parse.rs` parses two name/email pairs and then
+      rejects the whole line if anything is left over, and
+      `parse_name_and_email` rejects an empty `<>` email outright. Git
+      instead takes the first two identities it can read and ignores the
+      rest.
+
+      Give `parse_name_and_email` a flag that permits an empty email, and
+      pass it as false for the first identity and true for the second.
+      Parse the second identity leniently: if it fails, fall back to no
+      name, no email, and the untouched remainder instead of propagating
+      the error. Drop the "too many names or emails" check entirely.
+
+      The only remaining hard failure for a line is a missing first email;
+      report it as `Line {n} does not contain an email`.
+
+      Resulting behaviour: trailing junk after a complete mapping is
+      ignored, so a line with a third email, or a comment after the second
+      email, still yields the name-and-email mapping built from the first
+      two identities. A trailing bare name with no email is dropped,
+      leaving a change-name-by-email entry. A malformed second identity (an
+      unterminated `<`) is ignored rather than failing the line. An
+      explicitly empty second email (`<>`) is accepted and maps the empty
+      email, so a signature with an empty email resolves through it while a
+      signature with a non-empty email does not.
+    gold_sha: f14a495b0c30af82e2156f0dbdf60dfd74ac3612
+    pr_url: https://github.com/GitoxideLabs/gitoxide/pull/2857
+    test_paths:
+      - gix-mailmap/tests/parse/mod.rs
+      - gix-mailmap/tests/snapshot/mod.rs
+    test_command: |
+      cargo test -p gix-mailmap
+
+  - name: "Decode the config backslash-b escape to the backspace byte"
+    instruction: |
+      `gix-config` mis-decodes the `\b` escape in config values.
+      `normalize_inner` in `gix-config/src/value/normalize.rs` treats `\b`
+      as a request to delete the previously decoded byte (`out.pop()`). Git
+      does not do that: `\b` decodes to the backspace character, byte
+      `0x08`, exactly like `\n` and `\t` decode to newline and tab.
+
+      Push `0x08` instead of popping, and update the doc comment on the
+      module's normalize entry point to describe `\n`, `\t` and `\b` as
+      newline, tab and backspace (`0x08`).
+
+      So normalizing `\n\ta\b` yields "\n\ta\x08" — the `a` is preserved
+      and a backspace byte is appended. A quoted config value such as
+      `"hi\nho\n\tthere\bi\\\" \""` under `core.escape-sequence` normalizes
+      with the `e` of "there" intact and a `0x08` between "there" and "i",
+      for both the raw value and the string accessor.
+    gold_sha: 484ebac1fc590a92131293cf26715918d74ab0d7
+    pr_url: https://github.com/GitoxideLabs/gitoxide/pull/2860
+    test_paths:
+      - gix-config/tests/config/value/normalize.rs
+      - gix-config/tests/config/file/access/read_only.rs
+    test_command: |
+      cargo test -p gix-config --test config
+
+  - name: "An implicit boolean followed by whitespace is true, like in Git"
+    instruction: |
+      `BodyData` in `gix-config/src/file/section/body.rs` decides whether a
+      key has a value by comparing offsets: it assumes a value exists
+      whenever the value range does not start immediately after the key.
+      Trailing whitespace after a bare key shifts that offset, so `b ` is
+      misread as a key with an (empty) value rather than as an implicit
+      boolean.
+
+      Decide it by inspecting the events instead. Starting just after the
+      key, walk events while they are `Event::Whitespace` or
+      `Event::KeyValueSeparator` and record whether a `KeyValueSeparator`
+      was actually seen. Only report a value range when one was.
+
+      So `[a]` followed by `b` with any run of trailing spaces/tabs, with
+      or without a trailing newline or CRLF, is an implicit boolean: the
+      boolean accessor yields `Some(true)` and the string accessor yields
+      `None`, because an implicit boolean has no value of its own. Once a
+      separator is present — `b =`, `b = `, or `b=""` — the value is
+      explicitly empty: the boolean accessor yields `Some(false)` and the
+      string accessor yields the empty string.
+
+      This does not loosen the parser: a backspace (`\u{8}`) is not
+      whitespace, so `[a]\n\tb \u{8}\n` still fails to parse, with the
+      error rendering as `Got an unexpected token on line 2 while trying to
+      parse a name: '\u{8}\n'`.
+    gold_sha: 77dc1ff87fc9c95fda40134e7ff4aff132c966a8
+    pr_url: https://github.com/GitoxideLabs/gitoxide/pull/2858
+    test_paths:
+      - gix-config/tests/config/file/access/read_only.rs
+      - gix-config/tests/config/parse/error.rs
+      # normalize.rs carries turn 3's assertions; the unfiltered `--test
+      # config` run includes it, so it must be at THIS turn's gold state
+      # (post-turn restore resets test files to base otherwise).
+      - gix-config/tests/config/value/normalize.rs
+    test_command: |
+      cargo test -p gix-config --test config
+
+  - name: "Color names ignore case, and bright requires a standard color"
+    instruction: |
+      `Name::from_str` and `Attribute::from_str` in
+      `gix-config-value/src/color.rs` match color and attribute spellings
+      case-sensitively, and they strip a `bright` prefix before looking at
+      what follows, so `brightdefault` or `bright0` are accepted. Git
+      matches these names case-insensitively and only allows `bright` in
+      front of one of the eight standard colors.
+
+      Rework `Name::from_str`: match `normal` case-insensitively first;
+      then split off a leading `bright` prefix, compared case-insensitively,
+      and match the remainder case-insensitively against the eight standard
+      colors (black, red, green, yellow, blue, magenta, cyan, white),
+      returning the plain or bright variant accordingly. If a `bright`
+      prefix was present and the remainder is not one of those eight, it is
+      an error. Only without the prefix do the remaining forms apply:
+      `normal` (case-insensitive) and the literal `-1` map to Normal,
+      `default` (case-insensitive) maps to Default, and the ANSI u8 and
+      `#rrggbb` forms are unchanged.
+
+      In `Attribute::from_str`, match `reset` case-insensitively as well,
+      keeping the existing rule that an inverted `reset` is an error.
+
+      So `RED`, `Normal`, `DEFAULT`, `BrightRed`, `brightBLUE` and
+      `BRIGHTWHITE` all parse to the expected names, while `bright0`,
+      `bright1`, `bright255`, `bright-1` and `bright#ff0010` are all
+      errors. Round-tripping a Git color spec lowercases the names:
+      `RESET` renders as `reset`, `red Reset` as `red reset`, and
+      `RED brightBLUE bold` as `red brightblue bold`.
+    gold_sha: da5fa735905c97b9454542bcaba848bcdeac760d
+    pr_url: https://github.com/GitoxideLabs/gitoxide/pull/2863
+    test_paths:
+      - gix-config-value/tests/value/color.rs
+    test_command: |
+      cargo test -p gix-config-value --test value -- color
+
+  - name: "A trailing DOS EOF marker doesn't make a text file binary"
+    instruction: |
+      `eol::Stats::from_bytes` in `gix-filter/src/eol/utils.rs` counts a
+      trailing DOS end-of-file marker (byte `0x1a`) as an unprintable byte,
+      which is enough to classify an otherwise plain text buffer as binary
+      and suppress EOL conversion. Git discounts a single marker at the
+      very end of the buffer.
+
+      After the scan loop, if the last byte of the input is `0x1a`,
+      decrement the `non_printable` count by one. Only the final byte is
+      discounted — a marker anywhere else, including a second one
+      immediately before it, still counts. Note the loop currently shadows
+      the `bytes` parameter with its iterator; rename the iterator so the
+      original slice is still reachable for that check, and document the
+      exemption on `from_bytes`.
+
+      So `b"hello\r\n\x1a"` yields null 0, lone_cr 0, lone_lf 0, crlf 1,
+      printable 5, non_printable 0, and is not binary;
+      `b"hello\r\n\x1a\x1a"` yields non_printable 1 and is binary.
+
+      The consequence at the conversion level is that `convert_to_git` on
+      `b"a\r\nb\r\n\x1a"` with a text-auto digest reports a change and
+      produces `a\nb\n\x1a`, and `convert_to_worktree` on `b"a\nb\n\x1a"`
+      with a text-auto-crlf digest reports a change and produces
+      `a\r\nb\r\n\x1a`; with a second trailing marker both report no
+      change.
+    gold_sha: 873100b83ed67940c59d4c1bfee24f349b37862c
+    pr_url: https://github.com/GitoxideLabs/gitoxide/pull/2866
+    test_paths:
+      - gix-filter/tests/filter/eol/mod.rs
+      - gix-filter/tests/filter/eol/convert_to_git.rs
+      - gix-filter/tests/filter/eol/convert_to_worktree.rs
+    test_command: |
+      cargo test -p gix-filter --test filter -- eol

@@ -1,0 +1,27 @@
+id: dev6_rust_image_ico_mask_transparency
+name: ICO AND-mask transparency leaves stale color channels
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/image-rs/image
+  pr_url: https://github.com/image-rs/image/pull/3003
+  pr: 3003
+  scenario: decoder-correctness
+  prompt_source: human-prompt
+  merged_at: 2026-06-28T21:10:15Z
+  base_sha: 86e7792285a05049e43f68a7fd55de66ca88e5ab
+  gold_sha: 3f2b621ebc8a35bd098eaf18e2dc840883cdd9af
+  test_paths:
+    - tests/reference/ico/images/bmp-24bpp-mask.ico.png
+  verified: true   # fail-to-pass proven 2026-08-03 via scripts/verify_case.sh (agent image)
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  When we decode a BMP-format .ico whose AND mask marks pixels as
+  transparent, those pixels come out with alpha 0 but the original color
+  values still sitting in the RGB channels. Downstream consumers that
+  compare images or premultiply see stale color data leaking out of
+  supposedly transparent pixels. A masked-out pixel should be fully
+  transparent black — all four RGBA channels zero — not just alpha-cleared.
+  Pixels the mask leaves opaque must be untouched.

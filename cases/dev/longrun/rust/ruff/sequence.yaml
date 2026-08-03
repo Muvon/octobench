@@ -1,0 +1,232 @@
+id: longrun_rust_ruff_ty
+name: ty type-checker correctness fixes (6-turn sequence)
+language: rust
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/astral-sh/ruff
+  base_sha: f3c869da1b4962ff17d3f1674fb887e0d065a7df
+  prs: [27311, 27318, 26883, 27377, 27381, 27380]
+turns:
+  - name: "Preserve exact numeric types in covariant collections"
+    instruction: |
+      When inferring the elements of a collection display against an element
+      type context, `TypeInferenceBuilder` in
+      `crates/ty_python_semantic/src/types/infer/builder.rs` unconditionally
+      promotes each inferred element type before matching it. Promotion is
+      only correct for invariant positions. A covariant element context is
+      an upper bound, so promoting can widen an element past that bound and
+      produce a spurious error — promoting an exact `float`, for instance,
+      introduces `int`, which is not assignable to an exact-float element
+      context.
+
+      Keep promotion as the default, but fall back to the unpromoted
+      inferred element type when all of the following hold: an element type
+      context is present; the variance recorded for that element typevar is
+      covariant; promotion actually changed the type; the promoted type is
+      not assignable to the element context; and the unpromoted type is
+      assignable to it. In every other case use the promoted type as
+      before.
+
+      Leave the starred-expression handling and the rest of the element
+      loop alone.
+    gold_sha: a4f873dfc599124dc97cf6999da4a0e4822d2ef7
+    pr_url: https://github.com/astral-sh/ruff/pull/27311
+    test_paths:
+      - crates/ty_python_semantic/resources/mdtest/bidirectional.md
+    test_command: |
+      cargo test -p ty_python_semantic --test mdtest -- bidirectional.md
+
+  - name: "Fix enum class container assignability"
+    instruction: |
+      Matching a class object against a collection protocol goes wrong when
+      the special method comes from the metaclass with an explicitly
+      annotated receiver. In `TypeRelationChecker`
+      (`crates/ty_python_semantic/src/types/relation.rs`), the two places
+      that fall back to a constant `ConstraintSet` when a member cannot be
+      resolved definitively decide that constant from
+      `self.is_eager_assignability()`. That conflates "this check is an
+      eager assignability check" with "the relation being checked is
+      assignability", so the fallback answer differs between subtyping and
+      assignability queries that should agree. Derive the constant from the
+      relation itself instead — whether `self.relation` is assignability.
+
+      Expected behaviour afterwards:
+
+      - A metaclass special method receives the class object, not an
+        instance, so an explicitly annotated metaclass receiver such as
+        `def __contains__(self: type[Any], value: object, /) -> bool` must
+        be checked against the class object; a conflicting
+        `__contains__`/`__iter__`/`__reversed__` defined on the class body
+        itself is ignored for this lookup. A class whose metaclass supplies
+        `__contains__`, `__iter__`, `__reversed__` and `__len__` is
+        therefore assignable to `Container[int]`, `Container[str]`,
+        `Iterable[int]`, `Reversible[int]` and `Collection[int]`, and is a
+        subtype of `Container[int]` — the subtyping and assignability
+        answers must agree.
+      - The explicit receiver must not mask a genuinely incompatible
+        signature: a metaclass `__contains__` taking `str` is not
+        assignable to `Container[int]`, and one returning `int` rather than
+        `bool` is not assignable to `Container[int]`.
+      - Because `EnumMeta.__contains__` accepts any object, an enum class
+        satisfies `Container[T]` for every `T`, including bare `Container`,
+        `Container[Any]`, `Container[object]`, `Container[int]` and
+        `Container[str]` regardless of its member type, and satisfies
+        `Iterable`, `Reversible` and `Collection` of its own member type.
+        The same holds for `IntEnum` against
+        `Container[int]`/`Iterable[int]` and for `StrEnum` against
+        `Container[str]`/`Iterable[str]`.
+    gold_sha: 7c3e2db97deb5c5edd6e4303403ef6caf2bde8be
+    pr_url: https://github.com/astral-sh/ruff/pull/27318
+    test_paths:
+      - crates/ty_python_semantic/resources/mdtest/enums.md
+      - crates/ty_python_semantic/resources/mdtest/protocols.md
+    test_command: |
+      cargo test -p ty_python_semantic --test mdtest -- enums.md && cargo test -p ty_python_semantic --test mdtest -- protocols.md
+
+  - name: "Emit diagnostic when specializing a non-generic class"
+    instruction: |
+      Subscripting a non-generic class inside a type expression is silently
+      accepted. Both arms in
+      `crates/ty_python_semantic/src/types/infer/builder/type_expression.rs`
+      that handle a class with no generic context still carry a `TODO: emit
+      a diagnostic if you try to specialize a non-generic class` and
+      evaluate to `todo_type!("specialized non-generic class")`.
+
+      Replace both with a real diagnostic. Keep inferring the subscript's
+      parameters/slice with a default type context so its sub-expressions
+      are still checked, then report the `not-subscriptable` lint on the
+      subscript expression with the message
+
+          Cannot subscript non-generic type `X`
+
+      where `X` is the display form of the subscripted value's type, and
+      evaluate the expression to `Unknown` instead of the placeholder type.
+    gold_sha: 4d4c8fa1c75b00561ea24eefefb13eb5ff80e01f
+    pr_url: https://github.com/astral-sh/ruff/pull/26883
+    test_paths:
+      - crates/ty_python_semantic/resources/mdtest/generics/legacy/classes.md
+      - crates/ty_python_semantic/resources/mdtest/generics/pep695/classes.md
+      - crates/ty_python_semantic/resources/mdtest/generics/pep695/aliases.md
+      - crates/ty_python_semantic/resources/mdtest/protocols.md
+    test_command: |
+      cargo test -p ty_python_semantic --test mdtest -- generics/legacy/classes.md && cargo test -p ty_python_semantic --test mdtest -- generics/pep695/classes.md && cargo test -p ty_python_semantic --test mdtest -- generics/pep695/aliases.md && cargo test -p ty_python_semantic --test mdtest -- protocols.md
+
+  - name: "Reject specializing non-generic subclasses"
+    instruction: |
+      `crates/ty_python_semantic/src/types/subscript.rs` still carries a
+      hack for old-style generics. When a class object is subscripted and
+      no `__class_getitem__` resolution applies, we only raise
+      `NotSubscriptable` if the class's MRO does not contain `Generic`. A
+      class that inherits from `Generic` but is not itself generic
+      therefore falls through silently and yields a placeholder type.
+
+      Add a `NonGenericClass { class: ClassLiteral<'db> }` variant to
+      `SubscriptErrorKind`. In the class-object branch, once the
+      specialization paths have been exhausted, check whether the class's
+      MRO contains `ClassBase::Generic`; if it does, return that new error
+      with `Type::unknown()` as the recovered type. Report it on the
+      subscript expression under the `not-subscriptable` lint with the
+      message
+
+          Cannot specialize non-generic class `Name`
+
+      using the class's own name (not its full display form). Then remove
+      the MRO-based suppression so every other class-object case
+      unconditionally falls through to the existing `NotSubscriptable`
+      error with `DunderMethod::ClassGetItem`. Drop the now-unused
+      `itertools::Itertools` import and pull `ClassLiteral` into scope.
+    gold_sha: 8430a098fb8b46b5a5c3b3c919804cc40954460c
+    pr_url: https://github.com/astral-sh/ruff/pull/27377
+    test_paths:
+      - crates/ty_python_semantic/resources/mdtest/generics/legacy/classes.md
+      - crates/ty_python_semantic/resources/mdtest/generics/pep695/classes.md
+    test_command: |
+      cargo test -p ty_python_semantic --test mdtest -- generics/legacy/classes.md && cargo test -p ty_python_semantic --test mdtest -- generics/pep695/classes.md
+
+  - name: "Preserve TypeVarTuple context during Generic recovery"
+    instruction: |
+      `LegacyGenericContextError::TypeVarTupleMustBeUnpacked` throws away
+      the typevars that were validated before the failure, so a class
+      declared with a bare, un-unpacked `TypeVarTuple` as a `Generic`
+      argument reports its error and then produces cascading errors for
+      correctly unpacked uses of that same `TypeVarTuple` inside the class
+      body.
+
+      In `crates/ty_python_semantic/src/types/infer/builder/subscript.rs`,
+      give the variant an `Option<GenericContext<'db>>` payload. In
+      `legacy_generic_class_context`, when a bound argument turns out to be
+      a `TypeVarTuple`, insert it into the validated typevars first and
+      then return the error carrying a
+      `GenericContext::from_typevar_instances` built from that set. The
+      other site that raises this error — the check for an unbound
+      `TypeVarTuple`/`ExtensionsTypeVarTuple` argument — carries `None`.
+      The recovery type used by `into_type` for this variant stays
+      `Type::unknown()`.
+
+      In `infer_legacy_generic_subscript`, when the error carries a generic
+      context, use the corresponding `Type::KnownInstance` wrapping that
+      context as the recovered type instead of `Type::unknown()`; keep
+      `Type::unknown()` when it is `None`. The diagnostic itself is
+      unchanged: `invalid-generic-class` with the message "`TypeVarTuple`
+      must be unpacked".
+
+      So `class BareTypeVarTuple(Generic[Ts])` reports exactly one
+      `invalid-generic-class` error, and a body annotation of
+      `values: tuple[*Ts]` inside it reports nothing further.
+    gold_sha: 9e5424f0c45fb6db2463caad5cc4d85b64513b76
+    pr_url: https://github.com/astral-sh/ruff/pull/27381
+    test_paths:
+      - crates/ty_python_semantic/resources/mdtest/generics/legacy/classes.md
+    test_command: |
+      cargo test -p ty_python_semantic --test mdtest -- generics/legacy/classes.md
+
+  - name: "Reject ClassVar and Final qualifiers in NamedTuple fields"
+    instruction: |
+      `NamedTuple` fields may not carry the `ClassVar` or `Final`
+      qualifiers, but ty accepts them silently.
+
+      Add a `StaticClassLiteral::own_annotated_qualifiers` accessor in
+      `crates/ty_python_semantic/src/types/class/static_literal.rs`
+      returning, in source order, the name, type qualifiers, and defining
+      `Definition` of every reachable annotated assignment in the class
+      body. Read this from the declaration history rather than from
+      `own_fields`: `own_fields` drops `ClassVar` declarations entirely and
+      does not retain `Final`, and a later method or nested class can
+      replace a symbol's binding while its annotation entry survives. Walk
+      the end-of-scope symbol declarations, skip declarations whose
+      reachability constraint evaluates to always-false and any that are
+      not annotated assignments, take the qualifiers off the inferred
+      declared type, and sort the result by declaration order so each
+      qualifier stays paired with the annotation that introduced it.
+
+      Add `report_invalid_named_tuple_field_qualifier` in
+      `crates/ty_python_semantic/src/types/diagnostic.rs`. It reports the
+      `invalid-named-tuple` lint anchored to the full range of the field's
+      defining annotated assignment, with the message
+
+          Type qualifier `Q` is not allowed in a NamedTuple field
+
+      and the concise message
+
+          Type qualifier `Q` is not allowed on NamedTuple field `name`
+
+      where `Q` is the qualifier's name. Do not claim that class creation
+      fails at runtime: deferred and wrapped annotations can preserve a
+      qualifier without ever passing it to `typing._type_check`.
+
+      Wire it up in `check_static_class_definitions`
+      (`crates/ty_python_semantic/src/types/infer/builder/post_inference/static_class.rs`),
+      inside the existing `NamedTuple` branch and before the existing
+      default-ordering check: for each annotated field, report once for
+      `ClassVar` and once for `Final` if present, so a field carrying both
+      is reported twice — each qualifier violates the restriction
+      independently.
+    gold_sha: 2272478c067945096c34350b20d0bfc41d356d3c
+    pr_url: https://github.com/astral-sh/ruff/pull/27380
+    test_paths:
+      - crates/ty_python_semantic/resources/mdtest/named_tuple.md
+      - crates/ty_python_semantic/resources/lint_docs/invalid-named-tuple.md
+    test_command: |
+      cargo test -p ty_python_semantic --test mdtest -- named_tuple.md && cargo test -p ty_python_semantic --test mdtest -- invalid-named-tuple.md

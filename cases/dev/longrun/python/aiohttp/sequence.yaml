@@ -1,0 +1,195 @@
+id: longrun_python_aiohttp
+name: aiohttp multipart Content-Disposition hardening (6-turn sequence)
+language: python
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/aio-libs/aiohttp
+  base_sha: 04f3a5fa2a786f26b30426a69c7a97d9d47c9e75
+  prs: [12794, 12948, 12997, 13069, 13042, 13206]
+turns:
+  - name: "Reject non-digit Content-Length in multipart body parts"
+    instruction: |
+      A multipart body part reads its own Content-Length header and passes it
+      straight to int(). int() is far more permissive than the grammar: it
+      accepts a sign prefix, PEP 515 underscores, surrounding whitespace and
+      non-ASCII decimal digits. The main request parser already rejects all
+      of those, so a body part can currently declare a length the rest of the
+      stack would have refused.
+
+      Validate the header before converting (in `aiohttp/multipart.py`,
+      BodyPartReader's constructor): a Content-Length on a body part must be
+      a plain run of ASCII digits and nothing else. Reject anything else by
+      raising ValueError, with "Content-Length" in the message. Parts without
+      the header, and form-data parts (which ignore it per RFC 7578 section
+      4.8), are unaffected.
+
+      Add a parametrized test asserting that constructing a body part reader
+      whose headers carry each of "-1", "+5", "1_0", " 5", "0x5" and the
+      fullwidth digit "５" raises ValueError matching "Content-Length".
+    gold_sha: c67c9e4622d5a30a76e1b7b2e2d255eff6ec6640
+    pr_url: https://github.com/aio-libs/aiohttp/pull/12794
+    test_paths:
+      - tests/test_multipart.py
+    test_command: |
+      python -m pytest -q "tests/test_multipart.py::TestPartReader::test_rejects_malformed_content_length"
+
+  - name: "Fix IndexError on empty Content-Disposition parameter values"
+    instruction: |
+      parse_content_disposition (in `aiohttp/multipart.py`) crashes with
+      "IndexError: string index out of range" on a header whose parameter has
+      an empty value, e.g. "attachment; filename=". The quoted-string test
+      indexes the first and last character of the value without checking that
+      there is one.
+
+      Guard it: a value shorter than two characters cannot be a quoted
+      string. An empty parameter value is still malformed, so the function
+      must fall through to the existing bad-header path — warn with
+      BadContentDispositionHeader and return a None disposition type with an
+      empty params dict — rather than raise.
+
+      Add two cases to the Content-Disposition parsing tests:
+
+        * "attachment; filename=" warns BadContentDispositionHeader and
+          returns (None, {}).
+        * "attachment; name=foo; filename=", where only the trailing
+          parameter is empty, does the same.
+    gold_sha: f5e63e856708076a5a5d0500cb19b798cb0a94c2
+    pr_url: https://github.com/aio-libs/aiohttp/pull/12948
+    test_paths:
+      - tests/test_multipart_helpers.py
+    test_command: |
+      python -m pytest -q "tests/test_multipart_helpers.py::TestParseContentDisposition::test_empty_param_value_no_crash" "tests/test_multipart_helpers.py::TestParseContentDisposition::test_empty_param_value_multiple"
+
+  - name: "Accept optional whitespace around the disposition type"
+    instruction: |
+      RFC 9110 section 5.6.6 permits optional whitespace between a header's
+      field value tokens and the ";" separators. We already tolerate it
+      around parameter keys, but the disposition type itself is
+      token-validated exactly as it was split off the header, so
+      'form-data ; name="field"' is rejected as malformed and the whole
+      header is discarded.
+
+      In `aiohttp/multipart.py`, strip the disposition type before validating
+      it as a token, matching how the parameter keys are handled. Everything
+      downstream keeps working on the stripped value, so the returned
+      disposition type carries no surrounding whitespace.
+
+      Add two cases to the Content-Disposition parsing tests:
+
+        * 'form-data ; name="field"' returns disposition type "form-data" and
+          params {"name": "field"}.
+        * "inline " (trailing space, no parameters) returns disposition type
+          "inline" and an empty params dict.
+    gold_sha: 5ff087abcde85d0bef9b65bbde67d1131f5331b5
+    pr_url: https://github.com/aio-libs/aiohttp/pull/12997
+    test_paths:
+      - tests/test_multipart_helpers.py
+    test_command: |
+      python -m pytest -q "tests/test_multipart_helpers.py::TestParseContentDisposition::test_disptype_with_trailing_space_before_semicolon" "tests/test_multipart_helpers.py::TestParseContentDisposition::test_disptype_with_trailing_space_no_params"
+
+  - name: "Fix OWS before separators in parameter values"
+    instruction: |
+      The previous change handled optional whitespace around the disposition
+      type, but the parameter values have the same problem in a nastier form.
+      When a value fails token validation we run a repair heuristic that
+      tries to re-read it as a quoted string, and that check is done on the
+      raw value. A value with trailing whitespace before the ";" separator —
+      'filename="test.txt" ; name="field"' — does not look quoted, so the
+      heuristic falls through to the branch that glues the value together
+      with the following segment, and the next parameter is swallowed.
+
+      In `aiohttp/multipart.py`, right-strip the value before testing whether
+      it is quoted, and unescape the stripped form when it is. Values that
+      were already accepted must be unchanged, including the existing
+      behaviour of stripping leading path separators from the unescaped
+      content.
+
+      Add a case asserting that
+
+          'attachment; filename="test.txt" ; name="field"'
+
+      parses to disposition type "attachment" and params
+      {"filename": "test.txt", "name": "field"} — i.e. both parameters
+      survive.
+    gold_sha: fd07a7a7d7cdff58ca2a98c6c7a26149562e13a7
+    pr_url: https://github.com/aio-libs/aiohttp/pull/13069
+    test_paths:
+      - tests/test_multipart_helpers.py
+    test_command: |
+      python -m pytest -q "tests/test_multipart_helpers.py::TestParseContentDisposition::test_ows_before_separator"
+
+  - name: "Catch unknown charset when decoding Content-Disposition params"
+    instruction: |
+      RFC 5987 extended parameters carry their own charset name, and both the
+      name and the percent-encoded octets are attacker-controlled. We decode
+      them with urllib.parse.unquote(..., errors="strict") in two places in
+      `aiohttp/multipart.py`: while parsing the header, and while
+      reassembling a continued filename. Neither call is adequately guarded —
+      an unknown charset name raises LookupError, which escapes to the
+      caller, and the UnicodeDecodeError arm in the parser is marked as
+      unreachable when it plainly is not.
+
+      Catch both LookupError and UnicodeDecodeError at both call sites.
+      Careful: the bare name LookupError is shadowed inside this module by an
+      import from the payload module, so reference the builtin explicitly. On
+      a bad decode while parsing, warn with BadContentDispositionParam and
+      skip that parameter; while resolving a filename, return None.
+
+      Tests to add:
+
+        * Parsing "attachment; filename*=unknown-8bit''foo-%c3%a4.html"
+          (unknown charset) and "attachment; filename*=UTF-8''%ff.html"
+          (undecodable octets) each warns BadContentDispositionParam, and
+          returns disposition type "attachment" with an empty params dict.
+        * Resolving a filename from {"filename*0*": "unknown-8bit''foo-%c3%a4",
+          "filename*1": ".html"} and from {"filename*0*": "UTF-8''%ff",
+          "filename*1": ".html"} returns None in both cases.
+    gold_sha: b48737e74f2a18d0345d2894566be02c5da47f6b
+    pr_url: https://github.com/aio-libs/aiohttp/pull/13042
+    test_paths:
+      - tests/test_multipart_helpers.py
+    test_command: |
+      python -m pytest -q "tests/test_multipart_helpers.py::TestParseContentDisposition::test_attwithfn2231baddecode" "tests/test_multipart_helpers.py::TestContentDispositionFilename::test_attfncontenc_baddecode"
+
+  - name: "Strip leading separators in all Content-Disposition filename forms"
+    instruction: |
+      Leading path separators are stripped from quoted filenames, but not
+      from every form a filename can arrive in. An extended parameter decoded
+      from percent encoding keeps its leading "/" or "\", and so does a plain
+      unquoted filename and the value assembled from continuation segments.
+      That leaves callers with a filename that can still escape a target
+      directory depending on which form the sender picked.
+
+      In `aiohttp/multipart.py`, apply the same leading-separator stripping
+      consistently: to the decoded value of an extended parameter as it is
+      parsed, and in the filename resolver both to the decoded extended value
+      and to the plain value returned when there is no charset prefix. Only
+      leading separators go; separators inside the name stay.
+
+      Expected behaviour after the change:
+
+        * "attachment; filename*=UTF-8''%5cfoo.html" parses to params
+          {"filename*": "foo.html"} — note this changes an existing
+          assertion, which currently expects the backslash to survive.
+        * "attachment; filename*=UTF-8''%2Ffoo.html" likewise gives
+          {"filename*": "foo.html"}.
+        * Parsing 'attachment; filename*0="/foo."; filename*1="html"' still
+          reports the raw segments {"filename*0": "/foo.", "filename*1":
+          "html"}, because continuation parts are only normalised once
+          joined; resolving a filename from those same params yields
+          "foo.html".
+        * Resolving from 'form-data; name="f"; filename="/etc/evil";
+          filename*=UTF-8''%2Fetc%2Fevil' yields "etc/evil".
+        * A separator in the middle survives: 'attachment; filename*0="dir";
+          filename*1="/foo.html"' resolves to "dir/foo.html".
+        * Encoded continuations {"filename*0*": "UTF-8''%2Ffoo-%c3%a4",
+          "filename*1": ".html"} and the %5c variant both resolve to
+          "foo-ä.html".
+    gold_sha: 537125adcbb10cb733461ba1b08d85d9199c48f0
+    pr_url: https://github.com/aio-libs/aiohttp/pull/13206
+    test_paths:
+      - tests/test_multipart_helpers.py
+    test_command: |
+      python -m pytest -q "tests/test_multipart_helpers.py::TestParseContentDisposition::test_attwithfn2231abspathdisguised" "tests/test_multipart_helpers.py::TestParseContentDisposition::test_attwithfn2231abspath" "tests/test_multipart_helpers.py::TestParseContentDisposition::test_attfncontabspath" "tests/test_multipart_helpers.py::TestContentDispositionFilename::test_filename_ext_abspath" "tests/test_multipart_helpers.py::TestContentDispositionFilename::test_attfncontabspath" "tests/test_multipart_helpers.py::TestContentDispositionFilename::test_attfncontinnerpath" "tests/test_multipart_helpers.py::TestContentDispositionFilename::test_attfncontencabspath"

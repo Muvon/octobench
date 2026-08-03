@@ -1,0 +1,213 @@
+id: longrun_php_phpspreadsheet
+name: PhpSpreadsheet object-model API session (6-turn sequence)
+language: php
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/PHPOffice/PhpSpreadsheet
+  base_sha: 803293efb9d32dfdd357a0a8d48cbffbe420d25f
+  prs: [4880, 4886, 4896, 4909, 4910, 4925]
+turns:
+  - name: "Make a disconnected spreadsheet reusable"
+    instruction: |
+      `Spreadsheet::disconnectWorksheets()` is documented as a teardown
+      helper, but it leaves the object in a state where the spreadsheet
+      cannot be used again. After the call the worksheet collection is empty
+      while the active sheet index still points at the sheet that was just
+      dropped, so the next `createSheet()` lands on an inconsistent index.
+
+      Make a disconnected spreadsheet reusable (in
+      `src/PhpSpreadsheet/Spreadsheet.php`):
+
+      - Immediately after `disconnectWorksheets()` on a freshly constructed
+        `Spreadsheet`, `getSheetCount()` must be 0 and
+        `getActiveSheetIndex()` must be -1 (no sheet is active).
+      - Creating a sheet afterwards with `createSheet(0)` must bring the
+        count to 1 and make that new sheet the active one, i.e.
+        `getActiveSheetIndex()` returns 0.
+      - The re-created sheet must be fully wired to the spreadsheet: setting
+        `A1` to `=1+2` and reading `getCalculatedValue()` yields 3, and
+        `getStyle('A1')->getFont()->setBold(true)` is readable back as true
+        through the style supervisor.
+      - Calling `disconnectWorksheets()` a second time must still work.
+    gold_sha: b5a41165f74bd78e6b32fd44409832bb21add30b
+    pr_url: https://github.com/PHPOffice/PhpSpreadsheet/pull/4880
+    test_paths:
+      - tests/PhpSpreadsheetTests/ReuseDisconnectTest.php
+    test_command: |
+      vendor/bin/phpunit tests/PhpSpreadsheetTests/ReuseDisconnectTest.php
+
+  - name: "Add IReader2 interface with listWorksheetInfo/Names"
+    instruction: |
+      `listWorksheetInfo()` and `listWorksheetNames()` are implemented by
+      every reader we ship but are not part of the `IReader` contract, so
+      `IOFactory` cannot rely on them. Introduce a second interface rather
+      than widening `IReader` (third-party readers implementing only
+      `IReader` must keep working unchanged).
+
+      - Add `PhpOffice\PhpSpreadsheet\Reader\IReader2` extending `IReader`
+        and declaring `listWorksheetInfo(string $filename): array` and
+        `listWorksheetNames(string $filename): array`.
+      - Add `PhpOffice\PhpSpreadsheet\Reader\EmptyWorksheetInfo`, a plain
+        class supplying both methods as no-ops returning `[]`, so an
+        existing reader can migrate by extending it.
+      - `BaseReader` now implements `IReader2`.
+      - `IOFactory::registerReader()` must require the registered class to
+        implement `IReader2`, throwing
+        `PhpOffice\PhpSpreadsheet\Reader\Exception` with a message
+        containing `readers must implement` when it does not. Registering a
+        class that does implement `IReader2` still succeeds, and its
+        `listWorksheetInfo('x')` / `listWorksheetNames('x')` return `[]`
+        when it inherits the empty implementations.
+      - A standalone class that implements only `IReader` must remain
+        instantiable and usable directly — loading a CSV through it still
+        yields the parsed sheet.
+    gold_sha: 9260bd841feae60393069ebbaee39471d1173d1c
+    pr_url: https://github.com/PHPOffice/PhpSpreadsheet/pull/4886
+    test_paths:
+      - tests/PhpSpreadsheetTests/IOFactoryRegisterTest.php
+      - tests/PhpSpreadsheetTests/CustomReader2.php
+      - tests/PhpSpreadsheetTests/CustomReaderNot2.php
+      - tests/PhpSpreadsheetTests/Reader/Csv/SimpleCsv.php
+      - tests/PhpSpreadsheetTests/Reader/Csv/SimpleCsvTest.php
+    test_command: |
+      vendor/bin/phpunit tests/PhpSpreadsheetTests/IOFactoryRegisterTest.php tests/PhpSpreadsheetTests/Reader/Csv/SimpleCsvTest.php
+
+  - name: "Widen and tighten getChartByIndex"
+    instruction: |
+      `Worksheet::getChartByIndex()` (in
+      `src/PhpSpreadsheet/Worksheet/Worksheet.php`) is typed `?string` even
+      though a chart index is conceptually an integer, so callers have to
+      cast and nothing rejects junk input.
+
+      Widen and tighten it:
+
+      - The parameter accepts `null|int|string`.
+      - With no charts on the sheet, any argument (including `null`)
+        returns `false`.
+      - `null` keeps meaning "the last chart in the collection".
+      - An integer index returns the chart at that position, and a string
+        that is the canonical decimal form of that integer behaves
+        identically — `0` and `'0'` both return the first chart.
+      - Anything that is not a canonical integer string returns `false`
+        rather than being silently coerced: `' 0'` (leading space) and
+        `'x'` both return `false`.
+      - An index past the end of the collection returns `false`, whether
+        passed as an int (`1`) or a string (`'2'`).
+
+      While you are here, have the Xlsx drawing writer
+      (`src/PhpSpreadsheet/Writer/Xlsx/Drawing.php`) iterate the
+      worksheet's chart collection directly instead of counting and
+      re-fetching each chart by a stringified index.
+    gold_sha: 5f097568fc6d76720fba2d703883fd731130f7cc
+    pr_url: https://github.com/PHPOffice/PhpSpreadsheet/pull/4896
+    test_paths:
+      - tests/PhpSpreadsheetTests/Chart/ChartsByNameTest.php
+    test_command: |
+      vendor/bin/phpunit tests/PhpSpreadsheetTests/Chart/ChartsByNameTest.php
+
+  - name: "Navigate Cell as a cursor"
+    instruction: |
+      Add cursor-style navigation to `Cell`
+      (`src/PhpSpreadsheet/Cell/Cell.php`), so callers can walk a sheet
+      without building coordinate strings by hand. Every method returns the
+      `Cell` object at the computed position on the same worksheet (fetched
+      via `getCell()`, so the cell is created if absent), which makes them
+      chainable — including after `setValue()`.
+
+      Methods on `PhpOffice\PhpSpreadsheet\Cell\Cell`:
+
+      - `cursorRight(int $right = 1)` and `cursorLeft(int $left = 1)` —
+        move by columns.
+      - `cursorDown(int $down = 1)` and `cursorUp(int $up = 1)` — move by
+        rows.
+      - `cursorRow(int $row = 1)` — jump to an absolute row in the current
+        column.
+      - `cursorColumn(string $column = 'A')` — jump to an absolute column
+        in the current row.
+      - `cursorXlsLimits()` — return the same cell clamped to the BIFF
+        limits, so `JK71234` becomes `IV65536` and a cell already inside
+        the limits is unchanged.
+
+      All movement is clamped, never wrapped or errored: the result never
+      goes above row 1 or left of column A, and never past
+      `AddressRange::MAX_ROW` / `AddressRange::MAX_COLUMN_INT`.
+      `cursorRow(0)` clamps to row 1. Negative arguments are simply the
+      opposite direction.
+    gold_sha: 7a4574dcd117d5c9cf6e81a84e4910bab343776b
+    pr_url: https://github.com/PHPOffice/PhpSpreadsheet/pull/4909
+    test_paths:
+      - tests/PhpSpreadsheetTests/Cell/CursorTest.php
+    test_command: |
+      vendor/bin/phpunit tests/PhpSpreadsheetTests/Cell/CursorTest.php
+
+  - name: "Allow multiple ranges when setting style"
+    instruction: |
+      `Worksheet::getStyle()` accepts a comma-separated list of ranges, but
+      `Style::applyFromArray()` (in `src/PhpSpreadsheet/Style/Style.php`)
+      only ever handles the selection as a single range, so
+      `getStyle('A2:C5,E2:F5')` silently mis-applies the style.
+
+      Teach the supervisor path in `Style::applyFromArray()` to handle a
+      comma-separated selection: split it, apply the style array to each
+      sub-range in turn (trimming whitespace around each), then restore the
+      original selection before returning `$this`.
+
+      Requirements:
+
+      - `$sheet->getStyle('A2:C5,E2:F5')->applyFromArray(['font' =>
+        ['bold' => true]])` makes every cell in both ranges bold and leaves
+        cells outside them untouched.
+      - After the call, `$sheet->getSelectedCells()` still returns the full
+        comma-separated string exactly as passed in.
+      - The same must hold for lists that mix single cells and ranges, e.g.
+        `'A1,F6,B2:D3'`, and when the style is set through a nested
+        supervisor rather than `applyFromArray()` directly —
+        `$sheet->getStyle('A1,F6,B2:D3')->getFont()->setItalic(true)`
+        italicizes exactly those cells.
+      - Overlapping lists compose: a cell in both lists ends up bold and
+        italic, a cell in neither stays unstyled.
+    gold_sha: 961346a5d7b5b368c0b8321cf7d3bc095503cb9d
+    pr_url: https://github.com/PHPOffice/PhpSpreadsheet/pull/4910
+    test_paths:
+      - tests/PhpSpreadsheetTests/Style/MultipleRangeTest.php
+    test_command: |
+      vendor/bin/phpunit tests/PhpSpreadsheetTests/Style/MultipleRangeTest.php
+
+  - name: "Consistent highest row/column after row/column delete"
+    instruction: |
+      `removeRow()` and `removeColumn()` (in
+      `src/PhpSpreadsheet/Worksheet/Worksheet.php`) do not maintain the
+      cached highest row and highest column, so `getHighestRow()` /
+      `getHighestColumn()` keep reporting the pre-delete dimensions, and
+      the count argument is not validated.
+
+      Fix both methods symmetrically:
+
+      - A count of 0 is a no-op: return immediately with the sheet, its
+        data and its cached dimensions unchanged.
+      - A negative count means the deleted block *ends* at the given
+        row/column and extends backwards, clamped at row 1 / column A. On
+        a sheet with values 1..10 laid out across a row,
+        `removeColumn('E', -2)` deletes D and E, leaving
+        `[1,2,3,6,7,8,9,10]`; the row form behaves the same way.
+      - The cached highest row/column must be recomputed: if the deleted
+        block starts beyond the current highest, the highest is unchanged;
+        otherwise the new highest is the larger of (start - 1) and
+        (old highest - count).
+      - Concretely, on a sheet whose highest row is 1001,
+        `removeRow(15, 10)` leaves `getHighestRow()` at 991, and a
+        following `removeRow(985, 10)` — a range overlapping the highest
+        row — leaves it at 984. The column form behaves identically: with
+        highest column `ZZ`, `removeColumn('G', 5)` gives `ZU`, and a
+        following `removeColumn('ZR', 5)` gives `ZQ`.
+      - Deleting entirely above the highest row/column leaves both the
+        data and the reported dimensions untouched.
+    gold_sha: be06eebc2f6a57be1e5071897025c7577cc37396
+    pr_url: https://github.com/PHPOffice/PhpSpreadsheet/pull/4925
+    test_paths:
+      - tests/PhpSpreadsheetTests/Worksheet/InsertTest.php
+      - tests/PhpSpreadsheetTests/Worksheet/RemoveTest.php
+    test_command: |
+      vendor/bin/phpunit tests/PhpSpreadsheetTests/Worksheet/InsertTest.php tests/PhpSpreadsheetTests/Worksheet/RemoveTest.php

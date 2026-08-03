@@ -1,0 +1,311 @@
+id: longrun_cpp_cli11
+name: CLI11 parsing, config and help-formatting fixes (8-turn sequence)
+language: cpp
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/CLIUtils/CLI11
+  base_sha: d15c2ee1bb35e6ad2ff6d3f82369d354b8e035f7
+  prs: [1358, 1371, 1360, 1361, 1362, 1364, 1366, 1369]
+turns:
+  - name: "Chain name transforms so ignore_case and ignore_underscore both apply"
+    instruction: |
+      `App::check_name_detail` in `include/CLI/impl/App_inl.hpp` applies its
+      name transforms in sequence: the `ignore_underscore_` branch strips
+      underscores into a local copy, then the `ignore_case_` branch
+      lowercases. The second branch lowercases the original member name
+      instead of that local copy, so the underscore removal is thrown away
+      whenever both options are enabled on the same subcommand.
+
+      Chain the transforms: lowercase the already-transformed local name.
+
+      Expected, in `tests/SubcommandTest.cpp`: a subcommand named `my_sub`
+      with both `ignore_case()` and `ignore_underscore()` set, carrying a
+      `-v,--value` option, must be matched by the argument spellings
+      `my_sub`, `mysub`, `MY_SUB` and `MySub`, each parsing its value
+      normally. An unrelated name such as `other` must still throw
+      `CLI::ExtrasError`.
+    gold_sha: e187715ca9aa50b05462aad4a95198a92cc2d762
+    pr_url: https://github.com/CLIUtils/CLI11/pull/1358
+    test_paths:
+      - tests/SubcommandTest.cpp
+    test_command: |
+      cmake --build build --target SubcommandTest -j"$(nproc)" && ctest --test-dir build -R '^SubcommandTest$' --output-on-failure
+
+  - name: "Indent nested option groups in help output"
+    instruction: |
+      Nested option groups render flat in help output: a subgroup of a
+      group is printed at the same indentation as its parent, so the
+      hierarchy is invisible.
+
+      In `include/CLI/impl/Formatter_inl.hpp`, add a
+      `detail::indent_block(const std::string &input, const std::string
+      &indent)` helper that prefixes every line of `input` that is not
+      empty with `indent`. Then in `Formatter::make_expanded`, treat an
+      `App` with an empty name as an option group and indent its body by
+      two spaces — the description (both the paragraph-formatted and the
+      plain path), the positionals, the groups and the nested subcommands.
+      An ordinary named subcommand keeps no extra indent. The display-name
+      line itself is not indented.
+
+      Expected, in `tests/OptionGroupTest.cpp`: for an app with an option
+      group `group` described `common group` holding three subgroups
+      `subgroup 1..3` with matching descriptions, `app.help()` contains
+      `"[Option Group: group]\n  common group"` and, for each subgroup,
+      `"  [Option Group: subgroup N]\n    subgroup N description"`. When
+      `subgroup 1` also holds an option `-a`, the help contains
+      `"    OPTIONS:\n      -a"`.
+    gold_sha: b595bb40e129e06368ed0b202f02de818896ec8b
+    pr_url: https://github.com/CLIUtils/CLI11/pull/1371
+    test_paths:
+      - tests/OptionGroupTest.cpp
+    test_command: |
+      cmake --build build --target OptionGroupTest -j"$(nproc)" && ctest --test-dir build -R '^OptionGroupTest$' --output-on-failure
+
+  - name: "Clear proc_results_ in Option::clear()"
+    instruction: |
+      `Option::clear()` in `include/CLI/Option.hpp` clears `results_` and
+      resets the option state, but leaves `proc_results_` populated. A
+      value reduced during an earlier parse therefore survives into the
+      next one and is returned instead of the freshly added result.
+
+      Clear `proc_results_` as well.
+
+      Expected, in `tests/AppTest.cpp`: an option `--val` bound to an `int`
+      with `MultiOptionPolicy::Sum`; parsing `--val=2 --val=3` yields 5.
+      Then calling `clear()` on the option, adding the result `"7"`, and
+      reducing it must give 7.
+    gold_sha: 06377368ee457bab7a9466125a2ca95dadd410ee
+    pr_url: https://github.com/CLIUtils/CLI11/pull/1360
+    test_paths:
+      - tests/AppTest.cpp
+    test_command: |
+      cmake --build build --target AppTest -j"$(nproc)" && ctest --test-dir build -R '^AppTest$' --output-on-failure
+
+  - name: "Correct multiline string value extraction for indented keys"
+    instruction: |
+      In `ConfigBase::from_config` (`include/CLI/impl/Config_inl.hpp`), the
+      multiline-string branch slices the value out of the raw line buffer
+      using a delimiter position that was computed against the trimmed
+      item. When the key is indented, the leading whitespace shifts every
+      offset and the extracted value is corrupted.
+
+      Offset the slice by the buffer's first non-whitespace position
+      (treating "all whitespace" as offset 0) so the delimiter position
+      applies to the same string it was measured on.
+
+      Expected, in `tests/ConfigFileTest.cpp`: feeding
+      `CLI::ConfigINI().from_config` the stream `one = [three]` /
+      `  two = '''` / `multiline content` / `'''` / `three=7    ` yields
+      exactly three items: `one` with the single input `three`, `two` with
+      the single input `multiline content`, and `three` with the single
+      input `7`.
+    gold_sha: 45b994106c8de847c284005710fa6ea4e17e13f0
+    pr_url: https://github.com/CLIUtils/CLI11/pull/1361
+    test_paths:
+      - tests/ConfigFileTest.cpp
+    test_command: |
+      cmake --build build --target ConfigFileTest -j"$(nproc)" && ctest --test-dir build -R '^ConfigFileTest$' --output-on-failure
+
+  - name: "Fix type-conversion edge cases in TypeTools and Option reduce"
+    instruction: |
+      Five conversion edge cases, four in `include/CLI/TypeTools.hpp` and
+      one in `include/CLI/impl/Option_inl.hpp`.
+
+      1. `integral_conversion` for unsigned types only rejects a `-` at the
+         very front. `strtoull` skips leading whitespace and silently wraps
+         a negative value, so `" -1"` becomes `UINT64_MAX`. Reject when the
+         first non-whitespace character is a minus sign.
+      2. `lexical_cast` for floating-point types reports success for
+         whitespace-only input, yielding 0. `strtold` performs no
+         conversion there and leaves the end pointer at the start; treat
+         that as failure.
+      3. `lexical_conversion` for pair-like containers inserts a pair even
+         when an odd number of elements leaves the second value unset.
+         Value-initialize both locals and fail when the elements run out
+         before the second value.
+      4. `sum_string_vector` accumulates in a `double`, so totals at or
+         beyond 2^53 lose precision and large sums render in scientific
+         notation. Try an exact `int64_t` sum first, detecting signed
+         overflow *before* adding, and return `std::to_string` of it; fall
+         back to the existing double path and then string concatenation.
+      5. `Option::_reduce_results`, `Join` branch, tests `results_.size()`
+         instead of the `original` results it is about to join, so
+         default-derived results are never joined.
+
+      Expected, `tests/HelpersTest.cpp`: `lexical_cast` into
+      `std::uint64_t` fails for `" -1"`, `"\t-5"`, `"-1"` and succeeds for
+      `" 7"` giving 7; into `double` fails for `" "`, `"   "`, `"\t\n"`.
+      `lexical_conversion` into
+      `std::vector<std::pair<std::string,int>>` fails for `{"onlykey"}`
+      and succeeds for `{"a","1","b","2"}` giving `{{"a",1},{"b",2}}`.
+      `sum_string_vector`: `{"5000000000000000","5000000000000000"}` →
+      `"10000000000000000"`; `{"9007199254740993","0"}` →
+      `"9007199254740993"`; `{"3","4","5"}` → `"12"`; `{"1.5","2.5"}` →
+      `"4"`; `{"a","b"}` → `"ab"`.
+
+      Expected, `tests/OptionTypeTest.cpp`: a `std::vector<std::string>`
+      option with `Join` policy, `expected(2)` and `default_str("[a,b]")`,
+      parsed with no arguments, yields the joined result `"a\nb"`. A
+      `std::int64_t` option with `Sum` policy sums `5000000000000000`
+      twice to `10000000000000000`, and `9007199254740993` plus `0` to
+      `9007199254740993`.
+    gold_sha: 5c0ba6ab00563409572bbd69efed46e42b140432
+    pr_url: https://github.com/CLIUtils/CLI11/pull/1362
+    test_paths:
+      - tests/HelpersTest.cpp
+      - tests/OptionTypeTest.cpp
+    test_command: |
+      cmake --build build --target HelpersTest --target OptionTypeTest -j"$(nproc)" && ctest --test-dir build -R '^(HelpersTest|OptionTypeTest)$' --output-on-failure
+
+  - name: "Fix StringTools edge cases in split_up, remove_quotes, append_codepoint, escape_detect"
+    instruction: |
+      Four fixes in `include/CLI/impl/StringTools_inl.hpp`.
+
+      1. `append_codepoint` silently drops any code point above U+10FFFF —
+         no branch handles it. Throw `std::invalid_argument` for those, and
+         reword the existing surrogate-range message to say "are not valid
+         code points."
+      2. `split_up`, after emitting a closing quote or bracket, always
+         assumes the next character is a delimiter and skips it, so an
+         ordinary character there is lost. Retain it and resume from it
+         instead. Keep skipping when that character is whitespace, and also
+         keep skipping when it is itself a quote/bracket opener — resuming
+         from an opener would start a fresh, possibly unterminated, quoted
+         sequence that swallows later delimiters.
+      3. `escape_detect` reads `str[offset - 1]` when searching backwards;
+         at offset 0 that is out of bounds and there is nothing preceding
+         to reinterpret. Return `offset + 1` with the string untouched.
+      4. `remove_quotes` inspects `arg.front()` and `arg.back()` without
+         checking for an empty argument. Skip empty arguments.
+
+      Expected, `tests/HelpersTest.cpp`:
+      `escape_detect("--opt=\"value\"", 5)` rewrites the string to
+      `--opt "value"`; `escape_detect("=\"value\"", 0)` returns 1 and
+      leaves the string unchanged; `"=\"-value\""` at offset 0 is likewise
+      unchanged. `remove_escaped_characters` throws
+      `std::invalid_argument` for `test\U00110000` and `test\UFFFFFFFF`,
+      while `test\U0010FFFF` still converts. `split_up("\"abc\"def")` →
+      `{"\"abc\"", "def"}`; `split_up("[a, b]c", ',')` → `{"[a, b]", "c"}`;
+      `split_up("\"abc\",def", ',')` → `{"\"abc\"", "def"}`.
+
+      Expected, `tests/ConfigFileTest.cpp`: a section with consecutive
+      separators, `[a..b]` followed by `val=3`, must parse without
+      throwing and still yield `val` with the single input `3`.
+
+      Note, `tests/AppTest.cpp`: the existing case
+      `OneStringEqualVersionSingleStringQuotedEscapedCharacters` passes a
+      raw string with a stray trailing `"` that used to be swallowed by
+      the old split behaviour; remove that trailing quote so the fixture
+      reflects the corrected splitting.
+    gold_sha: 68692cfee0e58651073eb8eb4dd686e629948af0
+    pr_url: https://github.com/CLIUtils/CLI11/pull/1364
+    test_paths:
+      - tests/AppTest.cpp
+      - tests/ConfigFileTest.cpp
+      - tests/HelpersTest.cpp
+    test_command: |
+      cmake --build build --target AppTest --target ConfigFileTest --target HelpersTest -j"$(nproc)" && ctest --test-dir build -R '^(AppTest|ConfigFileTest|HelpersTest)$' --output-on-failure
+
+  - name: "Validator correctness nits"
+    instruction: |
+      A round of correctness nits across the validators.
+
+      In `include/CLI/Validators.hpp`, `PositiveNumber` uses
+      `std::numeric_limits<double>::min()` as its lower bound. That is the
+      smallest *normal* double, so strictly positive subnormal values are
+      rejected; use `denorm_min()` and fix the accompanying comment. In
+      the same header, both `detail::overflowCheck` overloads declare a
+      return type of `T` while returning a boolean — change the
+      `enable_if` result type to `bool`.
+
+      In `include/CLI/impl/Validators_inl.hpp`, `FileOnDefaultPath` calls
+      `default_path.back()` without checking that the path is non-empty.
+      Guard it.
+
+      Also correct the stale doc comments on `App` and `App::required` in
+      `include/CLI/App.hpp`, the `"1 b" => 100` example and the
+      `ExecPermissions` description in `include/CLI/ExtraValidators.hpp`,
+      and drop the unused `<algorithm>` include from
+      `include/CLI/impl/Argv_inl.hpp`.
+
+      Expected, in `tests/HelpersTest.cpp`: `CLI::PositiveNumber` accepts
+      `"5e-324"` (returns an empty error string). A
+      `CLI::FileOnDefaultPath("", false)` applied to
+      `"nonexistingfile.csv"` returns an empty error, and
+      `CLI::FileOnDefaultPath("", true)` returns a non-empty error,
+      neither invoking undefined behaviour.
+    gold_sha: 078c7413aab11f0e0df253d6383ff983cca3b034
+    pr_url: https://github.com/CLIUtils/CLI11/pull/1366
+    test_paths:
+      - tests/HelpersTest.cpp
+    test_command: |
+      cmake --build build --target HelpersTest -j"$(nproc)" && ctest --test-dir build -R '^HelpersTest$' --output-on-failure
+
+  - name: "Fix config reader/writer, formatter, and ExtrasError bugs"
+    instruction: |
+      A batch of config-reader, config-writer and formatter bugs.
+
+      `include/CLI/Error.hpp`: the two-argument `ExtrasError(name, args)`
+      delegates to the single-argument constructor, so the app name is
+      consumed as the error *name* and `get_name()` reports the message
+      text instead of `"ExtrasError"`. Build the message as
+      `"<name>: <text>"` — omitting the prefix and separator when the name
+      is empty — and pass it to the message+exit-code constructor.
+
+      `include/CLI/impl/Config_inl.hpp`: (a) move `clean_name_string` into
+      namespace `detail`, declared above `from_config`, returning `void`,
+      and update every call site; (b) a multiline comment that opens *and*
+      closes on the same line currently starts a multi-line scan that
+      swallows the rest of the file — detect the same-line close (the
+      opening quotes must not count as the closer, so require a length of
+      at least 6) and skip the line; (c) a section header with a trailing
+      comment, `[subcom] # comment`, is not recognised as a section —
+      strip a quote-aware trailing comment from a line that opens with `[`
+      but does not end with `]`, re-trim, and skip the line if nothing
+      usable remains; (d) the writer's decision to fall back to the array
+      form for a `Join` value containing the delimiter compares the option
+      count against `delim_count - 1`, off by two — compare
+      `opt->count() <= delim_count`; (e) the per-subcommand group heading
+      is written without a leading comment character.
+
+      `include/CLI/impl/Formatter_inl.hpp`: (a) the usage line collects
+      positionals without filtering out hidden ones, so a positional in an
+      empty group renders as an empty `[]` — require a non-empty group;
+      (b) `make_help` appends an extra newline after the description when
+      description formatting is disabled; (c) `make_subcommand` streams
+      the description unconditionally and never wraps — skip an empty
+      description, and when the name fills or overruns the column width
+      emit a newline first so the description is not glued to the name.
+
+      Expected, `tests/AppTest.cpp`: for an app named `myprog` given the
+      extra arguments `extra1 extra2`, the caught `CLI::ExtrasError` has
+      `get_name() == "ExtrasError"` and a message containing `extra1`,
+      `extra2` and `myprog`.
+
+      Expected, `tests/ConfigFileTest.cpp`: a config whose second section
+      header is `[subcom] # a comment about the subcommand` still routes
+      `val=2` to the `subcom` subcommand while `val=1` stays on the app. A
+      config whose comment lines are `'''comment on one line'''` and
+      `"""another one line comment"""` parses without throwing, with the
+      surrounding `one=35` and `two=42` both read. A `Join`-policy option
+      with delimiter `,` holding two results, the second embedding the
+      delimiter via the `[[ ]]` vector escape, must be written by
+      `config_to_str()` in array form — the output contains `vals=[` and
+      must not contain `vals="c,[a,b]"`.
+
+      Expected, `tests/FormatterTest.cpp`: a positional placed in an empty
+      group does not appear in the help and produces no `[]`; a subcommand
+      named `a-really-really-long-subcommand-name` with a description has
+      the two separated by a newline rather than concatenated; and with
+      description formatting disabled, the help contains
+      `"Short desc\n\n\nUsage"` and not `"Short desc\n\n\n\nUsage"`.
+    gold_sha: df42e6dd871bc7a082d128d87f25a6e9a704492a
+    pr_url: https://github.com/CLIUtils/CLI11/pull/1369
+    test_paths:
+      - tests/AppTest.cpp
+      - tests/ConfigFileTest.cpp
+      - tests/FormatterTest.cpp
+    test_command: |
+      cmake --build build --target AppTest --target ConfigFileTest --target FormatterTest -j"$(nproc)" && ctest --test-dir build -R '^(AppTest|ConfigFileTest|FormatterTest)$' --output-on-failure

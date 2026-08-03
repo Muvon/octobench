@@ -1,0 +1,222 @@
+id: longrun_php_doctrine_orm
+name: doctrine/orm query layer and mapping validation (6-turn sequence)
+language: php
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/doctrine/orm
+  base_sha: 9738e13e32b133b1d779193bb463ff9ed94f2f8d
+  prs: [12479, 12485, 12460, 12535, 12536, 12541]
+turns:
+  - name: "Harden CursorPaginator against untrusted cursor payloads"
+    instruction: |
+      `Cursor::fromEncodedString()` and `CursorPaginator::paginate()` (in
+      `src/Tools/Pagination/`) trust the decoded cursor payload more than
+      they should. The encoded string comes straight from a client, so a
+      caller passing an unvalidated request value (an array, a JSON scalar,
+      nested structures) reaches code that assumes a flat array of scalars.
+
+      Tighten both entry points; every rejection throws
+      `Doctrine\ORM\Tools\Pagination\Exception\InvalidCursor`:
+
+      - `Cursor::fromEncodedString()` takes `mixed`. A non-string argument
+        throws immediately with the message `(non-string value)`.
+      - Decode the JSON with a maximum depth of 2, so nested structures
+        cannot get through. If the decoded payload is not an array — e.g.
+        the payload encodes the JSON string `"just-a-string"` — throw.
+      - Every remaining parameter value must be scalar or null; a payload
+        whose value is an array such as `['p.id' => [1, 2, 3]]` throws.
+      - `_isNext` is cast to bool rather than used raw, so a payload
+        carrying `'_isNext' => 0` produces a cursor where `isNext()` is
+        false and `isPrevious()` is true.
+      - `CursorPaginator::paginate()` takes `mixed` as its cursor argument:
+        a `Cursor` is used as-is, `null` and the empty string mean "first
+        page", any other string is decoded, and anything else (an array,
+        for instance) throws `InvalidCursor`.
+    gold_sha: e981ccec3c27cc39fa47014a0458730acf8e25f8
+    pr_url: https://github.com/doctrine/orm/pull/12479
+    test_paths:
+      - tests/Tests/ORM/Tools/Pagination/CursorTest.php
+      - tests/Tests/ORM/Tools/Pagination/CursorPaginatorTest.php
+    test_command: |
+      # Whole directory: fixture entities (BlogPost/Author) are declared inside
+      # PaginationTestCase.php and only get defined when an earlier test loads
+      # it — running the dir keeps class loading deterministic.
+      vendor/bin/phpunit tests/Tests/ORM/Tools/Pagination
+
+  - name: "Fix cursor building when ordering by a ManyToOne association"
+    instruction: |
+      Paginating a query ordered by a to-one association — `ORDER BY
+      b.author` rather than `ORDER BY b.author.id` — builds a broken
+      cursor. When the paginator collects the ordering values from the last
+      hydrated row it reads the field straight off the entity, so for an
+      association field it gets the related *entity object* and then hands
+      that object to the DBAL type conversion for the association's field
+      type.
+
+      In `src/Tools/Pagination/CursorPaginator.php`, in the code that
+      builds the cursor parameters for a result item: when the ordering
+      field is an association on the owning metadata and the read value is
+      not null, resolve the related entity down to its identifier before
+      type conversion. Use the target entity's metadata to read its single
+      identifier value, falling back to null if the identifier is not
+      present.
+
+      Expected behaviour: for a query `SELECT b FROM ... BlogPost b ORDER
+      BY b.author ASC` paginated with a limit of 1 over rows whose authors
+      have ids 42 and 43, the paginator reports a next page and the next
+      cursor's parameters contain the integer `42` under the key
+      `b.author`.
+
+      Ordering by ordinary scalar fields must be unaffected.
+    gold_sha: 9eccd1fbe85418f60cc2c2b89b521aa5bb2122cd
+    pr_url: https://github.com/doctrine/orm/pull/12485
+    test_paths:
+      - tests/Tests/ORM/Tools/Pagination/CursorPaginatorTest.php
+    test_command: |
+      vendor/bin/phpunit tests/Tests/ORM/Tools/Pagination
+
+  - name: "SchemaValidator reports inversedBy targeting a different entity"
+    instruction: |
+      `SchemaValidator` (in `src/Tools/SchemaValidator.php`) already
+      cross-checks that an owning side's `inversedBy` names a real field
+      and that the two sides agree on cardinality, but it never checks
+      that the inverse side actually points back at the owning entity. Two
+      entities can both declare `inversedBy: 'owners'` against the same
+      inverse property while that property is mapped to only one of them,
+      and validation stays silent.
+
+      In the branch that resolves the owning side's `inversedBy`
+      association, also verify that the inverse side's target entity is
+      the owning side's source entity (or a parent of it, so inheritance
+      still validates). When it is not, append an error reading exactly:
+
+        The association <SourceEntity>#<fieldName> refers to the inverse
+        side <TargetEntity>#<inversedBy> which targets a different entity
+        (<inverse side's targetEntity>).
+
+      with the class names fully qualified. For a many-to-one field
+      `target` on an entity whose sibling is the one actually mapped by
+      the inverse `owners` collection, `validateClass()` must return
+      exactly that one error and nothing else. Mappings whose inverse side
+      does point back correctly must keep validating clean.
+    gold_sha: 74779505616ab3c932625ce4c66adeef73da0492
+    pr_url: https://github.com/doctrine/orm/pull/12460
+    test_paths:
+      - tests/Tests/ORM/Tools/SchemaValidatorTest.php
+    test_command: |
+      vendor/bin/phpunit tests/Tests/ORM/Tools/SchemaValidatorTest.php
+
+  - name: "Reject IDENTITY() on inverse-side associations"
+    instruction: |
+      `IDENTITY()` only makes sense on a to-one *owning* side, where the
+      foreign key column lives on the queried table. Today
+      `IdentityFunction::getSql()` (in
+      `src/Query/AST/Functions/IdentityFunction.php`) guards that
+      precondition with an `assert()`, so with assertions disabled — the
+      production default — an inverse-side path falls through to
+      `reset($assoc->joinColumns)` on an empty array and produces nonsense
+      SQL instead of a diagnosable error.
+
+      Replace the assertion with a real check: when the resolved
+      association is not a to-one owning side, throw the query exception
+      we already use for this situation,
+      `QueryException::associationPathInverseSideNotSupported()`, passing
+      the function's path expression.
+
+      `SELECT IDENTITY(u.address) FROM Doctrine\Tests\Models\CMS\CmsUser u`,
+      where `address` is the inverse side, must therefore fail SQL
+      generation with a `QueryException` whose message is:
+
+        A single-valued association path expression to an inverse side is
+        not supported in DQL queries. Instead of "u.address" use an
+        explicit join.
+
+      `IDENTITY()` on owning-side associations, including ones inherited
+      into a joined subclass, must keep generating the same SQL as before.
+    gold_sha: d7536918f06d0fb3d17163ecb00716e4854f686f
+    pr_url: https://github.com/doctrine/orm/pull/12535
+    test_paths:
+      - tests/Tests/ORM/Query/SelectSqlGenerationTest.php
+    test_command: |
+      vendor/bin/phpunit tests/Tests/ORM/Query/SelectSqlGenerationTest.php
+
+  - name: "Validate ManyToOne associations used as sole identifiers"
+    instruction: |
+      An entity whose only identifier is a many-to-one association is a
+      modelling mistake: the identifier is unique by definition, so the
+      association is really one-to-one, and mapping it as many-to-one lets
+      several rows claim the same primary key.
+
+      Add a check to `SchemaValidator::validateClass()` (in
+      `src/Tools/SchemaValidator.php`), in the association loop before the
+      existing foreign-identifier checks: if the association is
+      many-to-one and the entity's identifier consists of exactly this one
+      field, append the error
+
+        The association '<Entity>#<field>' is a many-to-one association
+        and is the sole identifier of the entity. This effectively makes
+        the association one-to-one; use a one-to-one association instead
+        or add another identifier field.
+
+      (class name fully qualified, quotes exactly as shown).
+
+      - An entity with `#[Id] #[ManyToOne]` as its only identifier reports
+        exactly that one error.
+      - An entity with a composite identifier — a scalar `#[Id]` column
+        plus an `#[Id] #[ManyToOne]` — is valid and reports no errors.
+      - Existing errors are additive, not replaced: an entity that already
+        reports the foreign-identifier and referenced-column-name errors
+        now reports this new error first, ahead of them, with the other
+        two unchanged.
+      - One-to-one associations used as identifiers stay valid.
+    gold_sha: 03783f8619425e823859bbc56feb6fc7207ef995
+    pr_url: https://github.com/doctrine/orm/pull/12536
+    test_paths:
+      - tests/Tests/ORM/Tools/SchemaValidatorTest.php
+    test_command: |
+      vendor/bin/phpunit tests/Tests/ORM/Tools/SchemaValidatorTest.php
+
+  - name: "Allow NULL literal in SELECT and CASE expressions"
+    instruction: |
+      DQL cannot express a literal `NULL` in a scalar position.
+      `SELECT NULL`, a `NULL` branch in a CASE expression and `NULL` as a
+      NEW-operator argument all fail to parse, forcing users into
+      workarounds like `NULLIF(1,1)`.
+
+      Support it end to end:
+
+      - Add a `NULL` literal type to `Doctrine\ORM\Query\AST\Literal`
+        alongside STRING, BOOLEAN and NUMERIC.
+      - In the parser (`src/Query/Parser.php`), accept the `NULL` token in
+        `ScalarExpression`, producing a `Literal` of the new type with a
+        null value, and accept it as a select expression in its own right
+        so `SELECT NULL` and `SELECT NULL AS nil` parse.
+      - In the SQL walker (`src/Query/SqlWalker.php`), emit the literal as
+        `NULL`.
+
+      Resulting behaviour:
+
+      - `SELECT g.id, NULL FROM CmsGroup g` generates
+        `SELECT c0_.id AS id_0, NULL AS sclr_1 FROM cms_groups c0_`; an
+        explicit alias (`NULL AS nil`) generates the same SQL, the alias
+        being the usual generated scalar name.
+      - The same works inside a subselect: `... WHERE g.id IN (SELECT NULL
+        FROM CmsGroup g2)` yields `... IN (SELECT NULL AS sclr_1 FROM
+        cms_groups c1_)`.
+      - `NULL` is usable in the THEN and ELSE branches of both general and
+        simple CASE expressions, and as a COALESCE argument, emitting a
+        bare `NULL` in the SQL.
+      - `NULL` is accepted as a NEW-operator argument — `SELECT new
+        CmsUserDTO(u.name, e.email, NULL, 123) ...` selects `NULL AS
+        sclr_2` and hydrates the DTO with that constructor argument set to
+        null, the other arguments unaffected.
+    gold_sha: e56aa3ba9522aff001b047d5cd667d1fe1ef3e67
+    pr_url: https://github.com/doctrine/orm/pull/12541
+    test_paths:
+      - tests/Tests/ORM/Query/SelectSqlGenerationTest.php
+      - tests/Tests/ORM/Query/LanguageRecognitionTest.php
+      - tests/Tests/ORM/Functional/NewOperatorTest.php
+    test_command: |
+      vendor/bin/phpunit tests/Tests/ORM/Query/SelectSqlGenerationTest.php tests/Tests/ORM/Query/LanguageRecognitionTest.php tests/Tests/ORM/Functional/NewOperatorTest.php

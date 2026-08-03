@@ -1,0 +1,227 @@
+id: longrun_cpp_ada
+name: ada URL parsing and URLPattern fixes (7-turn sequence)
+language: cpp
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/ada-url/ada
+  base_sha: 1e3b300977d5f2980ae0f64633a1c9fe025901df
+  prs: [1185, 1187, 1188, 1191, 1190, 1189, 1193]
+turns:
+  - name: "Bound hex ipv4 number by value not digit count"
+    instruction: |
+      `parse_ipv4_number` in `include/ada/url_ip-inl.h` rejects a
+      hexadecimal component once it has consumed 8 digits. That bound is
+      wrong: leading zeros are permitted, so a digit run longer than eight
+      can still denote a value that fits in 32 bits, and such hosts are
+      rejected today.
+
+      Replace the digit-count bound with a value bound. Keep the
+      invalid-nibble rejection as its own check, and before shifting the
+      accumulator left by 4 reject when the accumulated value would no
+      longer fit in 32 bits.
+
+      Expected: `http://0x0000000ff/` and `http://0x00000000ff/` both
+      parse, each with hostname `0.0.0.255`; `http://0x100000000/` still
+      fails to parse because it genuinely exceeds 32 bits.
+
+      Add a `TYPED_TEST` to `tests/basic_tests.cpp`.
+    gold_sha: 56950d382e06cf943552e2c5eb181036bdaa6fbe
+    pr_url: https://github.com/ada-url/ada/pull/1185
+    test_paths:
+      - tests/basic_tests.cpp
+    test_command: |
+      cmake --build build --target basic_tests -j"$(nproc)" && (cd build/tests && ./basic_tests)
+
+  - name: "Reject unterminated group in URL pattern constructor string parser"
+    instruction: |
+      In `constructor_string_parser<regex_provider>::parse`
+      (`include/ada/url_pattern_helpers-inl.h`), the branch that handles an
+      opening `{` increments `group_depth` and advances the token index but
+      then falls through into the following "group depth greater than 0"
+      branch in the same iteration. The end token is consequently consumed
+      as group content, so the trailing component is never captured or
+      compiled and silently falls back to the `*` wildcard instead of the
+      pattern being rejected.
+
+      Make that branch finish the iteration after advancing the token
+      index.
+
+      Expected: `ada::parse_url_pattern` rejects each of
+      `https://example.com/a{`, `https://example.com/{`,
+      `https://example.com{`, `https://example.com:80/a{`,
+      `https://example.com/a?q{`, `https://example.com/a#f{`. A balanced
+      group is unaffected: `https://example.com/a{b}` still parses, with
+      hostname `example.com` and pathname `/ab`.
+
+      Add a `TEST(wpt_urlpattern_tests, ...)` to
+      `tests/wpt_urlpattern_tests.cpp`.
+    gold_sha: 8942938b89abe18176167abc4a8dc962e82d1be2
+    pr_url: https://github.com/ada-url/ada/pull/1187
+    test_paths:
+      - tests/wpt_urlpattern_tests.cpp
+    test_command: |
+      cmake --build build --target wpt_urlpattern_tests -j"$(nproc)" && (cd build/tests && ./wpt_urlpattern_tests)
+
+  - name: "Report capture groups for empty input in regex_search"
+    instruction: |
+      `std_regex_provider::regex_search` in `src/url_pattern_regex.cpp`
+      returns an empty match vector as soon as the input string is empty, on
+      the assumption that an empty input cannot produce groups. That is
+      wrong: a compiled component such as `(x*)` matches the empty string
+      and captures it, and an optional `:a?` leaves its group undefined but
+      still present. These go through the compiled-regex path rather than
+      the `FULL_WILDCARD` fast path, so the group values must be extracted
+      for empty input exactly as for non-empty input. A successful search
+      always leaves the full match at index 0, so the
+      `match_result.empty()` guard is the only one needed.
+
+      Drop the empty-input condition from that early return.
+
+      Expected: a pattern built from `url_pattern_init` with
+      `search = "(x*)"`, exec'd against an input whose `search` is `""`,
+      yields a result that has a value; its `search.groups` has exactly one
+      entry and `groups["0"]` equals `""`. A pattern with `search = ":a?"`
+      against the same empty input yields one group `"a"` that holds no
+      value (undefined, not absent).
+
+      Add a `TEST(wpt_urlpattern_tests, ...)` to
+      `tests/wpt_urlpattern_tests.cpp`.
+    gold_sha: 308110b26b32d12db492d460a41e57932366269d
+    pr_url: https://github.com/ada-url/ada/pull/1188
+    test_paths:
+      - tests/wpt_urlpattern_tests.cpp
+    test_command: |
+      cmake --build build --target wpt_urlpattern_tests -j"$(nproc)" && (cd build/tests && ./wpt_urlpattern_tests)
+
+  - name: "Keep braces around a prefixed part in generate_pattern_string"
+    instruction: |
+      `generate_pattern_string` in `src/url_pattern_helpers.cpp` decides
+      whether a part needs braces. Its `needs_grouping` condition only
+      compares `part.prefix[0]` against the options' prefix code point when
+      that options prefix is non-empty. Only the pathname options carry a
+      prefix code point (`/`); for every other component the options prefix
+      is empty, so a part that has a prefix loses its braces on
+      serialization and the serialized component no longer recompiles to
+      the same component.
+
+      Change the condition so that a non-empty part prefix requires
+      grouping whenever the options prefix is empty **or** differs from
+      `part.prefix[0]`.
+
+      Expected: with `url_pattern_init.hostname = "{-:e}?.example.com"`,
+      `get_hostname()` is `{-:e}?.example.com`; the optional modifier
+      applies to the whole group, so `test("https://-.example.com/")` is
+      false while `test("https://.example.com/")` is true. With
+      `search = "{a:x}?"`, `get_search()` is `{a:x}?` and reparsing that
+      serialization as a new pattern's search yields the same value.
+      Pathname is unaffected: `pathname = "/a{/:b}?"` still serializes to
+      `/a/:b?`.
+
+      Add a `TEST(wpt_urlpattern_tests, ...)` to
+      `tests/wpt_urlpattern_tests.cpp`.
+    gold_sha: 95608e55bc9d469d44631f35200cad6c24bf4551
+    pr_url: https://github.com/ada-url/ada/pull/1191
+    test_paths:
+      - tests/wpt_urlpattern_tests.cpp
+    test_command: |
+      cmake --build build --target wpt_urlpattern_tests -j"$(nproc)" && (cd build/tests && ./wpt_urlpattern_tests)
+
+  - name: "Treat file as a special scheme in URL pattern protocol check"
+    instruction: |
+      `protocol_component_matches_special_scheme` in
+      `include/ada/url_pattern_helpers-inl.h` enumerates the special
+      schemes in two places: the exact-match branch compares
+      `component.exact_match_value` against a list, and the regex branch
+      runs `regex_match` against the same list. Both lists omit `file`,
+      which is a special scheme. As a result a protocol component that
+      matches `file` compiles its pathname with the non-special options, so
+      segment wildcards do not stop at `/` and an absent pathname does not
+      default to `/`.
+
+      Add `file` to both lists.
+
+      Expected: `file://host/:x` and `{file}://host/:x` both parse; for
+      each, `test("file://host/a")` is true and `test("file://host/a/b")`
+      is false. And `file://host?q` parses with `get_pathname()` equal to
+      `/`.
+
+      Add a `TEST(wpt_urlpattern_tests, ...)` to
+      `tests/wpt_urlpattern_tests.cpp`.
+    gold_sha: e8a0a840681cfca0122b0ab13b7eb6a2c62525d0
+    pr_url: https://github.com/ada-url/ada/pull/1190
+    test_paths:
+      - tests/wpt_urlpattern_tests.cpp
+    test_command: |
+      cmake --build build --target wpt_urlpattern_tests -j"$(nproc)" && (cd build/tests && ./wpt_urlpattern_tests)
+
+  - name: "Account for IDNA expansion in can_parse size shortcut"
+    instruction: |
+      `can_parse` in `src/implementation.cpp` must agree with
+      `parse().has_value()`, including the post-normalization max-length
+      check. It short-circuits to a validation-only parse whenever the
+      input (plus base, if any) fits in `max_length / 3`, justified by
+      percent-encoding expanding a byte at most 3x. IDNA expands more: the
+      3-byte UTF-8 label `U+337F` becomes the 17-byte `xn--6oqv20b1zgzxr`,
+      so a dotted host sustains about 4.5x once the label separators are
+      amortized. `can_parse` therefore returns true for inputs that `parse`
+      rejects.
+
+      Change the bound to `max_length / 5` in both places — the
+      absolute-URL hot path and the combined input+base path — and update
+      the accompanying comments to state the IDNA expansion factor.
+
+      Expected: with the fixture's small limit in force, a `ws://` URL
+      whose host is 60 `U+337F` labels (input 245 bytes; normalized 1085
+      bytes, over the limit) must have `ada::parse` fail and
+      `ada::can_parse` return false, while the input itself is under the
+      limit.
+
+      Add a `TYPED_TEST` to `tests/max_input_length.cpp`.
+    gold_sha: 16a5772360d4b901fc3b35ee1ee6947782ab9491
+    pr_url: https://github.com/ada-url/ada/pull/1189
+    test_paths:
+      - tests/max_input_length.cpp
+    test_command: |
+      cmake --build build --target max_input_length -j"$(nproc)" && (cd build/tests && ./max_input_length)
+
+  - name: "Enforce max input length on href_from_file and search params"
+    instruction: |
+      `get_max_input_length()` currently only bounds `ada::parse` and the
+      setters. Two other entry points take untrusted input and ignore it.
+
+      In `src/implementation.cpp`, `href_from_file` must refuse an input
+      path longer than the limit by returning an empty string, and —
+      because path percent-encoding can still expand the result — must also
+      return empty when the built `"file://" + path` exceeds the limit.
+
+      In `include/ada/url_search_params-inl.h`,
+      `url_search_params::initialize` must return early (leaving the object
+      empty) when the query string is longer than the limit. Declare
+      `uint32_t get_max_input_length();` locally in namespace `ada` for
+      this. The cap applies to construction and to `reset`; individual
+      `append`/`set` calls stay uncapped.
+
+      Document both in `include/ada/implementation.h` and
+      `include/ada/url_search_params.h`.
+
+      Expected, with the small limit set: `href_from_file` of a path of
+      `limit + 1` `'a'` characters is empty; a path of 339 spaces plus
+      `'y'` is under the limit but encodes past it, so the result is empty,
+      while 100 spaces plus `'y'` succeeds, stays under the limit and
+      starts with `file://`; `href_from_file("/home/user/file.txt")` is
+      `file:///home/user/file.txt`. An over-long query gives a
+      `url_search_params` with `size() == 0` and empty `to_string()`;
+      `reset` with an over-long query leaves size 0; `"foo=bar&baz=qux"`
+      gives size 2 with `get("foo") == "bar"`. Restore the limit to
+      `numeric_limits<uint32_t>::max()` in the tests.
+
+      Add `TEST(max_input_length_helpers, ...)` cases to
+      `tests/max_input_length.cpp`.
+    gold_sha: c041a5e8268f4f3d096d35c6d176832796c0a729
+    pr_url: https://github.com/ada-url/ada/pull/1193
+    test_paths:
+      - tests/max_input_length.cpp
+    test_command: |
+      cmake --build build --target max_input_length -j"$(nproc)" && (cd build/tests && ./max_input_length)

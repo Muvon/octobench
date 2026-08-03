@@ -1,0 +1,198 @@
+id: longrun_python_mypy
+name: mypy membership/match narrowing hardening (5-turn sequence)
+language: python
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/python/mypy
+  base_sha: 0007c5267287ba47a3e4acc022ecb149fcf702e2
+  prs: [21411, 21405, 21456, 21461, 21706]
+turns:
+  - name: "Fix negative narrowing for containers"
+    instruction: |
+      Membership narrowing is currently too eager on the negative branch. For
+      `x in c` / `x not in c` we derive the item type from c's declared type
+      and then narrow x in *both* branches. That is unsound: the container may
+      be empty, or may simply not hold the value, so a failing membership test
+      tells us nothing about x.
+
+      Restrict it. The branch where the test fails may only be narrowed when
+      the container is a fixed-length tuple and every one of its item types is
+      a singleton for equality purposes — e.g. `x not in (None,)` may narrow.
+      In every other case, drop the negative type map and leave x at its
+      declared type. The change lives in `mypy/checker.py`.
+
+      Concretely, this must type-check clean under --warn-unreachable, with
+      `colors: list[Color]` for an Enum Color:
+
+          counts: dict[Color, int] = {}
+          for color in colors:
+              if color not in counts:
+                  counts[color] = 0
+              counts[color] += 1
+
+      Today the trailing `counts[color] += 1` is flagged as unreachable,
+      because the enum member gets narrowed away on the negative branch of the
+      `not in` test. Add a check-narrowing case named
+      testNegativeNarrowingInContainer covering it.
+    gold_sha: b7a8bab4e5385adf2457f6644aa70a8fceab9113
+    pr_url: https://github.com/python/mypy/pull/21411
+    test_paths:
+      - test-data/unit/check-narrowing.test
+    test_command: |
+      python -m pytest -q -o addopts='' "mypy/test/testcheck.py::TypeCheckSuite::check-narrowing.test::testNegativeNarrowingInContainer"
+
+  - name: "Narrow match captures based on previous cases"
+    instruction: |
+      Capture patterns in `match` statements are validated against the
+      declared type of the captured name before the subject has been narrowed
+      by the preceding cases. That produces spurious "Incompatible types in
+      capture pattern" errors when the earlier cases have already excluded the
+      offending members.
+
+      Move the compatibility check (in `mypy/checker.py`, visit_match_stmt) so
+      it runs per case, against the type the pattern actually captures at that
+      point, and keep the existing behaviour of dropping the binding from the
+      type map when it genuinely conflicts. A case guarded by a condition mypy
+      cannot prove always holds must still count as possibly not taken, so it
+      must not narrow the subject for later cases.
+
+      With --strict-equality --warn-unreachable, for `x: int | None` and
+      `y: int`:
+
+        * `case None:` then `case y:` → no error; y reveals as "builtins.int".
+        * `case None if cond:` (cond: bool) then `case y:` → the capture line
+          reports 'Incompatible types in capture pattern (pattern captures
+          type "int | None", variable has type "int")'; y still reveals as
+          "builtins.int".
+        * `case None if True:` then `case y:` → no error; y reveals as
+          "builtins.int".
+        * `case None if False:` → its body is reported as unreachable, and the
+          following `case y:` reports the incompatible-capture error above.
+
+      Add this as testMatchCapturePatternAfterPreviousCase in the 3.10 test
+      data.
+    gold_sha: e95ea81a5b9415a9eca5c218995b13325fb52513
+    pr_url: https://github.com/python/mypy/pull/21405
+    test_paths:
+      - test-data/unit/check-python310.test
+    test_command: |
+      python -m pytest -q -o addopts='' "mypy/test/testcheck.py::TypeCheckSuite::check-python310.test::testMatchCapturePatternAfterPreviousCase"
+
+  - name: "Improve negative narrowing for membership checks on tuples"
+    instruction: |
+      Extend membership narrowing so a fixed-length tuple is treated as the
+      set of its item types rather than being collapsed to a single item type.
+
+      When the right operand has a tuple type with no unpacked element, run
+      the existing identity/equality narrowing once per item and combine:
+      union the positive maps, and meet the negative maps, contributing to the
+      negative side only from items that are singletons for equality. Apply
+      the same literal-coercion rule the equality path already uses before
+      narrowing each item. Tuples containing an unpack, homogeneous tuples,
+      lists, sets and everything else keep today's behaviour: positive
+      narrowing only. The change lives in `mypy/checker.py`.
+
+      With --strict-equality --warn-unreachable and x: Literal['a', 'b', 'c']:
+
+        * t: tuple[Literal['a'], Literal['b']] → `x in t` reveals
+          "Literal['a'] | Literal['b']", else reveals "Literal['c']";
+          `x not in t` is the mirror image.
+        * t: tuple[Literal['a'], int] → `x in t` reveals "Literal['a']", else
+          reveals "Literal['b'] | Literal['c']".
+        * t: tuple[Literal['a', 'b']] → `x in t` reveals "Literal['a'] |
+          Literal['b']", else stays "Literal['a'] | Literal['b'] |
+          Literal['c']".
+        * t: tuple[Literal['a', 'b'], ...], list[Literal['a', 'b']] and
+          set[Literal['a', 'b']] behave the same way: positive narrowing only.
+        * A tuple display, `x in ('a', 'b')`, narrows positively to
+          "Literal['a'] | Literal['b']" and must leave the else branch
+          unnarrowed.
+
+      Cover these as testNarrowLiteralInLiteralContainer in
+      check-narrowing.test, and rename the existing
+      testTypeNarrowingStringInLiteralContainer case to
+      testNarrowStringInLiteralContainer. The tuple cases in
+      check-isinstance.test (testNarrowTypeAfterInTuple) and
+      check-typevar-tuple.test (testVariadicTupleCollectionCheck) need
+      rewriting into function scope with modern union syntax; their revealed
+      types are unchanged.
+    gold_sha: a9008315ef56aa3843b957d372989f455acdd7bb
+    pr_url: https://github.com/python/mypy/pull/21456
+    test_paths:
+      - test-data/unit/check-narrowing.test
+      - test-data/unit/check-isinstance.test
+      - test-data/unit/check-typevar-tuple.test
+    test_command: |
+      python -m pytest -q -o addopts='' "mypy/test/testcheck.py::TypeCheckSuite::check-narrowing.test::testNarrowLiteralInLiteralContainer" "mypy/test/testcheck.py::TypeCheckSuite::check-narrowing.test::testNarrowStringInLiteralContainer" "mypy/test/testcheck.py::TypeCheckSuite::check-isinstance.test::testNarrowTypeAfterInTuple" "mypy/test/testcheck.py::TypeCheckSuite::check-typevar-tuple.test::testVariadicTupleCollectionCheck"
+
+  - name: "Narrow membership in statically known containers"
+    instruction: |
+      Membership narrowing only engages when the container's *type* tells us
+      its contents. Extend it to containers written out literally at the
+      comparison site.
+
+      When the right operand is a list, set or dict display, take the item
+      types (keys, for a dict) from the element expressions themselves and
+      feed them through the same per-item narrowing that fixed-length tuples
+      already use. Bail out to the old item-type behaviour if the display
+      contains a `*` unpacking, or `**` for a dict, since the extra elements
+      are unknown. Look through a walrus around the container expression. The
+      change lives in `mypy/checker.py`.
+
+      With --strict-equality --warn-unreachable and x: Literal['a', 'b', 'c']:
+
+        * `x in ['a', 'b']`, `x in {'a', 'b'}` and `x in {'a': 0, 'b': 1}`
+          each reveal "Literal['a'] | Literal['b']" in the positive branch,
+          and leave the else branch at "Literal['a'] | Literal['b'] |
+          Literal['c']".
+        * `x in ['a', 'b', *[]]`, `x in {'a', 'b', *[]}` and
+          `x in {'a': 0, 'b': 1, **{}}` narrow neither branch.
+        * `x in t` for t: dict[Literal['a', 'b'], int] still reports
+          'Unsupported operand types for in ("Literal['a', 'b', 'c']" and
+          "dict[Literal['a', 'b'], int]")' and still reveals "Literal['a'] |
+          Literal['b']" positively.
+
+      Extend testNarrowLiteralInLiteralContainer with these. The redundant
+      empty [out] sections on the container cases in check-isinstance.test can
+      go.
+    gold_sha: d2b023417be30efb44c6cbe60530c956069ff70d
+    pr_url: https://github.com/python/mypy/pull/21461
+    test_paths:
+      - test-data/unit/check-narrowing.test
+      - test-data/unit/check-isinstance.test
+    test_command: |
+      python -m pytest -q -o addopts='' "mypy/test/testcheck.py::TypeCheckSuite::check-narrowing.test::testNarrowLiteralInLiteralContainer"
+
+  - name: "Fix custom equality handling for membership narrowing in static containers"
+    instruction: |
+      Narrowing a membership test against a statically known container
+      coerces each element to its literal type before comparing. That
+      coercion assumes identity semantics, which is wrong as soon as the
+      element's type defines its own __eq__: `x in [E.foo, E.bar]` can
+      succeed for a value that equals neither member under default equality.
+
+      Skip the literal coercion for elements whose type carries a custom
+      equality implementation, so those comparisons fall back to the
+      unnarrowed behaviour. The checker already has a predicate for detecting
+      custom __eq__; reuse it. The change lives in `mypy/checker.py`.
+
+      With --strict-equality --warn-unreachable, given an Enum E with members
+      foo and bar that overrides __eq__ to return bool, and x: int:
+
+          if x in [E.foo, E.bar]:
+              reveal_type(x)   # "builtins.int"
+
+      That is: no narrowing of x, and no unreachable-code report on the body.
+      Enums without a custom __eq__ must keep narrowing exactly as they do
+      today.
+
+      Add this as testNarrowCustomEqEnumInLiteralContainer in
+      check-narrowing.test.
+    gold_sha: 77ccc7a4d0e15aa0b7f905e348e1c66e37c5d646
+    pr_url: https://github.com/python/mypy/pull/21706
+    test_paths:
+      - test-data/unit/check-narrowing.test
+    test_command: |
+      python -m pytest -q -o addopts='' "mypy/test/testcheck.py::TypeCheckSuite::check-narrowing.test::testNarrowCustomEqEnumInLiteralContainer"

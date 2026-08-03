@@ -1,0 +1,184 @@
+id: longrun_js_nest
+name: nest DI container fixes (5-turn sequence)
+language: js
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/nestjs/nest
+  base_sha: 6dd6e979e033364523d96649236b7e481efdc551
+  prs: [16967, 16987, 16993, 17009, 17393]
+turns:
+  - name: "Identify decorator type in invalid-class-module error"
+    instruction: |
+      A class decorated with `@Injectable()`, `@Controller()` or `@Catch()`
+      that is mistakenly listed in a module's `imports` array currently
+      produces one generic message that lists all three decorators and tells
+      the user only to remove the class. We know exactly which predicate
+      matched, so say so and name the array the class actually belongs in.
+
+      Give `USING_INVALID_CLASS_AS_A_MODULE_MESSAGE` (in
+      `packages/core/errors/messages.ts`) a third parameter,
+      `classKind: 'provider' | 'controller' | 'filter'`. With `Q` standing
+      for the instance name wrapped in double quotes, the message body
+      becomes exactly one of:
+      - controller: `Q is decorated with @Controller() and cannot appear in
+        the "imports" array of a module. Please move Q to the "controllers"
+        array of the importing module instead.`
+      - provider: `Q is decorated with @Injectable() and cannot appear in
+        the "imports" array of a module. Please move Q to the "providers"
+        array of the importing module instead.`
+      - filter: `Q is decorated with @Catch() and cannot appear in the
+        "imports" array of a module. Please move Q to the "providers" array
+        (using the APP_FILTER token to apply it globally) or apply it via
+        @UseFilters() instead.`
+
+      followed by a blank line and the existing `Scope [...]` line,
+      unchanged.
+
+      Thread the kind through `InvalidClassModuleException`'s constructor
+      (packages/core/errors/exceptions/invalid-class-module.exception.ts),
+      and in the dependencies scanner (packages/core/scanner.ts) replace the
+      combined injectable/controller/filter condition with three separate
+      checks so the exception reports the predicate that actually matched.
+    gold_sha: dc0b1c02338ebe6c5f4f87716155ddf8a15fdd0b
+    pr_url: https://github.com/nestjs/nest/pull/16967
+    test_paths:
+      - packages/core/test/errors/test/messages.spec.ts
+    test_command: |
+      node --loader ts-node/esm ./node_modules/mocha/bin/mocha.js packages/core/test/errors/test/messages.spec.ts
+
+  - name: "Include received value type in invalid-module error"
+    instruction: |
+      `INVALID_MODULE_MESSAGE` (in `packages/core/errors/messages.ts`) tells
+      the user that an unexpected value showed up at index *i* of a module's
+      `imports` array but never says what the value was, which makes a stray
+      `null`, `0`, `false` or `''` from a conditional-imports expression
+      hard to spot.
+
+      Add a fourth parameter, `receivedValue: unknown`, and insert one line
+      directly after the existing `Received an unexpected value at index [i]
+      of the X "imports" array.` line (the blank line and `Scope [...]`
+      still follow):
+
+      `The received value \`V\` is of type "T".`
+
+      where V and T are derived as: `null` → V is `null`, T is `null`; a
+      string → V is the string wrapped in double quotes, T is `string`;
+      anything else → V is `String(value)` and T is `typeof value`. Note
+      `null` must not fall through to `typeof`, which would report `object`.
+
+      Propagate the parameter through `InvalidModuleException`
+      (packages/core/errors/exceptions/invalid-module.exception.ts), and
+      have the scanner pass the offending entry when it throws for a
+      falsy-but-defined import.
+
+      Tests exercise `null`, `false`, `0` and the empty string against
+      `INVALID_MODULE_MESSAGE(CatsModule, 0, [AppModule, CatsModule],
+      value)`, comparing the whole message for exact equality.
+    gold_sha: d92b8379fb0b2713c89aa4d7678d6473d6127b89
+    pr_url: https://github.com/nestjs/nest/pull/16987
+    test_paths:
+      - packages/core/test/errors/test/messages.spec.ts
+    test_command: |
+      node --loader ts-node/esm ./node_modules/mocha/bin/mocha.js packages/core/test/errors/test/messages.spec.ts
+
+  - name: "Fix in-flight request-scoped factory injection"
+    instruction: |
+      Under concurrent in-flight requests, a request-scoped factory provider
+      can be invoked with `undefined` dependencies.
+
+      `resolveConstructorParams` (in `packages/core/injector/injector.ts`)
+      takes a fast path whenever `wrapper.getCtorMetadata()` returns
+      anything at all and the context is not the static one, feeding that
+      cached array straight into `loadCtorMetadata`. While another request
+      is still registering metadata for the same wrapper, that array can be
+      sparse — holes at some indices, or a length that does not match the
+      real dependency count — and those holes reach the factory as
+      `undefined` arguments.
+
+      Only take the fast path when the cached metadata is dense and
+      complete. Compute the expected dependency count as `inject.length`
+      when an explicit inject array is present, otherwise the number of
+      reflected constructor params of the wrapper's metatype, or 0 when
+      there is no metatype; require the metadata length to equal it and no
+      element to be `undefined`. Anything else falls back to resolving each
+      parameter individually. Note the reflection helpers are now called
+      with a possibly non-`Type` metatype, so relax their signatures to
+      accept `Type<unknown> | Function`.
+
+      Test: stub `getCtorMetadata` to return a one-element array whose
+      `length` has been forced to 2, call `resolveConstructorParams` with a
+      two-token dependency list and a non-static context id, and assert
+      `loadCtorMetadata` was never called.
+    gold_sha: 9aa9d1f3bedb1b5dd4860037c14ebd29fccc4453
+    pr_url: https://github.com/nestjs/nest/pull/16993
+    test_paths:
+      - packages/core/test/injector/injector.spec.ts
+    test_command: |
+      node --loader ts-node/esm ./node_modules/mocha/bin/mocha.js packages/core/test/injector/injector.spec.ts
+
+  - name: "Reset dependency-tree cache on metadata changes"
+    instruction: |
+      `InstanceWrapper` (in `packages/core/injector/instance-wrapper.ts`)
+      memoises `isTreeStatic` and `isTreeDurable` the first time the
+      dependency tree is introspected. Metadata can still arrive afterwards
+      — `addCtorMetadata`, `addPropertiesMetadata` and `addEnhancerMetadata`
+      are all called during scanning, sometimes after something has already
+      asked whether the tree is static. A wrapper introspected before a
+      REQUEST-scoped dependency was attached keeps reporting a static tree,
+      and so does every wrapper above it, so request-scoped providers get
+      treated as singletons.
+
+      Registering any of those three kinds of metadata must invalidate the
+      cached tree state on the wrapper and propagate the invalidation
+      upwards to every wrapper that has previously registered this one as a
+      dependency. Track those reverse edges outside the wrapper's own
+      metadata (a module-level `WeakMap` from wrapper to a set of parents is
+      enough, so nothing keeps wrappers alive), and guard the upward walk
+      against cycles with a visited set keyed by the wrapper's instance id.
+
+      Tests:
+      - A wrapper reports `isDependencyTreeStatic()` true, then
+        `addCtorMetadata(0, new InstanceWrapper({ scope: Scope.REQUEST }))`
+        — it must now report false.
+      - Same, but transitively: a wrapper with an already-attached plain
+        dependency reports true; attaching a REQUEST-scoped wrapper to that
+        dependency must flip the parent to false.
+    gold_sha: c0eb285dd4443c3d29bc4212ea55c53d2480e8a2
+    pr_url: https://github.com/nestjs/nest/pull/17009
+    test_paths:
+      - packages/core/test/injector/instance-wrapper.spec.ts
+      # The PR also rewrote the integration injector spec, which an orphan
+      # upstream commit (fda0cf302f) had touched — listing it here excludes it
+      # from the gold apply (it is checked out and restored, never run).
+      - integration/injector/e2e/injector.spec.ts
+    test_command: |
+      node --loader ts-node/esm ./node_modules/mocha/bin/mocha.js packages/core/test/injector/instance-wrapper.spec.ts
+
+  - name: "Resolve barrier immediately when target count is zero"
+    instruction: |
+      `Barrier(targetCount)` (in `packages/core/helpers/barrier.ts`) hands
+      out a promise that resolves once `signal()` has been called
+      `targetCount` times. Two edges are wrong.
+
+      A barrier constructed with a target of zero has nothing to wait for,
+      but nothing ever calls `signal()` either, so `wait()` never settles
+      and the caller deadlocks. Resolve the promise in the constructor when
+      the target count is zero.
+
+      And `signal()` compares the running count to the target with strict
+      equality, so an extra signal — which happens when a participant
+      retries or a caller is defensive — steps past the exact match without
+      resolving. Compare with `>=` instead, so an already-resolved barrier
+      stays resolved and a late extra signal is a harmless no-op.
+
+      Tests: `new Barrier(0).wait()` is fulfilled; and signalling an
+      ordinary barrier `targetCount + 1` times leaves the internal resolve
+      spy recorded as called and `wait()` fulfilled.
+    gold_sha: 0011b830c20dbc928ff88e198ae6d891fa4dbe2d
+    pr_url: https://github.com/nestjs/nest/pull/17393
+    test_paths:
+      - packages/core/test/helpers/barrier.spec.ts
+    test_command: |
+      node --loader ts-node/esm ./node_modules/mocha/bin/mocha.js packages/core/test/helpers/barrier.spec.ts

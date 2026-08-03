@@ -1,0 +1,169 @@
+id: longrun_js_vue
+name: vue reactivity core fixes (5-turn sequence)
+language: js
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/vuejs/core
+  base_sha: 7f46fd411b4e3f75ca755ee1318ea8e9aff43f56
+  prs: [14778, 14902, 14914, 14964, 15084]
+turns:
+  - name: "Prevent orphan effects created in a stopped scope"
+    instruction: |
+      When a component's `setup()` contains a top-level `await`, the compiler
+      splits it around `withAsyncContext()` and the `__restore()` callback,
+      which re-installs the component's effect scope as the active scope when
+      the promise settles. If the component was unmounted, or its `<Suspense>`
+      branch was replaced, while that promise was still pending, the scope has
+      already been stopped by then — but `__restore()` re-activates it anyway,
+      so anything reactive created in the second half of `setup()` becomes an
+      orphan: owned by no live scope, yet still subscribing to dependencies
+      and firing forever.
+
+      Make reactive primitives created under an already-stopped active scope
+      inert at construction time (in `packages/reactivity/src/effect.ts` and
+      `packages/reactivity/src/effectScope.ts`):
+      - A `ReactiveEffect` constructed while `activeEffectScope` exists but is
+        inactive must not be pushed onto that scope and must start out without
+        its active flag, so it never tracks dependencies and never re-runs.
+      - An undetached `EffectScope` constructed under an inactive parent must
+        not attach itself to the parent (no parent link, no index in
+        `parent.scopes`) and must itself be inactive, so watchers registered
+        inside its `run()` never fire.
+      - That second case is inactive by construction rather than by an
+        explicit `stop()`, so calling `run()` on it must NOT print the
+        dev-mode `cannot run an inactive effect scope.` warning; a scope that
+        was explicitly stopped must still warn.
+
+      Cover four scenarios where a `watch(stateRef, spy)` is registered after
+      the awaited promise resolves: the pending branch is replaced before it
+      resolves, the whole boundary is unmounted, the branch is switched back
+      and forth repeatedly (all pending resolvers settled at the end), and
+      the watcher is registered inside a nested `effectScope().run()`. In
+      every case, mutating `stateRef` afterwards must leave the spy uncalled.
+    gold_sha: c8e2d4adc9112d2529de0434acc1188dfc399bf4
+    pr_url: https://github.com/vuejs/core/pull/14778
+    test_paths:
+      - packages/runtime-core/__tests__/components/Suspense.spec.ts
+    test_command: |
+      pnpm vitest run --project unit packages/runtime-core/__tests__/components/Suspense.spec.ts
+
+  - name: "Preserve watch callback return value when wrapped for once: true"
+    instruction: |
+      `watch()` with `once: true` (in `packages/reactivity/src/watch.ts`)
+      replaces the user callback with a wrapper that invokes it and then
+      stops the watch handle. The wrapper swallows the callback's return
+      value.
+
+      That matters when a `call` option is supplied: the scheduler routes
+      every callback invocation through `call`, and integrations use the
+      returned value to attach error handling — typically
+      `fn.apply(null, args).catch(handler)` for async callbacks. With
+      `once: true` the wrapper returns `undefined`, so a rejected promise
+      from a one-shot callback escapes unhandled while the identical
+      non-once callback is handled correctly.
+
+      Have the once-wrapper return whatever the original callback returned,
+      while still stopping the handle after the call.
+
+      Test with a `call` implementation that recurses over array-valued `fn`
+      and otherwise does `fn.apply(null, args).catch(onError)`: an async
+      callback that throws `'oops in watch'` on a plain watcher must reach
+      `onError` once, and an async callback that throws `'oops in once
+      watch'` on a `{ once: true }` watcher must reach the same handler as
+      the second call.
+    gold_sha: 450a8a8e45520f30fe8343c5016a777d888e53fc
+    pr_url: https://github.com/vuejs/core/pull/14902
+    test_paths:
+      - packages/reactivity/__tests__/watch.spec.ts
+    test_command: |
+      pnpm vitest run --project unit packages/reactivity/__tests__/watch.spec.ts
+
+  - name: "Trigger immediate callback for empty watch sources"
+    instruction: |
+      `watch([], cb, { immediate: true })` never invokes the callback.
+      Watching an empty array of sources is legitimate — it happens whenever
+      the source list is computed and happens to be empty — and
+      `immediate: true` promises exactly one call with the initial values.
+
+      In `packages/reactivity/src/watch.ts`, the scheduler already flags the
+      first run via the `immediateFirstRun` parameter, but the guard that
+      decides whether to actually invoke the callback only passes when
+      `deep` or `forceTrigger` is set, or when the multi-source comparison
+      reports a changed entry. With zero sources there is nothing to compare,
+      so the guard fails and the immediate call is dropped.
+
+      Make the immediate first run bypass the change comparison: if it is the
+      immediate first run, always invoke the callback.
+
+      Test: `watch([], spy, { immediate: true })` synchronously calls the spy
+      exactly once, with the new value `[]`, the old value `[]`, and a
+      cleanup-registration function as the third argument.
+    gold_sha: 1f2ca7e4837b1b0de0b91048fffdb03710c0b03e
+    pr_url: https://github.com/vuejs/core/pull/14914
+    test_paths:
+      - packages/runtime-core/__tests__/apiWatch.spec.ts
+    test_command: |
+      pnpm vitest run --project unit packages/runtime-core/__tests__/apiWatch.spec.ts
+
+  - name: "Avoid triggering effects when a reactive set fails"
+    instruction: |
+      The mutable `set` trap on `reactive()` proxies (in
+      `packages/reactivity/src/baseHandlers.ts`) calls `Reflect.set` and then
+      fires the ADD/SET trigger whenever the trap's target is the raw
+      receiver. It ignores the boolean that `Reflect.set` returns.
+
+      When the underlying write cannot happen — a non-writable own property,
+      a setter-less accessor — `Reflect.set` returns `false` and, because the
+      proxy runs in strict-mode module code, the assignment throws a
+      `TypeError`. We nevertheless notify subscribers, so effects and
+      watchers re-run for a mutation that never took place and read back the
+      unchanged value.
+
+      Only trigger when the underlying set actually succeeded; keep the
+      existing prototype-chain guard (trigger only when the trap target is
+      the raw receiver) unchanged.
+
+      Test: an object with a non-writable, configurable `foo: 1` wrapped in
+      `reactive()`, plus an effect that reads `observed.foo`. Assigning
+      `observed.foo = 2` throws `TypeError`, the effect's captured value
+      stays `1`, and the effect must have run exactly once (the initial run
+      only).
+    gold_sha: e450973eabc0038f398344b981acd8759c246c50
+    pr_url: https://github.com/vuejs/core/pull/14964
+    test_paths:
+      - packages/reactivity/__tests__/reactive.spec.ts
+    test_command: |
+      pnpm vitest run --project unit packages/reactivity/__tests__/reactive.spec.ts
+
+  - name: "Handle effect removal during scope stop"
+    instruction: |
+      `EffectScope.pause()`, `resume()` and `stop()` (in
+      `packages/reactivity/src/effectScope.ts`) walk `this.scopes` and
+      `this.effects` with an index and a length cached before the loop. The
+      callbacks they invoke can mutate those very arrays: an `onScopeDispose`
+      handler that stops a sibling scope, or a watcher callback that stops
+      another watcher registered in the same scope. Removing an entry shifts
+      the remainder down, so the loop skips live entries and then indexes
+      past the new end, reading `undefined` and throwing.
+
+      Iterate over a snapshot of each array taken before the walk — in
+      `pause()` for the child scopes, in `resume()` for both the child
+      scopes and the effects, and in `stop()` for the child scopes. Keep the
+      existing bookkeeping that clears `this.scopes` after stopping children.
+
+      Tests:
+      - A parent scope with two children where the first child's
+        `onScopeDispose` stops the second: `parent.stop()` must not throw,
+        and the sibling ends up with `active === false`.
+      - A paused scope containing two `flush: 'sync'` watchers on the same
+        ref, where the first callback stops the second: after mutating the
+        ref, `scope.resume()` must not throw, the first callback ran exactly
+        once, the second never ran, and `scope.effects` has length 1.
+    gold_sha: 378f9783248a4a4f20781d665d4f7089f39cae6e
+    pr_url: https://github.com/vuejs/core/pull/15084
+    test_paths:
+      - packages/reactivity/__tests__/effectScope.spec.ts
+    test_command: |
+      pnpm vitest run --project unit packages/reactivity/__tests__/effectScope.spec.ts
