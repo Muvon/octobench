@@ -3,7 +3,7 @@ set -eo pipefail
 cd /home/box/work/muvon/octobench
 eval "$(grep "^export " ~/.zshrc)"
 export OCTOBENCH_JUDGE_MODELS="openrouter:thinkingmachines/inkling-small,openrouter:minimax/minimax-m3,openrouter:deepseek/deepseek-v4-flash-0731"
-export OPENCODE_BIN=/tmp/opencode-1.18.9/opencode
+export OPENCODE_BIN=/tmp/opencode-1.18.12/opencode
 export OPENCODE_CONFIG_JSON=/home/box/work/muvon/octobench/configs/opencode/opencode.json
 # Start after the codex bench finishes (bounded box load / disk).
 while [ ! -f /tmp/CODEX-BENCH-DONE ]; do sleep 120; done
