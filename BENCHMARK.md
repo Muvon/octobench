@@ -108,37 +108,46 @@ language), each proven fail-to-pass per turn cumulatively
 branch, interleaved-commit checks) are in `docs/LONGRUN.md`.
 
 <!-- LONGRUN-RESULTS:BEGIN -->
-_Updated 2026-08-04 ~04:20 UTC — claude campaign IN PROGRESS (15/20 sequences
-recorded; simdjson + 4 js pending). Cell = passed/turns · Σ sum of turn final
-scores · cost · total tokens (incl. cache reads) · agent wall time (sum of
-agent invocations; excludes setup/validation/judging). Two claude turns
-(symfony t1, pydantic t5) carry a degenerate zero from one panel judge and
-will be recomputed upward at campaign close._
+_Updated 2026-08-04 06:10 UTC — claude campaign COMPLETE (20/20 sequences,
+2026-08-03/04, claude CLI 2.1.168, agent image octobench-agent). Cell =
+passed/turns · Σ sum of turn final scores · cost · total tokens (incl. cache
+reads) · agent wall time (sum of agent invocations; excludes
+setup/validation/judging). Three turns (symfony t1, pydantic t5, vue t1) had
+an empty-zero verdict from one panel judge (deepseek) recorded before the
+panel filter excluded those; their means were recomputed from the stored
+per-judge verdicts per the panel rule (raw records kept in `results.json`,
+corrected in `results.corrected.json`)._
 
 | sequence (turns) | opus | glm-octomind | gpt56-codex | glm-opencode |
 |---|---|---|---|---|
 | cpp/ada (7) | 7/7 Σ596.2 $8.70 10.7M 20m | — | — | — |
 | cpp/cli11 (8) | 8/8 Σ678.5 $23.76 32.7M 64m | — | — | — |
 | cpp/fmt (7) | 7/7 Σ582.1 $10.69 12.9M 24m | — | — | — |
-| cpp/simdjson (5) | running | — | — | — |
-| js/axios (5) | pending | — | — | — |
-| js/fastify (5) | pending | — | — | — |
-| js/nest (5) | pending | — | — | — |
-| js/vue (5) | pending | — | — | — |
+| cpp/simdjson (5) | 5/5 Σ409.1 $77.34 118.5M 101m | — | — | — |
+| js/axios (5) | 3/5 Σ257.7 $10.85 13.0M 33m | — | — | — |
+| js/fastify (5) | 5/5 Σ422.1 $11.61 14.8M 30m | — | — | — |
+| js/nest (5) | 5/5 Σ421.8 $5.18 5.3M 12m | — | — | — |
+| js/vue (5) | 5/5 Σ421.8 $6.45 6.8M 14m | — | — | — |
 | php/doctrine_orm (6) | 6/6 Σ498.6 $14.17 17.9M 21m | — | — | — |
 | php/guzzle (5) | 4/5 Σ353.6 $24.42 34.3M 40m | — | — | — |
 | php/phpspreadsheet (6) | 6/6 Σ501.8 $15.13 17.9M 67m | — | — | — |
-| php/symfony (5) | 5/5 Σ398.6 $6.53 7.4M 12m | — | — | — |
+| php/symfony (5) | 5/5 Σ425.5 $6.53 7.4M 12m | — | — | — |
 | python/aiohttp (6) | 6/6 Σ500.3 $6.74 7.6M 12m | — | — | — |
 | python/mypy (5) | 5/5 Σ408.8 $18.15 22.1M 73m | — | — | — |
-| python/pydantic (5) | 5/5 Σ392.0 $18.65 24.2M 31m | — | — | — |
+| python/pydantic (5) | 5/5 Σ418.9 $18.65 24.2M 31m | — | — | — |
 | python/pytest (5) | 5/5 Σ413.7 $15.88 21.2M 45m | — | — | — |
 | rust/clap (5) | 5/5 Σ413.7 $12.81 17.0M 25m | — | — | — |
 | rust/gitoxide (6) | 5/6 Σ439.0 $14.75 18.3M 26m | — | — | — |
 | rust/ruff_ty (6) | 5/6 Σ423.7 $45.67 68.6M 203m | — | — | — |
 | rust/tokio (5) | 5/5 Σ421.6 $8.30 8.6M 40m | — | — | — |
 
-- **opus (15/20 sequences so far)**: **84/87 turns passed** · ΣΣ 7022.0 · $244.36 · 321M tokens · 11.7h agent time · 3 genuine validation fails (guzzle t4, gitoxide t2, ruff_ty t6) · session-resume verified on every sequence (single session id per sequence, growing cache reads)
+- **opus (FINAL, 20/20)**: **107/112 turns passed** · ΣΣ 9008.3 · $355.80 ·
+  480M tokens · 14.9h agent time · 5 genuine validation fails (guzzle t4
+  cookie-prefix edge, gitoxide t2 held-out identity case, ruff_ty t6, axios
+  t3+t5 xhr adapter) · session-resume verified on every sequence (single
+  session id across all turns, growing cache reads) · resource outliers:
+  simdjson ($77.34, 118.5M tok) and ruff_ty (3.4h agent time) together = 37%
+  of campaign cost.
 <!-- LONGRUN-RESULTS:END -->
 
 ## What a case is
