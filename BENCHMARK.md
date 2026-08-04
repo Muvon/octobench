@@ -87,6 +87,60 @@ Run artifacts live in `results-full-<provider>/<timestamp>/results.json` and
 trace `provider.raw.jsonl`, setup/quality/validate output, judge verdict)
 alongside.
 
+## Long-run results (multi-turn sequences)
+
+The long-run bench measures something the one-shot table cannot: **how a
+client behaves across a single long working session on one repository**. Each
+sequence replays 5–8 real merged PRs from one repo as consecutive turns in the
+SAME agent session — the client is resumed each turn (its own session memory,
+not a fresh context), asked for the next fix, and every turn is validated and
+judged independently exactly like a one-shot case (held-out gold tests +
+3-model judge panel). A sequence's score is the **sum of its turn finals**, so
+longer sequences can earn more; every sequence has ≥5 turns, making turns 1–5 a
+uniform 20×5 cross-language grid for depth analysis.
+
+Session-resume mechanics per client: claude `--resume <session-id>`, octomind
+`-r <session-name>`, codex `exec resume <id>`; opencode has no resume — it runs
+each turn with fresh context and serves as the no-memory control. Sequences
+live in `cases/dev/longrun/<language>/<repo>/` (20 sequences, 112 turns, 4 per
+language), each proven fail-to-pass per turn cumulatively
+(`scripts/verify_longrun.sh`). Provenance rules (merge-commit golds, same base
+branch, interleaved-commit checks) are in `docs/LONGRUN.md`.
+
+<!-- LONGRUN-RESULTS:BEGIN -->
+_Updated 2026-08-04 ~04:20 UTC — claude campaign IN PROGRESS (15/20 sequences
+recorded; simdjson + 4 js pending). Cell = passed/turns · Σ sum of turn final
+scores · cost · total tokens (incl. cache reads) · agent wall time (sum of
+agent invocations; excludes setup/validation/judging). Two claude turns
+(symfony t1, pydantic t5) carry a degenerate zero from one panel judge and
+will be recomputed upward at campaign close._
+
+| sequence (turns) | opus | glm-octomind | gpt56-codex | glm-opencode |
+|---|---|---|---|---|
+| cpp/ada (7) | 7/7 Σ596.2 $8.70 10.7M 20m | — | — | — |
+| cpp/cli11 (8) | 8/8 Σ678.5 $23.76 32.7M 64m | — | — | — |
+| cpp/fmt (7) | 7/7 Σ582.1 $10.69 12.9M 24m | — | — | — |
+| cpp/simdjson (5) | running | — | — | — |
+| js/axios (5) | pending | — | — | — |
+| js/fastify (5) | pending | — | — | — |
+| js/nest (5) | pending | — | — | — |
+| js/vue (5) | pending | — | — | — |
+| php/doctrine_orm (6) | 6/6 Σ498.6 $14.17 17.9M 21m | — | — | — |
+| php/guzzle (5) | 4/5 Σ353.6 $24.42 34.3M 40m | — | — | — |
+| php/phpspreadsheet (6) | 6/6 Σ501.8 $15.13 17.9M 67m | — | — | — |
+| php/symfony (5) | 5/5 Σ398.6 $6.53 7.4M 12m | — | — | — |
+| python/aiohttp (6) | 6/6 Σ500.3 $6.74 7.6M 12m | — | — | — |
+| python/mypy (5) | 5/5 Σ408.8 $18.15 22.1M 73m | — | — | — |
+| python/pydantic (5) | 5/5 Σ392.0 $18.65 24.2M 31m | — | — | — |
+| python/pytest (5) | 5/5 Σ413.7 $15.88 21.2M 45m | — | — | — |
+| rust/clap (5) | 5/5 Σ413.7 $12.81 17.0M 25m | — | — | — |
+| rust/gitoxide (6) | 5/6 Σ439.0 $14.75 18.3M 26m | — | — | — |
+| rust/ruff_ty (6) | 5/6 Σ423.7 $45.67 68.6M 203m | — | — | — |
+| rust/tokio (5) | 5/5 Σ421.6 $8.30 8.6M 40m | — | — | — |
+
+- **opus (15/20 sequences so far)**: **84/87 turns passed** · ΣΣ 7022.0 · $244.36 · 321M tokens · 11.7h agent time · 3 genuine validation fails (guzzle t4, gitoxide t2, ruff_ty t6) · session-resume verified on every sequence (single session id per sequence, growing cache reads)
+<!-- LONGRUN-RESULTS:END -->
+
 ## What a case is
 
 Each case in `cases/dev/oneshot/<language>/<case>/` reconstructs a real merged PR as a

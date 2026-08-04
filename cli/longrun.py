@@ -611,6 +611,11 @@ def main() -> None:
             )
             all_results.append(result)
 
+            # Flush after every sequence: a multi-day run must not lose
+            # completed records to a late crash, and partial tables read this.
+            with open(run_root / "results.json", "w", encoding="utf-8") as f:
+                json.dump({"results": all_results}, f, indent=2)
+
             agg = result.get("aggregate", {})
             log(
                 f"[longrun] completed sequence={seq_id} provider={pn} "

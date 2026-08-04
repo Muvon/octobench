@@ -161,7 +161,11 @@ def run_judge(prompt_payload: Dict, judge_cfg: Dict, workdir: str) -> Dict:
 
     valid = [
         v for v in verdicts
-        if not v.get("_judge_parse_error") and isinstance(v.get("score"), (int, float))
+        if not v.get("_judge_parse_error")
+        and isinstance(v.get("score"), (int, float))
+        # Empty-zero verdicts (score 0, no reasoning) are failed judgments that
+        # happened to parse — a genuine 0 must say why. Exclude from the mean.
+        and not (float(v["score"]) == 0 and not str(v.get("reasoning") or "").strip())
     ]
     if not valid:
         data = {
