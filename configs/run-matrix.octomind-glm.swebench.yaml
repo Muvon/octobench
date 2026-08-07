@@ -1,3 +1,7 @@
 runs:
   - provider: octomind
     model: glm-5.2
+    # Agent served by ollama.com cloud, not zai. Pricing in models.yaml is zai's
+    # and ollama reports cached:0, so $/solved is NOT comparable across the swap
+    # — read solve rate, tokens and judge instead.
+    provider_model: ollama:glm-5.2
