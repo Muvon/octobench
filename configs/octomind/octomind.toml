@@ -129,6 +129,10 @@ auto_capabilities = true
 # Each key is a capability name, value is the provider to use instead of "default"
 # Example: codesearch = "octocode" → uses capabilities/codesearch/octocode.toml
 # Leave empty to use default providers for all capabilities
+
+# Required field (strict parse). The bench defines no /prompt templates.
+prompts = []
+
 [capabilities]
 # octobench: route websearch to Brave (real npm pkg) — the default `tavily`
 # provider points at @tavily/mcp-server which is not published (npm 404 noise).
@@ -319,7 +323,7 @@ knowledge_retention = 10
 # in-env): an unauthenticated model here makes octomind log "compression failed,
 # continuing session" and skip compaction, so context overgrows past the model's
 # window and the provider rejects with 400 "prompt too long".
-model = "ollama:gpt-oss:120b"
+model = "ollama:kimi-k2.7-code"
 max_tokens = 16000  # Enough for decision + summary
 temperature = 0.3  # Lower temperature for consistent decisions
 top_p = 1.0

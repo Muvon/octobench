@@ -256,6 +256,40 @@ def ensure_workspace(case_dir: Path, run_dir: Path) -> Path:
     return workdir
 
 
+# Offline benchmark: deny octomind's `websearch` capability. Agents were solving
+# by retrieving the upstream PR for the instance rather than deriving the fix,
+# which measures retrieval instead of engineering.
+GUARDRAILS_TOML = """# Offline benchmark environment — injected by octobench.
+[[guard]]
+match   = "websearch"
+message = "Web search is DISABLED in this environment. You are running inside an offline benchmark harness, so external sources (upstream PRs, issue threads, changelogs, blog posts) are unavailable and must not be relied on. Derive the fix from this repository alone: read the code, run the failing tests, and let their behaviour define what correct means. Do not treat any remembered upstream patch as authoritative."
+"""
+
+
+def install_guardrails(executor: Executor) -> None:
+    """Write the deny rule into the case workspace, invisibly to the diff.
+
+    Runs INSIDE the executor, not on the host: setup.sh executes as root in the
+    container, so the workspace and its `.git` are root-owned and a host-side
+    write fails with EPERM.
+
+    `snapshot_files` lists via `git ls-files --exclude-standard`, so registering
+    `.agents/` in `.git/info/exclude` keeps the rule out of both snapshots and
+    therefore out of the recorded diff and the judge's view. Must run AFTER
+    setup.sh, which is what creates the repo. Idempotent: longrun calls this
+    once per turn.
+    """
+    script = (
+        "mkdir -p .agents && cat > .agents/guardrails.toml <<'OCTOBENCH_GUARD'\n"
+        f"{GUARDRAILS_TOML}"
+        "OCTOBENCH_GUARD\n"
+        "if [ -d .git ]; then mkdir -p .git/info && "
+        "{ grep -qxF '.agents/' .git/info/exclude 2>/dev/null || "
+        "echo '.agents/' >> .git/info/exclude; }; fi"
+    )
+    executor.run(["bash", "-lc", script])
+
+
 def build_task_prompt(case: Dict) -> str:
     return (
         f"System:\n{case.get('system_prompt', '')}\n\nInstruction:\n{case.get('instruction', '')}\n"
@@ -655,6 +689,7 @@ def main() -> None:
                     continue
 
                 prompt = build_task_prompt(case)
+                install_guardrails(executor)
                 before = snapshot_files(executor.workspace_host_path())
 
                 session_name = (

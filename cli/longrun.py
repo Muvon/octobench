@@ -26,6 +26,7 @@ from cli.main import (
     default_judge_cfg,
     diff_snapshots,
     ensure_workspace,
+    install_guardrails,
     load_yaml,
     log,
     make_executor,
@@ -185,6 +186,7 @@ def _run_sequence(
             )
 
             prompt = _build_turn_prompt(system_prompt, instruction, is_first)
+            install_guardrails(executor)
             before = snapshot_files(executor.workspace_host_path())
 
             # session_name is stable across turns (set once above).

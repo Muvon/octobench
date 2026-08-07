@@ -216,7 +216,12 @@ def run_instance(instance: Dict, target: Dict, repo_root: Path, models_cfg: Dict
             cfg_text += "\n[taps]\n" + mapping
         repo_config = logs_dir / "octomind.workflow.toml"
         repo_config.write_text(cfg_text)
-    name = f"obsweb-{safe_id(instance_id)[:22]}-{provider_name[:6]}-{int(time.time() * 1000)}"
+    # PID disambiguates: the driver launches reps of the SAME instance concurrently,
+    # so the 22-char instance prefix collides and `time.time()*1000` can land on the
+    # same millisecond — docker then rejects the second with a name conflict and the
+    # rep burns one of its MAXATT attempts on nothing. Appending is safe for the
+    # cleanup filter, which matches on the `obsweb-<inst:22>` prefix.
+    name = f"obsweb-{safe_id(instance_id)[:22]}-{provider_name[:6]}-{int(time.time() * 1000)}-{os.getpid()}"
     executor = DockerExecutor(
         derived, repo_root, repo_root, repo_config, name,
         workdir="/testbed", platform="linux/amd64",

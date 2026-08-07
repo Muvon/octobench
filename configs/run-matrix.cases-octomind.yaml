@@ -1,3 +1,5 @@
 runs:
   - provider: octomind
     model: glm-5.2
+    # Agent served by ollama.com cloud, not zai (models.yaml maps glm-5.2 -> zai).
+    provider_model: ollama:glm-5.2
