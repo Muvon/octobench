@@ -475,6 +475,12 @@ def main() -> None:
         default="octobench-agent:latest",
         help="Docker image for --executor docker (must contain the agent CLIs)",
     )
+    run_p.add_argument(
+        "--jobs",
+        type=int,
+        default=1,
+        help="Number of cases to run in parallel (each gets its own container/workspace)",
+    )
 
     args = parser.parse_args()
 
@@ -579,7 +585,8 @@ def main() -> None:
             "normal",
         )
 
-    for case_file in case_files:
+    def _process_case(case_file: Path) -> list:
+        records: list = []
         case = load_yaml(case_file)
         case_dir = case_file.parent
         case_id = case.get("id", case_dir.name)
@@ -685,7 +692,7 @@ def main() -> None:
                         "judge": judge_out,
                         "scoring": {},
                     }
-                    all_results.append(record)
+                    records.append(record)
                     continue
 
                 prompt = build_task_prompt(case)
@@ -723,7 +730,7 @@ def main() -> None:
                     write_text(logs_dir / "provider.stdout.log", provider_result.stdout or "")
                     write_text(logs_dir / "provider.stderr.log", provider_result.stderr or "")
                     write_text(logs_dir / "provider.raw.jsonl", provider_result.raw_output or "")
-                    all_results.append(
+                    records.append(
                         {
                             "case_id": case_id,
                             "setup": setup_name,
@@ -856,7 +863,7 @@ def main() -> None:
                     "judge": judge_out,
                     "scoring": {},
                 }
-                all_results.append(record)
+                records.append(record)
                 log(
                     (
                         f"[octobench] completed case={case_id} "
@@ -867,6 +874,17 @@ def main() -> None:
                 )
             finally:
                 executor.close()
+        return records
+
+    if args.jobs > 1:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+            futures = {pool.submit(_process_case, cf): cf for cf in case_files}
+            for future in as_completed(futures):
+                all_results.extend(future.result())
+    else:
+        for case_file in case_files:
+            all_results.extend(_process_case(case_file))
 
     for case_id in {r["case_id"] for r in all_results}:
         case_rows = [r for r in all_results if r["case_id"] == case_id]

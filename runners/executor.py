@@ -31,6 +31,8 @@ AUTH_ENV_KEYS = [
     "OCTOMIND_AGENT",
     "BRAVE_API_KEY",
     "TAVILY_API_KEY",
+    "ALIBABA_API_KEY",
+    "ALIBABA_API_URL",
 ]
 
 

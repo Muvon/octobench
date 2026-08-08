@@ -289,7 +289,8 @@ models:
       cached_input: 0.0028
       output: 0.28
     providers:
-      octomind: deepseek:deepseek-v4-flash
+      octomind: alibaba:deepseek-v4-flash-0731
+      opencode: alibaba/deepseek-v4-flash-0731
 
   deepseek-chat:
     pricing:

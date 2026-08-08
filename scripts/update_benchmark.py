@@ -71,6 +71,9 @@ def discover_cases(repo_root: Path) -> dict[str, dict]:
     cases = {}
     cases_root = repo_root / "cases"
     for case_file in cases_root.rglob("case.yaml"):
+        rel = case_file.relative_to(cases_root).as_posix()
+        if "oneshot" not in rel:
+            continue
         try:
             case = yaml.safe_load(case_file.read_text())
             case_id = case.get("id")
@@ -215,8 +218,10 @@ def main() -> None:
             )
         providers.append((label, records))
 
+    # Include ALL discovered oneshot cases (not just those with results) so
+    # empty rows appear for cases that haven't been run yet.
     order = sorted(
-        {c for _, recs in providers for c in recs},
+        cases.keys(),
         key=lambda c: cases.get(c, {}).get("path", c),
     )
 
@@ -236,6 +241,29 @@ def main() -> None:
         lines.append(f"- **{label}**: {totals(recs, order)}")
     section = "\n".join(lines)
 
+    # --- Summary block: model × harness matrix ---
+    # Parse labels as "{model}-{harness}" (split on last "-").
+    summary: dict[str, dict[str, dict]] = {}
+    for label, recs in providers:
+        parts = label.rsplit("-", 1)
+        model, harness = (parts[0], parts[1]) if len(parts) == 2 else (label, "result")
+        summary.setdefault(model, {})[harness] = recs
+    all_harnesses = sorted({h for m in summary.values() for h in m})
+
+    summary_lines = [
+        f"_Cross-model × harness matrix. Each cell = pass-rate · judgeΣ · "
+        f"cost · wall time._\n",
+        "| model | " + " | ".join(all_harnesses) + " |",
+        "|---" * (len(all_harnesses) + 1) + "|",
+    ]
+    for model in sorted(summary):
+        cells = []
+        for harness in all_harnesses:
+            recs = summary[model].get(harness)
+            cells.append(totals(recs, order) if recs else "-")
+        summary_lines.append(f"| {model} | " + " | ".join(cells) + " |")
+    summary_section = "\n".join(summary_lines)
+
     bench = repo_root / "BENCHMARK.md"
     text = bench.read_text()
     new = re.sub(
@@ -244,9 +272,15 @@ def main() -> None:
         text,
         flags=re.DOTALL,
     )
+    new = re.sub(
+        r"(<!-- SUMMARY:BEGIN[^>]*-->\n).*?(<!-- SUMMARY:END -->)",
+        lambda m: m.group(1) + summary_section + "\n" + m.group(2),
+        new,
+        flags=re.DOTALL,
+    )
     bench.write_text(new)
-    print(f"BENCHMARK.md results updated ({len(order)} cases, "
-          f"{len(providers)} providers)")
+    print(f"BENCHMARK.md updated ({len(order)} cases, {len(providers)} providers, "
+          f"{len(summary)} models × {len(all_harnesses)} harnesses)")
 
 
 if __name__ == "__main__":

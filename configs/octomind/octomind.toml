@@ -307,14 +307,28 @@ analysis_findings_max_tokens = 4000
 # NOTE: these belong to [compression]. A key placed AFTER the
 # [[compression.pressure_levels]] blocks below is parsed as a field of the last
 # pressure level and silently ignored — knowledge_retention sat there, inert,
-# through every bench run before 2026-08-08.
+# through every bench run before 2026-08-08. Every scalar must stay above the
+# nested attention and pressure-level tables.
+
+# Evidence-grounded causal compaction (PACT): runtime-owned task/constraint
+# pins, causal tool packets, an exact active frontier, attributed folds, and a
+# stable lossless recall index.
+# octobench: ENABLED — this is what the bench is measuring (ships default-off).
+[compression.attention]
+enabled = true
+validator = true
+telemetry = true
+
+[compression.attention.governance]
+enabled = true
+verify_hash = true
 
 # Compression aggressiveness scales with absolute token count
 # Each level defines: threshold (token count) and target_ratio (compression strength)
 # Compression triggers when context exceeds ANY threshold, using the highest matched ratio
 # Example: At 100k tokens, compress to 1/4 size (4x compression)
 [[compression.pressure_levels]]
-threshold = 60000
+threshold = 80000
 target_ratio = 2.0  # Light: 50% reduction
 
 [[compression.pressure_levels]]
@@ -333,7 +347,7 @@ target_ratio = 8.0  # Aggressive: 87.5% reduction
 # in-env): an unauthenticated model here makes octomind log "compression failed,
 # continuing session" and skip compaction, so context overgrows past the model's
 # window and the provider rejects with 400 "prompt too long".
-model = "ollama:kimi-k2.7-code"
+model = "ollama:qwen3.5:397b"
 max_tokens = 16000  # Enough for decision + summary
 temperature = 0.3  # Lower temperature for consistent decisions
 top_p = 1.0
@@ -402,7 +416,7 @@ dedup_threshold = 2
 # (self-referential -> no task anchor, robust to abstract requests). 0 = OFF (default;
 # costs one embedding per sizable tool result when enabled). Set e.g. 3 to enable;
 # drift decisions are logged at debug so you can tune drift_floor before relying on it.
-distraction_threshold = 0
+distraction_threshold = 3
 # FLOOR (not a relevance boundary): a result is drift only if its cosine to the working
 # set falls BELOW this. Embeddings are reliable at "clearly unrelated", not at "is this
 # relevant" -> keep it in the tail. Lower = stricter. Model-dependent; tune from logs.
@@ -419,6 +433,11 @@ self_report = true
 # on tox), and with no provider-side prompt caching every extra round re-bills
 # the whole context; the batching steer directly cuts rounds.
 sequential_threshold = 4
+# Cap how many batching steers one turn may receive. Without it the steer
+# re-fires on every qualifying round, so a read-heavy stretch collects a long
+# tail of identical advisories that cost context and stop being informative.
+# octobench: 2 — enough to correct over-sequencing, not enough to nag.
+sequential_max_steers_per_turn = 2
 
 # Verify-gate: on self-reported `done`, run a checklist before accepting.
 [supervisor.gate]
@@ -458,9 +477,9 @@ enabled = true
 # Per-result trigger (estimated tokens). 0 = off. Keep well below
 # mcp_response_tokens_threshold: that cap is the backstop, this is the smart
 # path that fires earlier.
-tokens_threshold = 5000
+tokens_threshold = 4000
 # Model that does the narrowing (cheap + fast recommended).
-model = "ollama:qwen3.5:397b"
+model = "ollama:deepseek-v4-flash"
 
 # Delegate gate: handoff quality check before a subagent is spawned.
 [supervisor.delegate]
