@@ -4,7 +4,7 @@
 #
 # Fixed configuration:
 #   agent          HEAD binary via HEAD_BIN (NOT the image's baked octomind)
-#   agent model    ollama:glm-5.2          (configs/run-matrix.cases-octomind.yaml)
+#   agent model    alibaba:glm-5.2         (configs/run-matrix.cases-octomind.yaml)
 #   compression    ollama:kimi-k2.7-code
 #   supervisor     ollama:qwen3.5:397b
 #   gate + judge   ollama:minimax-m3
