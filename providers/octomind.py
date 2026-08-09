@@ -125,14 +125,14 @@ def _extract_from_jsonl(
     # (which is cumulative across resumed sessions — summing it across turns
     # would double-count in multi-turn runs).
     if input_tokens is not None and output_tokens is not None:
-        total_tokens = input_tokens + output_tokens + (cached_tokens or 0) + (reasoning_tokens or 0)
+        total_tokens = input_tokens + output_tokens + (reasoning_tokens or 0)
 
     final_text = full_assistant[-1] if full_assistant else ""
     return (
         final_text,
         assistant_messages[-12:],
-        tool_intents[-24:],
-        tool_results[-24:],
+        tool_intents,
+        tool_results,
         input_tokens,
         cached_tokens,
         output_tokens,

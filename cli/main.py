@@ -5,6 +5,7 @@ import difflib
 import fnmatch
 import hashlib
 import json
+import threading
 import os
 import re
 import shutil
@@ -562,6 +563,7 @@ def main() -> None:
     run_root.mkdir(parents=True, exist_ok=True)
 
     all_results = []
+    _results_lock = threading.Lock()
 
     provider_impls = {name: get_provider(name) for name in selected_providers}
     repo_config = repo_root / "configs" / "octomind" / "octomind.toml"
@@ -582,7 +584,29 @@ def main() -> None:
                 f"{len(selected_providers)} provider(s), cases from {cases_root}"
             ),
             verbosity,
-            "normal",
+        )
+
+    def _score_record(r: dict, scfg: dict, ecfg: dict):
+        """Compute and attach scoring fields to a single result record."""
+        judge_score = float(r["judge"].get("score", 0))
+        efficiency = compute_efficiency_score(
+            r["result"]["elapsed_ms"], r["tokens"]["total"], r.get("cost_usd"), ecfg
+        )
+        validation_failed = r["scripts"]["validate"]["exit_code"] != 0
+        raw_final_score = compute_final_score(judge_score, efficiency, scfg)
+        validation_fail_penalty = float(scfg.get("validation_fail_penalty", 25.0))
+        penalty_applied = validation_fail_penalty if validation_failed else 0.0
+        final_score = round(max(0.0, raw_final_score - penalty_applied), 2)
+        r["scoring"].update(
+            {
+                "efficiency_score": efficiency,
+                "raw_final_score": raw_final_score,
+                "validation_penalty": penalty_applied,
+                "final_score": final_score,
+                "validation_failed": validation_failed,
+                "judge_weight": scfg.get("judge_weight", 0.85),
+                "efficiency_weight": scfg.get("efficiency_weight", 0.15),
+            }
         )
 
     def _process_case(case_file: Path) -> list:
@@ -692,6 +716,7 @@ def main() -> None:
                         "judge": judge_out,
                         "scoring": {},
                     }
+                    _score_record(record, scoring_cfg, efficiency_cfg)
                     records.append(record)
                     continue
 
@@ -863,6 +888,7 @@ def main() -> None:
                     "judge": judge_out,
                     "scoring": {},
                 }
+                _score_record(record, scoring_cfg, efficiency_cfg)
                 records.append(record)
                 log(
                     (
@@ -876,39 +902,30 @@ def main() -> None:
                 executor.close()
         return records
 
+    def _write_results():
+        """Flush current all_results to results.json (incremental, crash-safe)."""
+        out_path = run_root / "results.json"
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump({"results": all_results}, f, indent=2)
+
     if args.jobs > 1:
         from concurrent.futures import ThreadPoolExecutor, as_completed
         with ThreadPoolExecutor(max_workers=args.jobs) as pool:
             futures = {pool.submit(_process_case, cf): cf for cf in case_files}
             for future in as_completed(futures):
-                all_results.extend(future.result())
+                completed = future.result()
+                with _results_lock:
+                    all_results.extend(completed)
+                    _write_results()
     else:
         for case_file in case_files:
-            all_results.extend(_process_case(case_file))
+            completed = _process_case(case_file)
+            all_results.extend(completed)
+            _write_results()
 
-    for case_id in {r["case_id"] for r in all_results}:
-        case_rows = [r for r in all_results if r["case_id"] == case_id]
-        for r in case_rows:
-            judge_score = float(r["judge"].get("score", 0))
-            efficiency = compute_efficiency_score(
-                r["result"]["elapsed_ms"], r["tokens"]["total"], r.get("cost_usd"), efficiency_cfg
-            )
-            validation_failed = r["scripts"]["validate"]["exit_code"] != 0
-            raw_final_score = compute_final_score(judge_score, efficiency, scoring_cfg)
-            validation_fail_penalty = float(scoring_cfg.get("validation_fail_penalty", 25.0))
-            penalty_applied = validation_fail_penalty if validation_failed else 0.0
-            final_score = round(max(0.0, raw_final_score - penalty_applied), 2)
-            r["scoring"].update(
-                {
-                    "efficiency_score": efficiency,
-                    "raw_final_score": raw_final_score,
-                    "validation_penalty": penalty_applied,
-                    "final_score": final_score,
-                    "validation_failed": validation_failed,
-                    "judge_weight": scoring_cfg.get("judge_weight", 0.85),
-                    "efficiency_weight": scoring_cfg.get("efficiency_weight", 0.15),
-                }
-            )
+    # Final write (ensures results.json exists even if all_results is empty)
+    out_path = run_root / "results.json"
+    _write_results()
 
     total_runs = len(all_results)
     failed_runs = [
@@ -920,10 +937,6 @@ def main() -> None:
             or r["scripts"]["validate"]["exit_code"] != 0
         )
     ]
-
-    out_path = run_root / "results.json"
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump({"results": all_results}, f, indent=2)
 
     log(f"[octobench] wrote results to {out_path}", verbosity, "normal")
     if failed_runs:

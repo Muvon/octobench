@@ -76,7 +76,7 @@ class OpencodeProvider(Provider):
                 if tool:
                     tool_titles.append(f"{tool}: {title or ''}".strip())
 
-        total = input_tokens + output_tokens
+        total = input_tokens + output_tokens + reasoning_tokens
         return ProviderRunResult(
             stdout=(last_text or "").strip(),
             stderr=(proc.stderr or "").strip(),
@@ -87,7 +87,7 @@ class OpencodeProvider(Provider):
             output_tokens=output_tokens or None,
             reasoning_tokens=reasoning_tokens or None,
             total_tokens=total or None,
-            provider_trace={"tool_calls": tool_titles[-24:]},
+            provider_trace={"tool_calls": tool_titles},
             raw_output=proc.stdout or "",
         )
 

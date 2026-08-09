@@ -35,6 +35,30 @@ def load(pattern: str) -> dict:
     return records
 
 
+def _count_steps(record: dict) -> int:
+    """Count agent steps from the provider trace (tool_use events + 1 for final message)."""
+    result_path = Path(record.get("_result_path", ""))
+    cid = record["case_id"]
+    traces = list(result_path.parent.glob(f"{cid}/*/logs/provider.raw.jsonl"))
+    if not traces:
+        return 0
+    steps = 0
+    for line in traces[0].read_text(errors="replace").splitlines():
+        try:
+            obj = json.loads(line)
+            if obj.get("type") == "tool_use":
+                steps += 1
+        except Exception:
+            pass
+    return steps + 1  # +1 for the final assistant message
+
+
+def _fmt_tok(n: int) -> str:
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    return f"{n / 1000:.0f}K"
+
+
 def cell(r: dict | None) -> str:
     if r is None:
         return "-"
@@ -50,7 +74,19 @@ def cell(r: dict | None) -> str:
     cost = r.get("cost_usd")
     mins = r.get("result", {}).get("elapsed_ms", 0) / 60000
     cost_s = f"${cost:.2f}" if cost is not None else "$?"
-    return f"{val} j={judge if judge is not None else '?'} {cost_s} {mins:.0f}m"
+    steps = _count_steps(r)
+    tok = r.get("tokens", {})
+    tok_total = tok.get('total') or ((tok.get('input') or 0) + (tok.get('output') or 0) + (tok.get('reasoning') or 0))
+    tok_s = (
+        f"{_fmt_tok(tok_total)} tok "
+        f"({_fmt_tok(tok.get('input') or 0)}/{_fmt_tok(tok.get('output') or 0)}"
+        f"/{_fmt_tok(tok.get('reasoning') or 0)})"
+    )
+    cache_s = f"{_fmt_tok(tok.get('cached_input') or 0)} cache"
+    return (
+        f"{val} j={judge if judge is not None else '?'} {cost_s} {mins:.0f}m "
+        f"· {steps} steps · {tok_s} · {cache_s}"
+    )
 
 
 def totals(records: dict, order: list) -> str:
@@ -60,10 +96,30 @@ def totals(records: dict, order: list) -> str:
     ok = sum(1 for r in done if not (r["scoring"].get("validation_failed")
                                      or r.get("infra_failed")
                                      or r.get("_integrity_violations")))
+    fail = sum(1 for r in done if r["scoring"].get("validation_failed")
+              and not r.get("_integrity_violations"))
+    leak = sum(1 for r in done if r.get("_integrity_violations"))
     j = sum(r.get("judge", {}).get("score") or 0 for r in done)
     cost = sum(r.get("cost_usd") or 0 for r in done)
     hours = sum(r.get("result", {}).get("elapsed_ms", 0) for r in done) / 3600000
-    return f"**{ok}/{len(done)}** · judgeΣ {j} · ${cost:.2f} · {hours:.1f}h"
+    tok_in = sum(r.get("tokens", {}).get("input") or 0 for r in done)
+    tok_out = sum(r.get("tokens", {}).get("output") or 0 for r in done)
+    tok_reas = sum(r.get("tokens", {}).get("reasoning") or 0 for r in done)
+    cache = sum(r.get("tokens", {}).get("cached_input") or 0 for r in done)
+    parts = [f"**{ok}/{len(done)}** PASS"]
+    if fail:
+        parts.append(f"{fail} FAIL")
+    if leak:
+        parts.append(f"{leak} LEAK")
+    parts.append(f"jΣ {j:.0f}")
+    parts.append(f"${cost:.2f}")
+    parts.append(f"{hours:.1f}h")
+    parts.append(
+        f"{_fmt_tok(tok_in + tok_out + tok_reas)} tok "
+        f"({_fmt_tok(tok_in)} in / {_fmt_tok(tok_out)} out / {_fmt_tok(tok_reas)} reas)"
+    )
+    parts.append(f"{_fmt_tok(cache)} cache read")
+    return " · ".join(parts)
 
 
 def discover_cases(repo_root: Path) -> dict[str, dict]:

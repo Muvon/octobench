@@ -123,7 +123,7 @@ max_request_spending_threshold = 0.0
 # intent are activated automatically (no LLM routing turn needed).
 # Disable to require manual `capability(action="enable")` calls only.
 # ═══════════════════════════════════════════════════════════════════════
-auto_capabilities = true
+auto_capabilities = false
 
 # Capability provider overrides for tap agents
 # Each key is a capability name, value is the provider to use instead of "default"
@@ -260,7 +260,7 @@ tools = []
 # Enable automatic skill activation via declarative rules in SKILL.md frontmatter.
 # When enabled, skills with `domains` matching the current agent's role
 # are checked on each user message. Disable to use manual /skill only.
-auto_activation = true
+auto_activation = false
 
 # Enable automatic validation via `validate` scripts at end of each assistant turn.
 # When enabled, active skills with a `validate` script are run automatically.
@@ -380,7 +380,7 @@ max_consecutive_steers = 0
 
 [supervisor.learning]
 # Enable the learning system
-enabled = true
+enabled = false # nothing to larn cuz its just simple case tests short lived
 # Model for extraction and retrieval LLM calls (cheap model recommended)
 model = "ollama:qwen3.5:397b"
 # Backend: "file" (default, zero deps) or "mcp" (external tool with field mapping)
@@ -477,7 +477,7 @@ enabled = true
 # Per-result trigger (estimated tokens). 0 = off. Keep well below
 # mcp_response_tokens_threshold: that cap is the backstop, this is the smart
 # path that fires earlier.
-tokens_threshold = 4000
+tokens_threshold = 6000
 # Model that does the narrowing (cheap + fast recommended).
 model = "ollama:deepseek-v4-flash"
 
