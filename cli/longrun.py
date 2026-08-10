@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -27,6 +28,8 @@ from cli.main import (
     diff_snapshots,
     ensure_workspace,
     install_guardrails,
+    seal_network,
+    unseal_network,
     load_yaml,
     log,
     make_executor,
@@ -187,18 +190,26 @@ def _run_sequence(
 
             prompt = _build_turn_prompt(system_prompt, instruction, is_first)
             install_guardrails(executor)
+            sealed = os.environ.get("OCTOBENCH_SEAL_NETWORK") == "1"
+            if sealed:
+                seal_network(executor)
             before = snapshot_files(executor.workspace_host_path())
 
             # session_name is stable across turns (set once above).
 
-            provider_result = provider_impl.run_task(
-                prompt=prompt,
-                workdir=executor.container_workspace(),
-                provider_model=provider_model,
-                session_name=session_name,
-                executor=executor,
-                resume_session_id=session_id,
-            )
+            try:
+                provider_result = provider_impl.run_task(
+                    prompt=prompt,
+                    workdir=executor.container_workspace(),
+                    provider_model=provider_model,
+                    session_name=session_name,
+                    executor=executor,
+                    resume_session_id=session_id,
+                )
+            finally:
+                # _validate_turn fetches gold tests from the same hosts.
+                if sealed:
+                    unseal_network(executor)
             session_id = provider_result.session_id or session_id
 
             if provider_result.exit_code != 0:
@@ -254,6 +265,7 @@ def _run_sequence(
                 "prep_log": setup_log["stdout"] + setup_log["stderr"],
                 "quality_log": "",
                 "validation_log": validation["stdout"] + validation["stderr"],
+                "validation_exit_code": validation["exit_code"],
                 "evidence_log": "\n\n".join(p for p in evidence_parts if p),
             }
             judge_meta = dict(judge_cfg)

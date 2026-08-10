@@ -4,7 +4,7 @@ import json
 import time
 from typing import TYPE_CHECKING, Any, Optional
 
-from providers.base import Provider, ProviderRunResult
+from providers.base import Provider, ProviderRunResult, shared_system_prompt
 
 if TYPE_CHECKING:
     from runners.executor import Executor
@@ -67,6 +67,12 @@ class CodexProvider(Provider):
                 output_file,
                 "-",
             ]
+
+        # Clean-bench mode: same shared prompt as every other client. Codex has no
+        # web tool unless `--search` is passed, which it never is here.
+        system_prompt = shared_system_prompt()
+        if system_prompt:
+            cmd[2:2] = ["-c", f"instructions={json.dumps(system_prompt)}"]
 
         start = time.time()
         proc = executor.run(cmd, input_text=prompt)

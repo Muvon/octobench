@@ -134,10 +134,23 @@ def run_judge(prompt_payload: Dict, judge_cfg: Dict, workdir: str) -> Dict:
     validation_log = prompt_payload.get("validation_log", "")
     evidence_log = prompt_payload.get("evidence_log", "")
 
+    # The verdict comes from the test command's exit code. Without it the judge
+    # has to infer pass/fail from log prose, which misreads every suite that
+    # prints expected failures (Catch2 [!shouldfail], pytest xfail, ...).
+    exit_code = prompt_payload.get("validation_exit_code")
+    if exit_code is None:
+        validation_verdict = "UNKNOWN (exit code not supplied)"
+    else:
+        validation_verdict = (
+            f"{'PASS' if exit_code == 0 else 'FAIL'} "
+            f"(test command exit code {exit_code})"
+        )
+
     prompt = f"System:\n{JUDGE_SYSTEM}\n\n" + JUDGE_TEMPLATE.format(
         task=task,
         prep_log=prep_log,
         quality_log=quality_log,
+        validation_verdict=validation_verdict,
         validation_log=validation_log,
         evidence_log=evidence_log,
     )

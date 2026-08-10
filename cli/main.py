@@ -291,6 +291,81 @@ def install_guardrails(executor: Executor) -> None:
     executor.run(["bash", "-lc", script])
 
 
+# Hosts that serve the upstream solution: the repo, its PRs, and raw file content.
+# Blackholed by name; the egress allowlist below is what actually enforces it.
+SEALED_HOSTS = (
+    "github.com www.github.com api.github.com codeload.github.com gist.github.com "
+    "raw.githubusercontent.com objects.githubusercontent.com "
+    "patch-diff.githubusercontent.com gitlab.com bitbucket.org"
+)
+
+# The only egress the agent legitimately needs: the model endpoint. Everything
+# else is dropped, so blocking is not a question of enumerating what to deny.
+DEFAULT_ALLOW_HOSTS = (
+    "api.deepseek.com token-plan.ap-southeast-1.maas.aliyuncs.com api.z.ai "
+    "api.anthropic.com chatgpt.com api.openai.com openrouter.ai"
+)
+
+
+def seal_network(executor: Executor) -> None:
+    """Cut the agent's route to the upstream answer, after setup has used it.
+
+    Cases are harvested from merged PRs, so the current upstream file already
+    contains the fix — reaching it is reading the answer key. setup.sh needs
+    github to check the repo out, so this runs between setup and the agent.
+
+    Blackholed in /etc/hosts, plus an iptables DROP on the addresses those names
+    resolved to before sealing, so a raw-IP request fails too. Without iptables
+    in the image only the name-based block applies.
+
+    Must be lifted by `unseal_network` before validation: every case's
+    validate.sh fetches its gold tests from the same hosts.
+    """
+    allow = os.environ.get("OCTOBENCH_ALLOW_HOSTS", DEFAULT_ALLOW_HOSTS).split()
+    script = (
+        "set -e\n"
+        "command -v iptables >/dev/null 2>&1 || { echo NO_IPTABLES; exit 1; }\n"
+        "[ -f /etc/hosts.octobench-preseal ] || cp /etc/hosts /etc/hosts.octobench-preseal\n"
+        # Resolve the allowlist BEFORE the deny rule lands.
+        "ALLOW_IPS=\"\"\n"
+        "for h in " + " ".join(allow) + "; do\n"
+        "  ips=$(getent ahostsv4 \"$h\" 2>/dev/null | awk '{print $1}' | sort -u)\n"
+        "  ALLOW_IPS=\"$ALLOW_IPS $ips\"\n"
+        "done\n"
+        "iptables -F OUTPUT\n"
+        "iptables -A OUTPUT -o lo -j ACCEPT\n"
+        "iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT\n"
+        "iptables -A OUTPUT -p udp --dport 53 -j ACCEPT\n"
+        "iptables -A OUTPUT -p tcp --dport 53 -j ACCEPT\n"
+        "for ip in $ALLOW_IPS; do iptables -A OUTPUT -d \"$ip\" -j ACCEPT; done\n"
+        "iptables -A OUTPUT -j REJECT --reject-with icmp-admin-prohibited\n"
+        # Belt and braces: names fail fast instead of hanging on a REJECT.
+        "for h in " + " ".join(SEALED_HOSTS.split()) + "; do\n"
+        "  printf '127.0.0.1 %s\\n::1 %s\\n' \"$h\" \"$h\" >> /etc/hosts\n"
+        "done\n"
+        "echo SEALED"
+    )
+    result = executor.run(["bash", "-lc", script])
+    if "SEALED" not in (result.stdout or ""):
+        raise RuntimeError(
+            "network seal failed (agent would run with upstream reachable): "
+            f"{result.stderr or result.stdout!r}"
+        )
+
+
+def unseal_network(executor: Executor) -> None:
+    """Restore upstream reachability for the validation phase."""
+    script = (
+        "[ -f /etc/hosts.octobench-preseal ] && "
+        "cat /etc/hosts.octobench-preseal > /etc/hosts || true\n"
+        "command -v iptables >/dev/null 2>&1 && iptables -F OUTPUT || true\n"
+        "echo UNSEALED"
+    )
+    result = executor.run(["bash", "-lc", script])
+    if "UNSEALED" not in (result.stdout or ""):
+        raise RuntimeError(f"network unseal failed: {result.stderr or result.stdout!r}")
+
+
 def build_task_prompt(case: Dict) -> str:
     return (
         f"System:\n{case.get('system_prompt', '')}\n\nInstruction:\n{case.get('instruction', '')}\n"
@@ -675,6 +750,7 @@ def main() -> None:
                         "prep_log": setup_log["stdout"] + setup_log["stderr"],
                         "quality_log": quality_log["stdout"] + quality_log["stderr"],
                         "validation_log": validation_log["stdout"] + validation_log["stderr"],
+                        "validation_exit_code": validation_log["exit_code"],
                         "evidence_log": "",
                     }
                     judge_meta = dict(judge_cfg)
@@ -722,19 +798,28 @@ def main() -> None:
 
                 prompt = build_task_prompt(case)
                 install_guardrails(executor)
+                sealed = os.environ.get("OCTOBENCH_SEAL_NETWORK") == "1"
+                if sealed:
+                    seal_network(executor)
                 before = snapshot_files(executor.workspace_host_path())
 
                 session_name = (
                     f"ob-{safe_id(case_id)[:20]}-{provider_name[:8]}-"
                     f"{safe_id(benchmark_model)[:12]}-{int(time.time())}"
                 )
-                provider_result = provider_impl.run_task(
-                    prompt=prompt,
-                    workdir=executor.container_workspace(),
-                    provider_model=provider_model,
-                    session_name=session_name,
-                    executor=executor,
-                )
+                try:
+                    provider_result = provider_impl.run_task(
+                        prompt=prompt,
+                        workdir=executor.container_workspace(),
+                        provider_model=provider_model,
+                        session_name=session_name,
+                        executor=executor,
+                    )
+                finally:
+                    # Validation is a different phase with different rules: it must
+                    # reach upstream to fetch the gold tests.
+                    if sealed:
+                        unseal_network(executor)
                 if provider_result.exit_code != 0:
                     err_tail = (provider_result.stderr or "").strip() or (
                         provider_result.stdout or ""
@@ -830,6 +915,7 @@ def main() -> None:
                     "prep_log": setup_log["stdout"] + setup_log["stderr"],
                     "quality_log": quality_log["stdout"] + quality_log["stderr"],
                     "validation_log": validation_log["stdout"] + validation_log["stderr"],
+                        "validation_exit_code": validation_log["exit_code"],
                     "evidence_log": evidence_log,
                 }
                 judge_meta = dict(judge_cfg)
@@ -898,6 +984,13 @@ def main() -> None:
                     verbosity,
                     "normal",
                 )
+                # A 49-case campaign leaves tens of GB of checked-out repos behind;
+                # everything graded (diff, logs, scores) is already in the record.
+                # Trade-off: rejudge.py's git-diff fallback needs the workspace, so
+                # only drop it once the evidence diff is actually recorded.
+                if os.environ.get("OCTOBENCH_CLEAN_WORKSPACE") == "1" and evidence_log_diff:
+                    shutil.rmtree(workdir_abs, ignore_errors=True)
+                    log(f"[octobench] workspace removed for {case_id}", verbosity, "normal")
             finally:
                 executor.close()
         return records

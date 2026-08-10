@@ -4,7 +4,7 @@ import json
 import time
 from typing import TYPE_CHECKING, Any, Optional
 
-from providers.base import Provider, ProviderRunResult
+from providers.base import Provider, ProviderRunResult, shared_system_prompt
 
 if TYPE_CHECKING:
     from runners.executor import Executor
@@ -48,6 +48,12 @@ class ClaudeProvider(Provider):
             provider_model,
             "--dangerously-skip-permissions",
         ]
+        # Clean-bench mode: replace claude's own prompt with the shared one and
+        # drop the web tools, so only the client differs across harnesses.
+        system_prompt = shared_system_prompt()
+        if system_prompt:
+            cmd.extend(["--system-prompt", system_prompt,
+                        "--disallowed-tools", "WebSearch", "WebFetch"])
         if resume_session_id:
             cmd.extend(["--resume", resume_session_id])
 

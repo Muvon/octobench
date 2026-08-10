@@ -86,6 +86,7 @@ def main() -> None:
             "prep_log": scripts["setup"]["stdout"] + scripts["setup"]["stderr"],
             "quality_log": scripts["quality"]["stdout"] + scripts["quality"]["stderr"],
             "validation_log": scripts["validate"]["stdout"] + scripts["validate"]["stderr"],
+            "validation_exit_code": scripts["validate"]["exit_code"],
             "evidence_log": evidence,
         }
         meta = dict(judge_cfg)

@@ -272,8 +272,12 @@ class DockerExecutor(Executor):
             mounts += ["-v", f"{claude_creds}:/root/.claude/.credentials.json:rw"]
 
         platform_args = ["--platform", self._platform] if self._platform else []
+        # NET_ADMIN lets cli.main seal the container's egress for the agent phase
+        # (see seal_network); without it the agent can reach the upstream fix.
+        net_args = ["--cap-add=NET_ADMIN"] if os.environ.get("OCTOBENCH_SEAL_NETWORK") == "1" else []
         cmd = [
-            "docker", "run", "-d", *platform_args, "--name", self.name, "-w", self._workdir,
+            "docker", "run", "-d", *platform_args, *net_args,
+            "--name", self.name, "-w", self._workdir,
             *mounts, *env_args, self.image, "sleep", "infinity",
         ]
         proc = subprocess.run(cmd, capture_output=True, text=True)

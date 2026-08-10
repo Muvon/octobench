@@ -24,7 +24,10 @@ import yaml
 
 def load(pattern: str) -> dict:
     records = {}
-    for path in sorted(glob.glob(pattern)):
+    # A pattern may be several whitespace-separated globs; later globs (and later
+    # paths within a glob) win, so reruns can be layered over the base run.
+    paths = [p for g in pattern.split() for p in sorted(glob.glob(g))]
+    for path in paths:
         try:
             data = json.loads(open(path).read())
         except Exception:
@@ -99,6 +102,7 @@ def totals(records: dict, order: list) -> str:
     fail = sum(1 for r in done if r["scoring"].get("validation_failed")
               and not r.get("_integrity_violations"))
     leak = sum(1 for r in done if r.get("_integrity_violations"))
+    infra = sum(1 for r in done if r.get("infra_failed"))
     j = sum(r.get("judge", {}).get("score") or 0 for r in done)
     cost = sum(r.get("cost_usd") or 0 for r in done)
     hours = sum(r.get("result", {}).get("elapsed_ms", 0) for r in done) / 3600000
@@ -111,6 +115,8 @@ def totals(records: dict, order: list) -> str:
         parts.append(f"{fail} FAIL")
     if leak:
         parts.append(f"{leak} LEAK")
+    if infra:
+        parts.append(f"{infra} INFRA")
     parts.append(f"jΣ {j:.0f}")
     parts.append(f"${cost:.2f}")
     parts.append(f"{hours:.1f}h")

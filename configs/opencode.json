@@ -23,11 +23,7 @@
       },
       "models": {
         "deepseek-v4-flash": {
-          "name": "DeepSeek V4 Flash",
-          "reasoning": true,
-          "options": {
-            "reasoning_effort": "medium"
-          }
+          "name": "DeepSeek V4 Flash"
         }
       }
     },

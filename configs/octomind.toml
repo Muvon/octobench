@@ -183,18 +183,13 @@ websearch = "brave"
 # byte-identical to what claude/codex/opencode receive — so the bench measures
 # client behaviour rather than prompt differences.
 #
-# Departures from developer:general:
+# Two deliberate departures from developer:general:
 #   - No websearch/knowledge. developer:general's system prompt MANDATES looking
 #     up the upstream issue and mirroring the merged PR's diff; on a bench built
-#     from merged PRs that is reading the answer key. This is the one thing every
-#     client must lose, because it defeats the benchmark itself.
-#   - No memory-*. Persistent cross-case memory would carry state between cases.
-#
-# KEPT: structural code search (octocode). It is octomind's own exploration
-# capability and no other client ships an equivalent — that difference is part of
-# what the bench compares, not noise to be normalised away. Equalising the
-# PROMPT is what makes clients comparable; equalising their distinctive tooling
-# would just measure the same agent four times.
+#     from merged PRs that is reading the answer key.
+#   - No codesearch-* or memory-*. The other three clients have no equivalent,
+#     so keeping them would compare tool surfaces, not agent loops.
+# What remains — files + shell — is the common denominator across all four.
 [[roles]]
 name = "developer"
 temperature = 0.1
@@ -322,28 +317,9 @@ Trivial edits (typo, rename, single-line tweak) → just "Done." or one-line des
 """
 welcome = ""
 
-# Tools spelled out per capability, exactly as the tap's capability files define
-# them, so the role's surface is auditable against developer:general:
-#   core                  → plan
-#   shell                 → octofs:shell
-#   filesystem-read       → octofs:view, octofs:workdir
-#   filesystem-write      → octofs:text_editor, batch_edit, extract_lines
-#   codesearch-structural → octocode:structural_search, view_signatures
-# `runtime` is deliberately ABSENT: it grants MCP server management and
-# capability activation, i.e. the agent could switch websearch back on.
 [roles.mcp]
-server_refs = ["core", "octofs", "octocode"]
-allowed_tools = [
-  "core:*",
-  "octofs:shell",
-  "octofs:view",
-  "octofs:workdir",
-  "octofs:text_editor",
-  "octofs:batch_edit",
-  "octofs:extract_lines",
-  "octocode:structural_search",
-  "octocode:view_signatures",
-]
+server_refs = ["core", "runtime", "filesystem"]
+allowed_tools = ["core:*", "runtime:*", "filesystem:*"]
 
 # Example: override the developer role with your own system prompt
 [[roles]]
@@ -413,17 +389,6 @@ name = "octocode"
 type = "stdio"
 command = "octocode"
 args = ["mcp", "--path=.", "--no-git"]
-timeout_seconds = 300
-tools = []
-
-# octobench: octofs serves the `shell` and `filesystem-*` capabilities the
-# clean-bench `developer` role references. Tap agents get this server from the
-# capability files; a config-local role must declare it itself.
-[[mcp.servers]]
-name = "octofs"
-type = "stdio"
-command = "octofs"
-args = ["mcp"]
 timeout_seconds = 300
 tools = []
 

@@ -1,11 +1,28 @@
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from runners.executor import Executor
+
+
+def shared_system_prompt() -> Optional[str]:
+    """The prompt every client must receive, or None when unset (stock behaviour).
+
+    Octomind and opencode take it through their config files; the CLI-driven
+    clients read it here so all four stay byte-identical to the one file.
+    """
+    path = os.environ.get("OCTOBENCH_SYSTEM_PROMPT")
+    if not path:
+        return None
+    text = Path(path).read_text()
+    if not text.strip():
+        raise RuntimeError(f"OCTOBENCH_SYSTEM_PROMPT={path} is empty")
+    return text
 
 
 @dataclass
