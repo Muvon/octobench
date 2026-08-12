@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_URL="https://github.com/rustls/rustls"
-BASE_SHA="b705779b6cc03fbc73b0ee7bbe0dd9832081fa69"
+BASE_SHA="ce23b5429ad617e932c896150ded30e3c7a0d0a7"
 
 git config --global --add safe.directory "$(pwd)" || true
 git init -q .

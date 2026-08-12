@@ -257,6 +257,28 @@ def ensure_workspace(case_dir: Path, run_dir: Path) -> Path:
     return workdir
 
 
+def clean_workspace(executor, workdir: Path, label: str, verbosity: str) -> None:
+    """Drop a graded workspace when OCTOBENCH_CLEAN_WORKSPACE=1.
+
+    A campaign leaves tens of GB of checked-out repos behind; everything graded
+    (diff, logs, scores) is already in the record, and rejudge.py rebuilds its
+    payload from there. Callers must invoke this from a `finally` and
+    unconditionally: gating it on a recorded diff kept the workspaces that grow
+    largest — the runs that hung, timed out, or crashed before the record was
+    written — and that filled a 904G disk mid-campaign.
+
+    The container writes as root, so directories it created cannot be unlinked
+    by the host user. Delete from inside the container first, while it is still
+    alive, and let rmtree take the empty shell.
+    """
+    if os.environ.get("OCTOBENCH_CLEAN_WORKSPACE") != "1":
+        return
+    ws = executor.container_workspace()
+    executor.run(["find", ws, "-mindepth", "1", "-delete"])
+    shutil.rmtree(workdir, ignore_errors=True)
+    log(f"[octobench] workspace removed for {label}", verbosity, "normal")
+
+
 # Offline benchmark: deny octomind's `websearch` capability. Agents were solving
 # by retrieving the upstream PR for the instance rather than deriving the fix,
 # which measures retrieval instead of engineering.
@@ -303,7 +325,7 @@ SEALED_HOSTS = (
 # else is dropped, so blocking is not a question of enumerating what to deny.
 DEFAULT_ALLOW_HOSTS = (
     "api.deepseek.com token-plan.ap-southeast-1.maas.aliyuncs.com api.z.ai "
-    "api.anthropic.com chatgpt.com api.openai.com openrouter.ai"
+    "api.anthropic.com chatgpt.com api.openai.com openrouter.ai ollama.com"
 )
 
 
@@ -641,7 +663,14 @@ def main() -> None:
     _results_lock = threading.Lock()
 
     provider_impls = {name: get_provider(name) for name in selected_providers}
-    repo_config = repo_root / "configs" / "octomind" / "octomind.toml"
+    # Overridable so a one-off run can use an instrumented config (e.g. debug
+    # log level) without touching the shared checked-in one.
+    repo_config = Path(
+        os.environ.get(
+            "OCTOBENCH_OCTOMIND_CONFIG",
+            str(repo_root / "configs" / "octomind" / "octomind.toml"),
+        )
+    )
 
     if use_run_matrix:
         log(
@@ -984,14 +1013,8 @@ def main() -> None:
                     verbosity,
                     "normal",
                 )
-                # A 49-case campaign leaves tens of GB of checked-out repos behind;
-                # everything graded (diff, logs, scores) is already in the record.
-                # Trade-off: rejudge.py's git-diff fallback needs the workspace, so
-                # only drop it once the evidence diff is actually recorded.
-                if os.environ.get("OCTOBENCH_CLEAN_WORKSPACE") == "1" and evidence_log_diff:
-                    shutil.rmtree(workdir_abs, ignore_errors=True)
-                    log(f"[octobench] workspace removed for {case_id}", verbosity, "normal")
             finally:
+                clean_workspace(executor, workdir_abs, case_id, verbosity)
                 executor.close()
         return records
 

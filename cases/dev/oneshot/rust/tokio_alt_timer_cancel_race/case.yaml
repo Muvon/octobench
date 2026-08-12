@@ -18,3 +18,9 @@ system_prompt: |
   Resolve the requested task completely, as the project's maintainers would. When done, stop.
 instruction: |
   A `Sleep` that loses a `select!` or `timeout()` race can be cancelled before Tokio moves it into the alternate timer wheel, but it still gets inserted and keeps its allocation until the far-away deadline. Cancellation and insertion can happen concurrently: the timer must end up either never inserted or inserted and queued for removal, never stuck in the wheel with no way out.
+
+  Registration must answer whether the entry was actually registered (true)
+  or was already cancelled (false), so callers can branch on the result.
+  When registration reports an entry as already cancelled, the insertion must
+  back out cleanly: such an entry ends up neither in the wheel nor queued for
+  later removal, and nothing gets woken by the attempt.

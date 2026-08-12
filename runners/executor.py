@@ -28,6 +28,9 @@ AUTH_ENV_KEYS = [
     "OCTOHUB_API_URL",
     "OLLAMA_API_KEY",
     "OLLAMA_API_URL",
+    # Not auth: forwarded so an instrumented run can surface the agent's debug
+    # tracing in provider.stderr.log. Absent from the host env in normal runs.
+    "RUST_LOG",
     "OCTOMIND_AGENT",
     "BRAVE_API_KEY",
     "TAVILY_API_KEY",

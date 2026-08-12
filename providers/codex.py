@@ -13,6 +13,12 @@ if TYPE_CHECKING:
 class CodexProvider(Provider):
     name = "codex"
 
+    def __init__(self) -> None:
+        # thread id -> cumulative (input, cached, output) reported so far. The
+        # long-run runner keeps one provider instance per sequence, which is
+        # what makes the per-turn delta below possible.
+        self._thread_usage: dict[str, tuple[int, int, int]] = {}
+
     def run_task(
         self,
         prompt: str,
@@ -27,6 +33,9 @@ class CodexProvider(Provider):
         ws = executor.container_workspace()
         out_name = f"_provider_output_{session_name}.txt"
         output_file = f"{ws}/{out_name}"
+        # Index at which `-c` overrides are spliced in: they must follow the
+        # subcommand (and its session-id positional) to bind to it.
+        opts_at = 4 if resume_session_id else 2
         if resume_session_id:
             # `codex exec resume <SESSION_ID>` continues a prior session.
             cmd = [
@@ -37,10 +46,11 @@ class CodexProvider(Provider):
                 "--json",
                 "-m",
                 provider_model,
-                "-C",
-                ws,
-                "-s",
-                "danger-full-access",
+                # `resume` takes neither -C nor -s. The executor already runs it
+                # with the workspace as cwd; the sandbox mode has to come in as
+                # the config key -s would have set (same value as turn 1).
+                "-c",
+                'sandbox_mode="danger-full-access"',
                 "--skip-git-repo-check",
                 "--output-last-message",
                 output_file,
@@ -72,7 +82,7 @@ class CodexProvider(Provider):
         # web tool unless `--search` is passed, which it never is here.
         system_prompt = shared_system_prompt()
         if system_prompt:
-            cmd[2:2] = ["-c", f"instructions={json.dumps(system_prompt)}"]
+            cmd[opts_at:opts_at] = ["-c", f"instructions={json.dumps(system_prompt)}"]
 
         start = time.time()
         proc = executor.run(cmd, input_text=prompt)
@@ -88,6 +98,15 @@ class CodexProvider(Provider):
         else:
             stdout = (proc.stdout or "").strip()
 
+        # Raw `turn.completed.usage` counters, as codex reports them: input
+        # INCLUDES cached, and every number is a RUNNING TOTAL for the thread —
+        # a resumed turn restates the whole thread's usage. Measured: three
+        # turns on one thread reported 28.1k / 42.7k / 57.3k input while each
+        # trailing turn was trivial. They are converted to per-turn deltas below;
+        # without that a 5-turn sequence would bill turn 1 five times.
+        raw_input_total: Optional[int] = None
+        raw_cached_total: Optional[int] = None
+        raw_output_total: Optional[int] = None
         input_tokens: Optional[int] = None
         cached_input_tokens: Optional[int] = None
         output_tokens: Optional[int] = None
@@ -151,18 +170,16 @@ class CodexProvider(Provider):
                 continue
             usage = obj.get("usage")
             if isinstance(usage, dict):
-                raw_input_tokens = usage.get("input_tokens")
-                if raw_input_tokens is not None:
-                    input_tokens = raw_input_tokens
-                cached_input_tokens = usage.get("cached_input_tokens", cached_input_tokens)
-                output_tokens = usage.get("output_tokens", output_tokens)
-                # Normalize to canonical semantics where input excludes cached.
-                if input_tokens is not None and cached_input_tokens is not None:
-                    input_tokens = max(input_tokens - cached_input_tokens, 0)
-                if input_tokens is not None and output_tokens is not None:
-                    total_tokens = input_tokens + (cached_input_tokens or 0) + output_tokens
-            # Extract session ID for multi-turn resumption.
-            raw_session_id = obj.get("session_id") or obj.get("session")
+                raw_input_total = usage.get("input_tokens", raw_input_total)
+                raw_cached_total = usage.get("cached_input_tokens", raw_cached_total)
+                raw_output_total = usage.get("output_tokens", raw_output_total)
+            # Extract session ID for multi-turn resumption. Codex 0.146 names it
+            # thread_id on the `thread.started` event; older builds used
+            # session_id. Without this the id stays None and every long-run turn
+            # silently starts a fresh session.
+            raw_session_id = (
+                obj.get("thread_id") or obj.get("session_id") or obj.get("session")
+            )
             if isinstance(raw_session_id, str):
                 session_id = raw_session_id
             item = obj.get("item")
@@ -180,6 +197,24 @@ class CodexProvider(Provider):
                         tool_results.append(summary)
                     else:
                         tool_intents.append(summary)
+
+        # Cumulative -> per-turn. The baseline is what this thread had already
+        # reported before this invocation; a fresh thread starts at zero.
+        if raw_input_total is not None:
+            base_in, base_cached, base_out = self._thread_usage.get(
+                session_id or "", (0, 0, 0)
+            )
+            self._thread_usage[session_id or ""] = (
+                raw_input_total,
+                raw_cached_total or 0,
+                raw_output_total or 0,
+            )
+            delta_in = max(raw_input_total - base_in, 0)
+            cached_input_tokens = max((raw_cached_total or 0) - base_cached, 0)
+            output_tokens = max((raw_output_total or 0) - base_out, 0)
+            # Canonical semantics: input excludes cached.
+            input_tokens = max(delta_in - cached_input_tokens, 0)
+            total_tokens = input_tokens + cached_input_tokens + output_tokens
 
         # Keep evidence compact and bounded.
         assistant_messages = assistant_messages[-12:]
@@ -205,31 +240,3 @@ class CodexProvider(Provider):
             raw_output=proc.stdout or "",
         )
 
-    def build_provider_evidence(self, run_result: ProviderRunResult) -> str:
-        trace = run_result.provider_trace or {}
-        assistant_messages = trace.get("assistant_messages") or []
-        tool_intents = trace.get("tool_intents") or []
-        tool_results = trace.get("tool_results") or []
-
-        lines: list[str] = []
-        lines.append("PROVIDER_EVIDENCE")
-        lines.append("provider: codex")
-        lines.append("assistant_messages:")
-        if assistant_messages:
-            for msg in assistant_messages:
-                lines.append(f"- {msg}")
-        else:
-            lines.append("- <none>")
-        lines.append("tool_intents:")
-        if tool_intents:
-            for intent in tool_intents:
-                lines.append(f"- {intent}")
-        else:
-            lines.append("- <none>")
-        lines.append("tool_results:")
-        if tool_results:
-            for result in tool_results:
-                lines.append(f"- {result}")
-        else:
-            lines.append("- <none>")
-        return "\n".join(lines)

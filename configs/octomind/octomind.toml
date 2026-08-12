@@ -7,7 +7,7 @@
 #   • Validate config: octomind config --validate
 
 # Configuration version (DO NOT MODIFY - used for automatic upgrades)
-version = 3
+version = 4
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SYSTEM-WIDE SETTINGS
@@ -30,7 +30,7 @@ model = "alibaba:glm-5.2"
 default = "assistant:concierge"
 
 # Default max_tokens for all operations
-max_tokens = 16384
+max_tokens = 32000
 
 # Custom instructions file name (relative to project root)
 # This file will be automatically loaded as a user message in new sessions
@@ -413,7 +413,7 @@ name = "octocode"
 type = "stdio"
 command = "octocode"
 args = ["mcp", "--path=.", "--no-git"]
-timeout_seconds = 300
+timeout_seconds = 600
 tools = []
 
 # octobench: octofs serves the `shell` and `filesystem-*` capabilities the
@@ -424,7 +424,7 @@ name = "octofs"
 type = "stdio"
 command = "octofs"
 args = ["mcp"]
-timeout_seconds = 300
+timeout_seconds = 600
 tools = []
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -440,7 +440,7 @@ tools = []
 # Enable automatic skill activation via declarative rules in SKILL.md frontmatter.
 # When enabled, skills with `domains` matching the current agent's role
 # are checked on each user message. Disable to use manual /skill only.
-auto_activation = false
+auto_activation = true
 
 # Enable automatic validation via `validate` scripts at end of each assistant turn.
 # When enabled, active skills with a `validate` script are run automatically.
@@ -484,6 +484,8 @@ knowledge_retention = 25
 # they do not all fit. 0 disables analysis-finding retention.
 analysis_findings_max_tokens = 4000
 
+threshold = 80000
+
 # NOTE: these belong to [compression]. A key placed AFTER the
 # [[compression.pressure_levels]] blocks below is parsed as a field of the last
 # pressure level and silently ignored — knowledge_retention sat there, inert,
@@ -502,22 +504,6 @@ telemetry = true
 [compression.attention.governance]
 enabled = true
 verify_hash = true
-
-# Compression aggressiveness scales with absolute token count
-# Each level defines: threshold (token count) and target_ratio (compression strength)
-# Compression triggers when context exceeds ANY threshold, using the highest matched ratio
-# Example: At 100k tokens, compress to 1/4 size (4x compression)
-[[compression.pressure_levels]]
-threshold = 90000
-target_ratio = 2.0  # Light: 50% reduction
-
-[[compression.pressure_levels]]
-threshold = 125000
-target_ratio = 4.0  # Medium: 75% reduction
-
-[[compression.pressure_levels]]
-threshold = 180000
-target_ratio = 8.0  # Aggressive: 87.5% reduction
 
 # Decision model configuration for compression decisions and summary generation
 # Use a fast, cheap model like Haiku for cost savings (10x cheaper than Sonnet)
@@ -560,7 +546,7 @@ max_consecutive_steers = 0
 
 [supervisor.learning]
 # Enable the learning system
-enabled = false # nothing to larn cuz its just simple case tests short lived
+enabled = true 
 # Model for extraction and retrieval LLM calls (cheap model recommended)
 model = "ollama:qwen3.5:397b"
 # Backend: "file" (default, zero deps) or "mcp" (external tool with field mapping)
@@ -612,7 +598,7 @@ self_report = true
 # octobench: enabled — glm-5.2 issues one `view` per round (~48 sequential reads
 # on tox), and with no provider-side prompt caching every extra round re-bills
 # the whole context; the batching steer directly cuts rounds.
-sequential_threshold = 4
+sequential_threshold = 3
 # Cap how many batching steers one turn may receive. Without it the steer
 # re-fires on every qualifying round, so a read-heavy stretch collects a long
 # tail of identical advisories that cost context and stop being informative.
@@ -625,11 +611,17 @@ enabled = true
 # Max gate re-entry iterations (bounds over-verification). Shared budget across
 # the free pre-gate and the LLM verify-gate.
 max_iterations = 2
-# Model the gate verifies WITH. RECOMMENDED: a DIFFERENT family than your agent
-# model -- a same-family verifier inherits the same blind spots and rubber-stamps
-# them; cross-family catches far more (e.g. openai:gpt-5-mini, google:gemini-2.5-flash).
-# Defaults to the cheap supervisor model so it works out of the box; change it.
-verifier_model = "ollama:minimax-m3"
+# Model the gate verifies WITH (also runs the task classifier / conditions
+# compiler). Cross-family is the default guidance, but instrumented traces
+# (2026-08-12) showed minimax-m3 dropping mandated rules on both seats —
+# omitting required checklist conditions and never applying the
+# acceptance-only evidence rule — while deepseek applied them with depth in
+# an A/B replay on identical input. Capability beats family diversity here.
+# Transport matters: the ollama-served variant answers without its reasoning
+# pass (measured: bare 9s PASS verdicts, 2-line checklists) while the
+# openrouter-served one reasons deeply on identical input (A/B 2026-08-12).
+verifier_model = "openrouter:deepseek/deepseek-v4-flash-0731"
+
 # Free deterministic pre-gate (no model call): refuse a `done` claim when code
 # was changed but no successful check (build/test/lint/etc.) ran since the change.
 require_check_after_mutation = true
@@ -657,7 +649,7 @@ enabled = true
 # Per-result trigger (estimated tokens). 0 = off. Keep well below
 # mcp_response_tokens_threshold: that cap is the backstop, this is the smart
 # path that fires earlier.
-tokens_threshold = 6000
+tokens_threshold = 4000
 # Model that does the narrowing (cheap + fast recommended).
 model = "ollama:deepseek-v4-flash"
 

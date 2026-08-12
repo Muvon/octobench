@@ -40,9 +40,9 @@ RUN curl --retry 5 --retry-all-errors --retry-delay 3 --connect-timeout 30 -fsSL
 
 # ── Pinned agent CLIs (prebuilt, no source builds) ───────────────────────────
 ARG TARGETARCH
-ARG OCTOMIND_VERSION=0.42.1
+ARG OCTOMIND_VERSION=0.43.0
 ARG OCTOCODE_VERSION=0.20.2
-ARG OCTOFS_VERSION=0.8.1
+ARG OCTOFS_VERSION=0.9.0
 ARG OCTOBRAIN_VERSION=0.10.2
 ARG CODEX_VERSION=0.146.0
 ARG CLAUDE_VERSION=2.1.221

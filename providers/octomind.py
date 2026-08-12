@@ -231,31 +231,3 @@ class OctomindProvider(Provider):
             raw_output=main.stdout or "",
         )
 
-    def build_provider_evidence(self, run_result: ProviderRunResult) -> str:
-        trace = run_result.provider_trace or {}
-        assistant_messages = trace.get("assistant_messages") or []
-        tool_intents = trace.get("tool_intents") or []
-        tool_results = trace.get("tool_results") or []
-
-        lines: list[str] = []
-        lines.append("PROVIDER_EVIDENCE")
-        lines.append("provider: octomind")
-        lines.append("assistant_messages:")
-        if assistant_messages:
-            for msg in assistant_messages:
-                lines.append(f"- {msg}")
-        else:
-            lines.append("- <none>")
-        lines.append("tool_intents:")
-        if tool_intents:
-            for intent in tool_intents:
-                lines.append(f"- {intent}")
-        else:
-            lines.append("- <none>")
-        lines.append("tool_results:")
-        if tool_results:
-            for result in tool_results:
-                lines.append(f"- {result}")
-        else:
-            lines.append("- <none>")
-        return "\n".join(lines)

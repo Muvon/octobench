@@ -9,6 +9,10 @@ from typing import TYPE_CHECKING, Any, Optional
 if TYPE_CHECKING:
     from runners.executor import Executor
 
+# Same cap for every client: a longer trace must not buy a client more judge
+# attention (favourable or otherwise) than a terser one.
+PROVIDER_EVIDENCE_FINAL_MESSAGE_CHARS = 2000
+
 
 def shared_system_prompt() -> Optional[str]:
     """The prompt every client must receive, or None when unset (stock behaviour).
@@ -67,8 +71,24 @@ class Provider(ABC):
         raise NotImplementedError
 
     def build_provider_evidence(self, run_result: ProviderRunResult) -> str:
+        """Client-agnostic trace block for judge context. Do NOT override.
+
+        Scoring comes from the production diff and the validation exit code,
+        both harness-produced. The only thing a trace adds is a completion
+        claim the verdict can contradict, so that is all this carries.
+
+        Anything client-specific here is scored as if it were work product:
+        clients that exposed richer traces (tool params, tool results, every
+        intermediate message) collected criticism that clients exposing less
+        never received, and three of four announced themselves by name to the
+        judge. Same work must yield the same payload, so the shape is fixed
+        here and the provider name is deliberately absent.
+
+        Kept to the final message alone because that is the one field also
+        stored on the record (`result.stdout`), which lets rejudge rebuild
+        this block byte-for-byte instead of re-parsing raw client traces.
         """
-        Provider-specific compact evidence for judge context.
-        Override in provider implementations when richer trace is available.
-        """
-        return ""
+        final = (run_result.stdout or "").strip()
+        if not final:
+            return ""
+        return "final_message:\n" + final[-PROVIDER_EVIDENCE_FINAL_MESSAGE_CHARS:]

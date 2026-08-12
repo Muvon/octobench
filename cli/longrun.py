@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from cli.main import (
+    clean_workspace,
     default_judge_cfg,
     diff_snapshots,
     ensure_workspace,
@@ -334,6 +335,11 @@ def _run_sequence(
             )
 
     finally:
+        # A sequence keeps its checkout for all its turns, so it can only be
+        # dropped here. Rust/C++ build trees reach tens of GB each; without this
+        # a 20-sequence campaign needs more disk than the box has. Turn logs,
+        # diffs and scores live under run_dir/turns and are unaffected.
+        clean_workspace(executor, workdir_abs, seq_id, verbosity)
         executor.close()
 
     # Aggregate sequence-level metrics.

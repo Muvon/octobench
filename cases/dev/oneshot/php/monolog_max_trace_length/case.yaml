@@ -1,0 +1,35 @@
+id: dev_php_monolog_max_trace_length
+name: Monolog configurable exception trace length
+category: dev
+difficulty: simple
+meta:
+  repo: https://github.com/Seldaek/monolog
+  pr_url: https://github.com/Seldaek/monolog/pull/2015
+  pr: 2015
+  scenario: feature
+  base_sha: b321dd6749f0bf7189444158a3ce785cc16d69b0
+  gold_sha: 108867b3552775777dea2c71e014e233147f440f
+  test_paths:
+    - tests/Monolog/Formatter/NormalizerFormatterTest.php
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  When Monolog normalizes an exception it writes out every frame of the stack
+  trace. On deep call stacks that buries the useful part of the log line and
+  bloats whatever storage the records end up in. Make the number of trace frames
+  configurable on `NormalizerFormatter`, alongside the existing normalization
+  limits.
+
+  Requirements:
+  - A `maxTraceLength` option limits how many stack frames a normalized exception
+    includes. It defaults to unlimited, so existing output is unchanged unless the
+    option is set.
+  - Read and written through `getMaxTraceLength()` and `setMaxTraceLength()`,
+    following the conventions the neighbouring normalization options already use,
+    including what the setter returns.
+  - Setting it to 0 means no trace frames are included at all.
+  - The limit applies to every exception in the chain, so a previous exception's
+    trace is capped the same way.
+  - It composes with the existing base-path stripping: frames that survive the
+    limit are still rendered exactly as they are today.

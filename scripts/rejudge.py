@@ -21,7 +21,28 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from judges.llm_judge import run_judge  # noqa: E402
 from cli.main import build_task_prompt, default_judge_cfg, load_yaml  # noqa: E402
+from providers.base import PROVIDER_EVIDENCE_FINAL_MESSAGE_CHARS  # noqa: E402
 from scoring.aggregate import compute_efficiency_score, compute_final_score  # noqa: E402
+
+
+def build_uniform_evidence(record: dict) -> str:
+    """The judge payload a run would produce today, from a stored record.
+
+    Mirrors Provider.build_provider_evidence: final message only, no client
+    name, same cap — so records judged months apart stay comparable.
+    """
+    parts = []
+    final = ((record.get("result") or {}).get("stdout") or "").strip()
+    if final:
+        parts.append(
+            "<provider_evidence>\nfinal_message:\n"
+            + final[-PROVIDER_EVIDENCE_FINAL_MESSAGE_CHARS:]
+            + "\n</provider_evidence>"
+        )
+    diff = (record.get("evidence_diff") or "").strip()
+    if diff:
+        parts.append("<evidence_diff>\n" + diff + "\n</evidence_diff>")
+    return "\n\n".join(parts)
 
 
 def needs_rejudge(record: dict) -> bool:
@@ -62,7 +83,12 @@ def main() -> None:
             continue
         case = case_files[r["case_id"]]
         scripts = r["scripts"]
-        evidence = r.get("evidence", "")
+        # Rebuild the evidence block instead of reusing the stored one: records
+        # written before the payload was unified carry a client-specific trace
+        # (and the producing client's name), which is exactly what made scores
+        # non-comparable. Reconstructed here from client-agnostic fields so an
+        # old record is judged on the same input a new one would produce.
+        evidence = build_uniform_evidence(r)
         # Records written before the evidence fix can carry a file list with no
         # diff content (snapshot cap starved build_evidence). The workspace
         # persists per run — regenerate the real diff from git when available.

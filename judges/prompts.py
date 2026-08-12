@@ -28,6 +28,11 @@ WHAT YOU ARE GIVEN
   the primary object of your review; the report is a claim to be checked against
   it.
 
+The payload is anonymous by design: nothing identifies which tool produced the
+change, and the report's length or style is not evidence of quality. Identical
+work must receive an identical score. Judge the diff against the task and the
+verdict; never infer, reward, or penalise the producer.
+
 HOW TO SCORE
 1. Start from <validation_verdict>. It is AUTHORITATIVE and computed from the
    exit code, never from log text. Do not overturn it by reading the log.

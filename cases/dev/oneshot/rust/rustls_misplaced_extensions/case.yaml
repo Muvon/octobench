@@ -9,7 +9,7 @@ meta:
   scenario: protocol-security-fix
   prompt_source: human-prompt
   prompt_style: behavior-rich
-  base_sha: b705779b6cc03fbc73b0ee7bbe0dd9832081fa69
+  base_sha: ce23b5429ad617e932c896150ded30e3c7a0d0a7
   gold_sha: 7b7f4511a4f8395e67a1d8b0e97e840b0fa117eb
   test_paths:
     - rustls/src/client/test.rs
@@ -18,4 +18,40 @@ system_prompt: |
   You are an autonomous software engineer working in an existing repository at the current directory.
   Resolve the requested task completely, as the project's maintainers would. When done, stop.
 instruction: |
-  Tighten rustls's handling of misplaced TLS extensions to follow RFC 9846. If a recognized extension appears in a handshake message where that extension is not permitted, abort with an `illegal_parameter` alert instead of silently ignoring it. Apply this consistently to TLS 1.3 `ServerHello`, `EncryptedExtensions`, `CertificateRequest`, and `NewSessionTicket`, and reject `oid_filters` and `ech_outer_extensions` in `ClientHello`. Unknown extensions should remain accepted where the protocol permits them, as should recognized extensions that rustls does not process but that are legal in that message. Preserve the existing behavior for `HelloRetryRequest` and `Certificate`.
+  Tighten rustls's handling of misplaced TLS extensions to follow RFC 9846. If a
+  recognized extension appears in a handshake message where that extension is not
+  permitted, abort with an `illegal_parameter` alert instead of silently ignoring
+  it. Apply this consistently to TLS 1.3 `ServerHello`, `EncryptedExtensions`,
+  `CertificateRequest`, and `NewSessionTicket`, and reject `oid_filters` and
+  `ech_outer_extensions` in `ClientHello`. Unknown extensions should remain
+  accepted where the protocol permits them, as should recognized extensions that
+  rustls does not process but that are legal in that message. Preserve the
+  existing behavior for `HelloRetryRequest` and `Certificate`.
+
+  Doing this per-message means each message's extensions need their own type
+  rather than sharing one. The crate's unit tests are written against that shape,
+  so the change must provide:
+
+  - `msgs::server_hello::EncryptedExtensions` — models the TLS 1.3
+    EncryptedExtensions message, split out from `ServerExtensions` (which remains
+    for `ServerHello`). It carries a field per extension that message may legally
+    hold, named the way the existing extension structs name theirs.
+    `ServerExtensions` keeps every field it has today — this adds a type, it
+    does not move fields out of the existing one.
+  - `msgs::handshake::CertificateRequestExtensions` — the equivalent for the TLS
+    1.3 CertificateRequest message.
+  - `ExtensionType::is_recognized` — reports whether an extension type is one
+    rustls knows about.
+  - `InvalidMessage::MisplacedExtension(u16)` — the error returned when a
+    recognized extension appears where it is not permitted, carrying the
+    offending extension type.
+  - On each extension struct (`ClientExtensions`, `ServerExtensions`,
+    `EncryptedExtensions`, `CertificateRequestExtensions`,
+    `NewSessionTicketExtensions`, `HelloRetryRequestExtensions`,
+    `CertificateExtensions`): an associated `ALL_EXTENSIONS` constant listing
+    every `ExtensionType` it can encode or decode; and on those that legally
+    carry extensions rustls does not act on, an associated `UNPROCESSED`
+    constant listing those types.
+
+  `ALL_EXTENSIONS`, `UNPROCESSED` and `msgs::codec::LengthPrefixedBuffer` must be
+  reachable from the crate's `msgs` unit tests.

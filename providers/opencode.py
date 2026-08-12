@@ -91,12 +91,3 @@ class OpencodeProvider(Provider):
             raw_output=proc.stdout or "",
         )
 
-    def build_provider_evidence(self, run_result: ProviderRunResult) -> str:
-        parts = []
-        if run_result.stdout:
-            parts.append("FINAL MESSAGE:\n" + run_result.stdout[-2000:])
-        trace = run_result.provider_trace or {}
-        calls = trace.get("tool_calls")
-        if calls:
-            parts.append("TOOL CALLS (tail):\n" + "\n".join(f"- {c}" for c in calls))
-        return "\n\n".join(parts)

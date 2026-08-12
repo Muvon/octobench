@@ -162,16 +162,3 @@ class ClaudeProvider(Provider):
             raw_output=proc.stdout or "",
         )
 
-    def build_provider_evidence(self, run_result: ProviderRunResult) -> str:
-        trace = run_result.provider_trace or {}
-        assistant_messages = trace.get("assistant_messages") or []
-        tool_intents = trace.get("tool_intents") or []
-        tool_results = trace.get("tool_results") or []
-
-        lines: list[str] = ["PROVIDER_EVIDENCE", "provider: claude", "assistant_messages:"]
-        lines.extend([f"- {m}" for m in assistant_messages] or ["- <none>"])
-        lines.append("tool_intents:")
-        lines.extend([f"- {t}" for t in tool_intents] or ["- <none>"])
-        lines.append("tool_results:")
-        lines.extend([f"- {r}" for r in tool_results] or ["- <none>"])
-        return "\n".join(lines)
