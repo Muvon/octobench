@@ -2,6 +2,7 @@ id: dev_python_werkzeug_float_url_notation
 name: Werkzeug float URL scientific notation
 category: dev
 difficulty: simple
+timeout_minutes: 60
 meta:
   repo: https://github.com/pallets/werkzeug
   pr_url: https://github.com/pallets/werkzeug/pull/3147

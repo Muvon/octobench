@@ -2,6 +2,7 @@ id: dev3_cpp_redis_acl_effective_keys
 name: Redis ACL effective-key validation
 category: dev
 difficulty: complex
+timeout_minutes: 90
 meta:
   repo: https://github.com/redis/redis
   pr_url: https://github.com/redis/redis/pull/15478

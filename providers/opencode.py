@@ -61,10 +61,16 @@ class OpencodeProvider(Provider):
             typ = obj.get("type")
             if typ == "step_finish":
                 tokens = part.get("tokens") or {}
-                input_tokens += int(tokens.get("input") or 0)
-                output_tokens += int(tokens.get("output") or 0)
-                reasoning_tokens += int(tokens.get("reasoning") or 0)
+                # Per-step counters, summed over the run (opencode has no resume,
+                # so there is nothing cumulative to subtract). Canonical
+                # semantics, identical to the other clients: cache writes are
+                # billed input, and reasoning is billed output — opencode reports
+                # both separately, so they are folded in here or they cost 0.
                 cache = tokens.get("cache") or {}
+                input_tokens += int(tokens.get("input") or 0) + int(cache.get("write") or 0)
+                reasoning = int(tokens.get("reasoning") or 0)
+                reasoning_tokens += reasoning
+                output_tokens += int(tokens.get("output") or 0) + reasoning
                 cached_input += int(cache.get("read") or 0)
             elif typ == "text":
                 text = part.get("text")
@@ -76,7 +82,7 @@ class OpencodeProvider(Provider):
                 if tool:
                     tool_titles.append(f"{tool}: {title or ''}".strip())
 
-        total = input_tokens + output_tokens + reasoning_tokens
+        total = input_tokens + cached_input + output_tokens
         return ProviderRunResult(
             stdout=(last_text or "").strip(),
             stderr=(proc.stderr or "").strip(),

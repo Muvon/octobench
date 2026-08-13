@@ -54,6 +54,13 @@ class Executor(ABC):
     orchestration (snapshot/judge/scoring) stays identical for both.
     """
 
+    # Per-case wall-clock budget for `run()` calls (the agent invocation), set by
+    # the orchestrator from the case's `timeout_minutes`. Enforcing it INSIDE the
+    # run (instead of an external `timeout` on the whole harness) means a timeout
+    # still writes an infra-marked record and the container still gets torn down —
+    # an external kill leaves neither.
+    case_timeout_s: Optional[int] = None
+
     @abstractmethod
     def run(
         self,
@@ -122,14 +129,25 @@ class HostExecutor(Executor):
         env = os.environ.copy()
         if env_overrides:
             env.update({k: str(v) for k, v in env_overrides.items()})
-        proc = subprocess.run(
-            argv,
-            cwd=str(self._ws),
-            capture_output=True,
-            text=True,
-            input=input_text,
-            env=env,
-        )
+        try:
+            proc = subprocess.run(
+                argv,
+                cwd=str(self._ws),
+                capture_output=True,
+                text=True,
+                input=input_text,
+                env=env,
+                timeout=self.case_timeout_s,
+            )
+        except subprocess.TimeoutExpired as e:
+            # TimeoutExpired output is bytes even in text mode.
+            stdout = e.stdout if isinstance(e.stdout, str) else (e.stdout or b"").decode(errors="replace")
+            stderr = e.stderr if isinstance(e.stderr, str) else (e.stderr or b"").decode(errors="replace")
+            return ExecResult(
+                stdout,
+                stderr + f"\noctobench: case timeout after {self.case_timeout_s}s",
+                124,
+            )
         return ExecResult(proc.stdout or "", proc.stderr or "", proc.returncode)
 
     def bash_script(self, name, verbosity, log_fn, extra_env=None) -> Dict:
@@ -295,7 +313,21 @@ class DockerExecutor(Executor):
             for k, v in env_overrides.items():
                 exec_cmd += ["-e", f"{k}={v}"]
         exec_cmd += [self.name, *argv]
-        proc = subprocess.run(exec_cmd, capture_output=True, text=True, input=input_text)
+        try:
+            proc = subprocess.run(
+                exec_cmd, capture_output=True, text=True, input=input_text,
+                timeout=self.case_timeout_s,
+            )
+        except subprocess.TimeoutExpired as e:
+            # The killed `docker exec` client does not stop the process inside
+            # the container; close() (docker rm -f) reaps it with the container.
+            stdout = e.stdout if isinstance(e.stdout, str) else (e.stdout or b"").decode(errors="replace")
+            stderr = e.stderr if isinstance(e.stderr, str) else (e.stderr or b"").decode(errors="replace")
+            return ExecResult(
+                stdout,
+                stderr + f"\noctobench: case timeout after {self.case_timeout_s}s",
+                124,
+            )
         return ExecResult(proc.stdout or "", proc.stderr or "", proc.returncode)
 
     def bash_script(self, name, verbosity, log_fn, extra_env=None) -> Dict:

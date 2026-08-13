@@ -2,6 +2,7 @@ id: dev5_js_vite_hmr_restart_stale
 name: Vite crashes when the server restarts during a hot update
 category: dev
 difficulty: complex
+timeout_minutes: 45
 meta:
   repo: https://github.com/vitejs/vite
   pr_url: https://github.com/vitejs/vite/pull/22992

@@ -2,6 +2,7 @@ id: dev5_cpp_cpphttplib_query_verbatim
 name: cpp-httplib re-encodes the query when path encoding is disabled
 category: dev
 difficulty: medium
+timeout_minutes: 45
 meta:
   repo: https://github.com/yhirose/cpp-httplib
   pr_url: https://github.com/yhirose/cpp-httplib/pull/2479

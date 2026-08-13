@@ -2,6 +2,7 @@ id: dev2_php_guzzle_cookie_prefixes
 name: Guzzle secure cookie name prefixes
 category: dev
 difficulty: complex
+timeout_minutes: 45
 meta:
   repo: https://github.com/guzzle/guzzle
   pr_url: https://github.com/guzzle/guzzle/pull/3894

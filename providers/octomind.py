@@ -48,8 +48,13 @@ def _iter_jsonl_records(text: str) -> list[dict[str, Any]]:
     return records
 
 
+SessionUsage = tuple[int, int, int, int, int]
+NO_USAGE: SessionUsage = (0, 0, 0, 0, 0)
+
+
 def _extract_from_jsonl(
     records: list[dict[str, Any]],
+    baseline: SessionUsage = NO_USAGE,
 ) -> tuple[
     str,
     list[str],
@@ -60,6 +65,7 @@ def _extract_from_jsonl(
     Optional[int],
     Optional[int],
     Optional[int],
+    SessionUsage,
 ]:
     assistant_messages: list[str] = []  # compacted, for judge-evidence trace
     full_assistant: list[str] = []       # full text, for the actual verdict
@@ -72,6 +78,7 @@ def _extract_from_jsonl(
     reasoning_tokens: Optional[int] = None
     total_tokens: Optional[int] = None
     last_cost_meta: Optional[dict[str, Any]] = None
+    new_baseline: SessionUsage = baseline
 
     for obj in records:
         typ = str(obj.get("type", "")).strip().lower()
@@ -105,27 +112,35 @@ def _extract_from_jsonl(
             last_cost_meta = obj
 
     if last_cost_meta is not None:
-        raw_in = last_cost_meta.get("input_tokens")
-        raw_out = last_cost_meta.get("output_tokens")
-        raw_cached = last_cost_meta.get("cache_read_tokens", last_cost_meta.get("cached_tokens"))
-        raw_reasoning = last_cost_meta.get("reasoning_tokens")
+        # Every counter on the cost event is a RUNNING TOTAL for the session,
+        # session_tokens included — measured on a 2-turn run: turn 1 reported
+        # 718,613 and turn 2 reported 2,699,666, and in both turns the parts sum
+        # exactly to session_tokens. `baseline` is what this session had already
+        # reported, so a resumed turn is billed for its own work only.
         try:
-            if raw_in is not None:
-                input_tokens = int(raw_in)
-            if raw_out is not None:
-                output_tokens = int(raw_out)
-            if raw_cached is not None:
-                cached_tokens = int(raw_cached)
-            if raw_reasoning is not None:
-                reasoning_tokens = int(raw_reasoning)
+            raw_in = int(last_cost_meta.get("input_tokens") or 0)
+            raw_out = int(last_cost_meta.get("output_tokens") or 0)
+            raw_cached = int(
+                last_cost_meta.get("cache_read_tokens")
+                or last_cost_meta.get("cached_tokens")
+                or 0
+            )
+            raw_cache_write = int(last_cost_meta.get("cache_write_tokens") or 0)
+            raw_reasoning = int(last_cost_meta.get("reasoning_tokens") or 0)
         except Exception:
-            pass
-
-    # Always compute total from per-request fields, never from session_tokens
-    # (which is cumulative across resumed sessions — summing it across turns
-    # would double-count in multi-turn runs).
-    if input_tokens is not None and output_tokens is not None:
-        total_tokens = input_tokens + output_tokens + (reasoning_tokens or 0)
+            raw_in = raw_out = raw_cached = raw_cache_write = raw_reasoning = 0
+        b_in, b_out, b_cached, b_write, b_reason = baseline
+        # Canonical semantics, identical to claude and codex:
+        #   input  = fresh input, cache WRITES included (they are billed input)
+        #   cached = cache reads
+        #   output = completion INCLUDING reasoning (octomind reports reasoning
+        #            alongside output, so it must be folded in or it bills at 0)
+        input_tokens = max(raw_in - b_in, 0) + max(raw_cache_write - b_write, 0)
+        cached_tokens = max(raw_cached - b_cached, 0)
+        reasoning_tokens = max(raw_reasoning - b_reason, 0)
+        output_tokens = max(raw_out - b_out, 0) + reasoning_tokens
+        total_tokens = input_tokens + cached_tokens + output_tokens
+        new_baseline = (raw_in, raw_out, raw_cached, raw_cache_write, raw_reasoning)
 
     final_text = full_assistant[-1] if full_assistant else ""
     return (
@@ -138,11 +153,18 @@ def _extract_from_jsonl(
         output_tokens,
         reasoning_tokens,
         total_tokens,
+        new_baseline,
     )
 
 
 class OctomindProvider(Provider):
     name = "octomind"
+
+    def __init__(self) -> None:
+        # session name -> cumulative usage already reported by that session, so a
+        # resumed turn can be charged for its own work only. The long-run runner
+        # keeps one provider instance per sequence, which is what makes this work.
+        self._session_usage: dict[str, SessionUsage] = {}
 
     def run_task(
         self,
@@ -206,7 +228,9 @@ class OctomindProvider(Provider):
             output_tokens,
             reasoning_tokens,
             total_tokens,
-        ) = _extract_from_jsonl(records)
+            new_baseline,
+        ) = _extract_from_jsonl(records, self._session_usage.get(session_name, NO_USAGE))
+        self._session_usage[session_name] = new_baseline
 
         if not final_text:
             # Fallback to legacy text extraction for non-jsonl output variants.

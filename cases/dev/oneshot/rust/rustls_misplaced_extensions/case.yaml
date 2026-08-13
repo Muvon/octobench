@@ -2,6 +2,7 @@ id: dev3_rust_rustls_misplaced_extensions
 name: rustls misplaced TLS extension rejection
 category: dev
 difficulty: complex
+timeout_minutes: 45
 meta:
   repo: https://github.com/rustls/rustls
   pr_url: https://github.com/rustls/rustls/pull/3172

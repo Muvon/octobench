@@ -2,6 +2,7 @@ id: dev3_js_react_hidden_hydration_hang
 name: React hidden hydration update hang
 category: dev
 difficulty: complex
+timeout_minutes: 240
 meta:
   repo: https://github.com/facebook/react
   pr_url: https://github.com/facebook/react/pull/37135

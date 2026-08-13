@@ -2,6 +2,7 @@ id: dev_php_carbon_period_end_sync
 name: Carbon period end property sync
 category: dev
 difficulty: medium
+timeout_minutes: 90
 meta:
   repo: https://github.com/briannesbitt/Carbon
   pr_url: https://github.com/briannesbitt/Carbon/pull/3333

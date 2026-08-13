@@ -2,6 +2,7 @@ id: dev_js_fastify_query_method
 name: Fastify HTTP QUERY method support
 category: dev
 difficulty: complex
+timeout_minutes: 45
 meta:
   repo: https://github.com/fastify/fastify
   pr_url: https://github.com/fastify/fastify/pull/6832

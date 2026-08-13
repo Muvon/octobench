@@ -832,6 +832,12 @@ def main() -> None:
                     seal_network(executor)
                 before = snapshot_files(executor.workspace_host_path())
 
+                # Per-case wall budget for the agent run: `timeout_minutes` from
+                # case.yaml, default 30. Enforced inside Executor.run so a timeout
+                # still yields an infra-marked record and container teardown.
+                timeout_minutes = int(case.get("timeout_minutes") or 30)
+                executor.case_timeout_s = timeout_minutes * 60
+
                 session_name = (
                     f"ob-{safe_id(case_id)[:20]}-{provider_name[:8]}-"
                     f"{safe_id(benchmark_model)[:12]}-{int(time.time())}"

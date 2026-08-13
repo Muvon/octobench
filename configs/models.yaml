@@ -15,7 +15,7 @@ models:
       octomind: openai:gpt-5.5
 
   gpt-5.6-sol:
-    pricing:                     # proxy: gpt-5.5 tier pricing until official page lists 5.6-sol
+    pricing:                     # official, developers.openai.com/api/docs/pricing 2026-08-13
       input: 5.00
       cached_input: 0.50
       output: 30.00
@@ -24,10 +24,10 @@ models:
       octomind: openai:gpt-5.6-sol
 
   gpt-5.6-luna:
-    pricing:                     # proxy: gpt-5.4-mini tier (luna is its successor)
-      input: 0.75
-      cached_input: 0.075
-      output: 4.50
+    pricing:                     # official, developers.openai.com/api/docs/pricing 2026-08-13
+      input: 0.20
+      cached_input: 0.02
+      output: 1.20
     providers:
       codex: gpt-5.6-luna
       octomind: openai:gpt-5.6-luna

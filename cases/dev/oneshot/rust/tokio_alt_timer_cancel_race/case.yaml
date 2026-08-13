@@ -2,6 +2,7 @@ id: dev3_rust_tokio_alt_timer_cancel_race
 name: Tokio alternate-timer cancellation race
 category: dev
 difficulty: complex
+timeout_minutes: 45
 meta:
   repo: https://github.com/tokio-rs/tokio
   pr_url: https://github.com/tokio-rs/tokio/pull/8252

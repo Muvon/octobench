@@ -2,6 +2,7 @@ id: dev3_js_axios_stack_decoration
 name: Axios stack decoration destroys request errors (human-prompt)
 category: dev
 difficulty: medium
+timeout_minutes: 45
 meta:
   repo: https://github.com/axios/axios
   pr_url: https://github.com/axios/axios/pull/11109
