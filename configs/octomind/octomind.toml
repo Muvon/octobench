@@ -534,7 +534,7 @@ ignore_cost = false  # When true, compression decision API cost is not tracked (
 # Master switch for the whole control plane
 enabled = true
 # Shared cheap model for supervisor mechanics (a mechanic may override)
-model = "ollama:qwen3.5:397b"
+model = "ollama:deepseek-v4-flash"
 # Evidence-bound claims: have the agent back load-bearing repo facts with a
 # verbatim «quote», then deterministically verify each quote occurs in a tool
 # result; fabricated citations are re-grounded via the verify-gate (needs gate.enabled).
@@ -620,7 +620,7 @@ max_iterations = 2
 # Transport matters: the ollama-served variant answers without its reasoning
 # pass (measured: bare 9s PASS verdicts, 2-line checklists) while the
 # openrouter-served one reasons deeply on identical input (A/B 2026-08-12).
-verifier_model = "openrouter:deepseek/deepseek-v4-flash-0731"
+verifier_model = "ollama:deepseek-v4-flash"
 
 # Free deterministic pre-gate (no model call): refuse a `done` claim when code
 # was changed but no successful check (build/test/lint/etc.) ran since the change.
