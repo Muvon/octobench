@@ -31,9 +31,10 @@ Required fields:
 - `elapsed_ms`: wall-clock runtime in milliseconds
 
 Token fields (optional but strongly recommended):
+- `semantics`: `separate_reasoning_v1` in persisted result records
 - `input_tokens`: non-cached input tokens only
 - `cached_input_tokens`: cached input tokens
-- `output_tokens`: output tokens
+- `output_tokens`: visible/non-reasoning output tokens
 - `reasoning_tokens`: reasoning tokens (if provider exposes them)
 - `total_tokens`: total tokens; should include cached+reasoning when available
 
@@ -46,7 +47,7 @@ Use canonical semantics across all providers:
 - `input_tokens` excludes cached input.
 - `cached_input_tokens` is separate.
 - `output_tokens` is response/output only.
-- `total_tokens = input_tokens + cached_input_tokens + output_tokens (+ reasoning_tokens when known)`.
+- `total_tokens = input_tokens + cached_input_tokens + output_tokens + reasoning_tokens` when reasoning is known.
 
 If a provider exposes only aggregate input:
 - subtract cached from input when cached is available.

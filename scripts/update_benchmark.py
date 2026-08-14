@@ -21,6 +21,8 @@ from pathlib import Path
 
 import yaml
 
+from scoring.aggregate import compute_cost, normalize_token_counts
+
 
 def load(pattern: str) -> dict:
     records = {}
@@ -62,6 +64,20 @@ def _fmt_tok(n: int) -> str:
     return f"{n / 1000:.0f}K"
 
 
+def _report_cost(record: dict, pricing_by_model: dict[str, dict]) -> float:
+    # Claude's provider-reported bill includes cache-write premiums that the
+    # flat model table cannot reproduce. Other stored costs are derived values,
+    # so refresh them from canonical tokens and the current price table.
+    if record.get("provider") == "claude":
+        return float(record.get("cost_usd") or 0)
+    model = record.get("model") or record.get("benchmark_model")
+    pricing = pricing_by_model.get(str(model), {})
+    if not pricing:
+        return float(record.get("cost_usd") or 0)
+    fresh, cache, output, reasoning = normalize_token_counts(record.get("tokens", {}))
+    return float(compute_cost(fresh, cache, output, pricing, reasoning) or 0)
+
+
 def cell(r: dict | None) -> str:
     if r is None:
         return "-"
@@ -74,18 +90,17 @@ def cell(r: dict | None) -> str:
     else:
         val = "FAIL" if s.get("validation_failed") else "PASS"
     judge = r.get("judge", {}).get("score")
-    cost = r.get("cost_usd")
+    cost = r.get("_report_cost_usd", r.get("cost_usd"))
     mins = r.get("result", {}).get("elapsed_ms", 0) / 60000
     cost_s = f"${cost:.2f}" if cost is not None else "$?"
     steps = _count_steps(r)
-    tok = r.get("tokens", {})
-    tok_total = tok.get('total') or ((tok.get('input') or 0) + (tok.get('output') or 0) + (tok.get('reasoning') or 0))
+    tok_in, tok_cache, tok_out, tok_reas = normalize_token_counts(r.get("tokens", {}))
+    tok_total = tok_in + tok_out + tok_reas
     tok_s = (
         f"{_fmt_tok(tok_total)} tok "
-        f"({_fmt_tok(tok.get('input') or 0)}/{_fmt_tok(tok.get('output') or 0)}"
-        f"/{_fmt_tok(tok.get('reasoning') or 0)})"
+        f"({_fmt_tok(tok_in)}/{_fmt_tok(tok_out)}/{_fmt_tok(tok_reas)})"
     )
-    cache_s = f"{_fmt_tok(tok.get('cached_input') or 0)} cache"
+    cache_s = f"{_fmt_tok(tok_cache)} cache"
     return (
         f"{val} j={judge if judge is not None else '?'} {cost_s} {mins:.0f}m "
         f"· {steps} steps · {tok_s} · {cache_s}"
@@ -103,28 +118,32 @@ def totals(records: dict, order: list) -> str:
               and not r.get("_integrity_violations"))
     leak = sum(1 for r in done if r.get("_integrity_violations"))
     infra = sum(1 for r in done if r.get("infra_failed"))
+    count = len(done)
     j = sum(r.get("judge", {}).get("score") or 0 for r in done)
-    cost = sum(r.get("cost_usd") or 0 for r in done)
+    cost = sum(r.get("_report_cost_usd", r.get("cost_usd")) or 0 for r in done)
     hours = sum(r.get("result", {}).get("elapsed_ms", 0) for r in done) / 3600000
-    tok_in = sum(r.get("tokens", {}).get("input") or 0 for r in done)
-    tok_out = sum(r.get("tokens", {}).get("output") or 0 for r in done)
-    tok_reas = sum(r.get("tokens", {}).get("reasoning") or 0 for r in done)
-    cache = sum(r.get("tokens", {}).get("cached_input") or 0 for r in done)
-    parts = [f"**{ok}/{len(done)}** PASS"]
+    normalized = [normalize_token_counts(r.get("tokens", {})) for r in done]
+    tok_in = sum(t[0] for t in normalized)
+    cache = sum(t[1] for t in normalized)
+    tok_out = sum(t[2] for t in normalized)
+    tok_reas = sum(t[3] for t in normalized)
+    fresh_total = tok_in + tok_out + tok_reas
+    parts = [f"**{ok}/{count}** PASS ({ok / count * 100:.1f}%)"]
     if fail:
         parts.append(f"{fail} FAIL")
     if leak:
         parts.append(f"{leak} LEAK")
     if infra:
         parts.append(f"{infra} INFRA")
-    parts.append(f"jΣ {j:.0f}")
-    parts.append(f"${cost:.2f}")
-    parts.append(f"{hours:.1f}h")
+    parts.append(f"jAvg {j / count:.2f}")
+    parts.append(f"${cost:.2f} total (${cost / count:.3f}/case)")
+    parts.append(f"{hours:.1f}h agent ({hours * 60 / count:.1f}m/case)")
     parts.append(
-        f"{_fmt_tok(tok_in + tok_out + tok_reas)} tok "
-        f"({_fmt_tok(tok_in)} in / {_fmt_tok(tok_out)} out / {_fmt_tok(tok_reas)} reas)"
+        f"{_fmt_tok(fresh_total)} tok ({_fmt_tok(round(fresh_total / count))}/case; "
+        f"{_fmt_tok(tok_in)} in / {_fmt_tok(tok_out)} out / {_fmt_tok(tok_reas)} reas"
+        f")"
     )
-    parts.append(f"{_fmt_tok(cache)} cache read")
+    parts.append(f"{_fmt_tok(cache)} cache read ({_fmt_tok(round(cache / count))}/case)")
     return " · ".join(parts)
 
 
@@ -270,11 +289,16 @@ def audit_integrity(record: dict, case: dict | None) -> list[str]:
 def main() -> None:
     repo_root = Path(__file__).resolve().parent.parent
     cases = discover_cases(repo_root)
+    model_specs = yaml.safe_load((repo_root / "configs/models.yaml").read_text())["models"]
+    pricing_by_model = {
+        name: spec.get("pricing") or {} for name, spec in model_specs.items()
+    }
     providers = []
     for arg in sys.argv[1:]:
         label, pattern = arg.split("=", 1)
         records = load(pattern)
         for case_id, record in records.items():
+            record["_report_cost_usd"] = _report_cost(record, pricing_by_model)
             record["_integrity_violations"] = audit_integrity(
                 record, cases.get(case_id)
             )
@@ -290,7 +314,7 @@ def main() -> None:
     lines = []
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines.append(f"_Updated {stamp}. val = hidden gold tests; j = judge 0-100; "
-                 f"cost; wall time (incl. env setup + verification). "
+                 f"cost; agent runtime (excludes setup, validation, and judging). "
                  f"LEAK = upstream solution access, excluded from passes._\n")
     header = "| case path | " + " | ".join(l for l, _ in providers) + " |"
     lines.append(header)
@@ -313,8 +337,8 @@ def main() -> None:
     all_harnesses = sorted({h for m in summary.values() for h in m})
 
     summary_lines = [
-        f"_Cross-model × harness matrix. Each cell = pass-rate · judgeΣ · "
-        f"cost · wall time._\n",
+        f"_Cross-model × harness matrix. Each cell = pass-rate · judge average · "
+        f"total/average cost · agent runtime · non-cache tokens._\n",
         "| model | " + " | ".join(all_harnesses) + " |",
         "|---" * (len(all_harnesses) + 1) + "|",
     ]

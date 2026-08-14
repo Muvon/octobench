@@ -132,6 +132,7 @@ def base_record(
         "domain": instance.meta.get("domain", ""),
         "result": {"stdout": "", "stderr": "", "exit_code": 0, "elapsed_ms": 0},
         "tokens": {
+            "semantics": "separate_reasoning_v1",
             "input": None,
             "cached_input": None,
             "output": None,
@@ -161,6 +162,7 @@ def apply_provider_result(record: Dict, pr, pricing: Optional[Dict]) -> None:
         "elapsed_ms": pr.elapsed_ms,
     }
     record["tokens"] = {
+        "semantics": "separate_reasoning_v1",
         "input": pr.input_tokens,
         "cached_input": pr.cached_input_tokens,
         "output": pr.output_tokens,
@@ -168,7 +170,13 @@ def apply_provider_result(record: Dict, pr, pricing: Optional[Dict]) -> None:
         "total": pr.total_tokens,
     }
     record["cost_usd"] = (
-        compute_cost(pr.input_tokens, pr.cached_input_tokens, pr.output_tokens, pricing)
+        compute_cost(
+            pr.input_tokens,
+            pr.cached_input_tokens,
+            pr.output_tokens,
+            pricing,
+            pr.reasoning_tokens,
+        )
         if pricing
         else None
     )

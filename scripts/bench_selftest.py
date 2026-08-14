@@ -18,6 +18,11 @@ sys.path.insert(0, str(REPO))
 from benchmarks import verify  # noqa: E402
 from benchmarks.base import RunContext, finalize_scoring  # noqa: E402
 from benchmarks.registry import build_adapter, list_benchmarks  # noqa: E402
+from scoring.aggregate import (  # noqa: E402
+    TOKEN_SEMANTICS,
+    compute_cost,
+    normalize_token_counts,
+)
 
 _passed = 0
 _failed = 0
@@ -142,6 +147,43 @@ def test_scoring() -> None:
     check("judge_text -> weighted final >0", rn["scoring"]["final_score"] > 0)
 
 
+def test_token_accounting() -> None:
+    pricing = {"input": 0.14, "cached_input": 0.0028, "output": 0.28}
+    expected = (100 * 0.14 + 200 * 0.0028 + (300 + 400) * 0.28) / 1_000_000
+    actual = compute_cost(100, 200, 300, pricing, 400)
+    check("reasoning billed once", actual is not None and abs(actual - expected) < 1e-12)
+
+    old_separate = {
+        "input": 100,
+        "cached_input": 200,
+        "output": 300,
+        "reasoning": 400,
+        "total": 800,
+    }
+    check(
+        "legacy separate reasoning preserved",
+        normalize_token_counts(old_separate) == (100, 200, 300, 400),
+    )
+
+    old_folded = {
+        "input": 100,
+        "cached_input": 200,
+        "output": 700,
+        "reasoning": 400,
+        "total": 1000,
+    }
+    check(
+        "legacy folded reasoning normalized",
+        normalize_token_counts(old_folded) == (100, 200, 300, 400),
+    )
+
+    current = {**old_separate, "semantics": TOKEN_SEMANTICS, "total": 1000}
+    check(
+        "current token semantics preserved",
+        normalize_token_counts(current) == (100, 200, 300, 400),
+    )
+
+
 def main() -> None:
     print("octobench benchmark framework self-test\n")
     test_configs()
@@ -150,6 +192,7 @@ def main() -> None:
     test_constraints()
     test_ifbench()
     test_scoring()
+    test_token_accounting()
     print(f"\n{_passed} passed, {_failed} failed")
     sys.exit(1 if _failed else 0)
 

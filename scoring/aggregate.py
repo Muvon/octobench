@@ -3,6 +3,32 @@ from __future__ import annotations
 from typing import Dict, Optional
 
 
+TOKEN_SEMANTICS = "separate_reasoning_v1"
+
+
+def normalize_token_counts(tokens: Dict) -> tuple[int, int, int, int]:
+    """Return fresh input, cache reads, visible output, and reasoning.
+
+    Unmarked records from a short-lived schema folded reasoning into output.
+    Their stored total is input + cache + folded output, which distinguishes
+    them from the older and current separate-reasoning representations.
+    """
+    fresh = int(tokens.get("input") or 0)
+    cache = int(tokens.get("cached_input") or 0)
+    output = int(tokens.get("output") or 0)
+    reasoning = int(tokens.get("reasoning") or 0)
+    total = int(tokens.get("total") or 0)
+    semantics = tokens.get("semantics")
+    folded = semantics == "reasoning_in_output_v0" or (
+        not semantics
+        and reasoning > 0
+        and total == fresh + cache + output
+    )
+    if folded:
+        output = max(output - reasoning, 0)
+    return fresh, cache, output, reasoning
+
+
 def _exp_score(value: float, scale: float, invert: bool = False) -> float:
     import math
 
@@ -50,6 +76,7 @@ def compute_cost(
     cached_input_tokens: Optional[int],
     output_tokens: Optional[int],
     pricing: Dict,
+    reasoning_tokens: Optional[int] = None,
 ) -> Optional[float]:
     if input_tokens is None or output_tokens is None:
         return None
@@ -61,15 +88,17 @@ def compute_cost(
     # Canonical semantics:
     # - input_tokens: non-cached input tokens
     # - cached_input_tokens: cached input tokens
-    # - output_tokens: output tokens
+    # - output_tokens: visible/non-reasoning output tokens
+    # - reasoning_tokens: billed at the output rate
     cached_tokens = cached_input_tokens or 0
+    reasoning = reasoning_tokens or 0
     billable_input = max(input_tokens, 0)
     cached_rate = cached_inp if cached_inp is not None else inp
     per = 1_000_000.0
     return (
         (billable_input / per) * inp
         + (cached_tokens / per) * cached_rate
-        + (output_tokens / per) * out
+        + ((output_tokens + reasoning) / per) * out
     )
 
 

@@ -318,7 +318,13 @@ def run_instance(instance: Dict, target: Dict, repo_root: Path, models_cfg: Dict
         executor.close()
 
     pricing = models_cfg.get("models", {}).get(benchmark_model, {}).get("pricing")
-    eval_cost = compute_cost(pr.input_tokens, pr.cached_input_tokens, pr.output_tokens, pricing) \
+    eval_cost = compute_cost(
+        pr.input_tokens,
+        pr.cached_input_tokens,
+        pr.output_tokens,
+        pricing,
+        pr.reasoning_tokens,
+    ) \
         if pricing else None
 
     return {
@@ -337,6 +343,7 @@ def run_instance(instance: Dict, target: Dict, repo_root: Path, models_cfg: Dict
             "elapsed_ms": pr.elapsed_ms,
         },
         "tokens": {
+            "semantics": "separate_reasoning_v1",
             "input": pr.input_tokens, "cached_input": pr.cached_input_tokens,
             "output": pr.output_tokens, "reasoning": pr.reasoning_tokens, "total": pr.total_tokens,
         },

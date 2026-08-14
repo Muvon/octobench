@@ -283,6 +283,7 @@ def _run_sequence(
                     provider_result.cached_input_tokens,
                     provider_result.output_tokens,
                     pricing,
+                    provider_result.reasoning_tokens,
                 )
 
             efficiency = compute_efficiency_score(
@@ -306,6 +307,7 @@ def _run_sequence(
                         "stdout": (provider_result.stdout or "")[-2000:],
                     },
                     "tokens": {
+                        "semantics": "separate_reasoning_v1",
                         "input": provider_result.input_tokens,
                         "cached_input": provider_result.cached_input_tokens,
                         "output": provider_result.output_tokens,

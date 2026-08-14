@@ -133,13 +133,13 @@ def _extract_from_jsonl(
         # Canonical semantics, identical to claude and codex:
         #   input  = fresh input, cache WRITES included (they are billed input)
         #   cached = cache reads
-        #   output = completion INCLUDING reasoning (octomind reports reasoning
-        #            alongside output, so it must be folded in or it bills at 0)
+        #   output = visible/non-reasoning completion
+        #   reasoning = separate output-rate tokens, billed by compute_cost()
         input_tokens = max(raw_in - b_in, 0) + max(raw_cache_write - b_write, 0)
         cached_tokens = max(raw_cached - b_cached, 0)
         reasoning_tokens = max(raw_reasoning - b_reason, 0)
-        output_tokens = max(raw_out - b_out, 0) + reasoning_tokens
-        total_tokens = input_tokens + cached_tokens + output_tokens
+        output_tokens = max(raw_out - b_out, 0)
+        total_tokens = input_tokens + cached_tokens + output_tokens + reasoning_tokens
         new_baseline = (raw_in, raw_out, raw_cached, raw_cache_write, raw_reasoning)
 
     final_text = full_assistant[-1] if full_assistant else ""
@@ -254,4 +254,3 @@ class OctomindProvider(Provider):
             },
             raw_output=main.stdout or "",
         )
-

@@ -808,6 +808,7 @@ def main() -> None:
                             "elapsed_ms": 0,
                         },
                         "tokens": {
+                            "semantics": "separate_reasoning_v1",
                             "input": None,
                             "cached_input": None,
                             "output": None,
@@ -899,10 +900,11 @@ def main() -> None:
                                 "elapsed_ms": provider_result.elapsed_ms,
                             },
                             "tokens": {
+                                "semantics": "separate_reasoning_v1",
                                 "input": provider_result.input_tokens,
                                 "cached_input": provider_result.cached_input_tokens,
                                 "output": provider_result.output_tokens,
-                                "reasoning": None,
+                                "reasoning": provider_result.reasoning_tokens,
                                 "total": provider_result.total_tokens,
                             },
                             "cost_usd": provider_result.provider_cost_usd,
@@ -979,6 +981,7 @@ def main() -> None:
                         provider_result.cached_input_tokens,
                         provider_result.output_tokens,
                         pricing,
+                        provider_result.reasoning_tokens,
                     )
 
                 record = {
@@ -996,6 +999,7 @@ def main() -> None:
                         "elapsed_ms": provider_result.elapsed_ms,
                     },
                     "tokens": {
+                        "semantics": "separate_reasoning_v1",
                         "input": provider_result.input_tokens,
                         "cached_input": provider_result.cached_input_tokens,
                         "output": provider_result.output_tokens,
