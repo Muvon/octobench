@@ -527,13 +527,19 @@ def default_judge_cfg(repo_root: Path) -> Dict:
         os.environ.get("OCTOBENCH_JUDGE_MODEL", "octohub:minimax")
     ]
     judge_model = judge_models[0]
+    # The judge runs HOST-side against the same config the agents get, so it must
+    # be able to load it: a config newer than the host binary's schema fails every
+    # panel model and silently scores the run at 0 (seen with config v5 against a
+    # v4 binary). OCTOMIND_BIN, which already overrides the agent's binary, applies
+    # here too so both sides stay on one build.
+    judge_bin = os.environ.get("OCTOMIND_BIN") or "octomind"
     return {
         "name": "octomind_judge",
         "runner": "cli",
         "model": judge_model,
         "models": judge_models,
         "stdin_prompt": True,
-        "command": ["octomind", "run", "judge", "-m", judge_model, "--format=jsonl"],
+        "command": [judge_bin, "run", "judge", "-m", judge_model, "--format=jsonl"],
         "json_events": True,
         "env": {
             "OCTOMIND_CONFIG_PATH": f"{repo_root}/configs/octomind/octomind.toml",

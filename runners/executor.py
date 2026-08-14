@@ -12,6 +12,12 @@ from typing import Callable, Dict, List, Optional
 # Host environment variables carrying provider/tool auth. The Docker executor
 # forwards these (by name, so values stay off the command line) into the
 # container, so agents authenticate with the same credentials as the host.
+# Prepared once by scripts/prepare_caches.sh and mounted into every container, so
+# no run pays to fetch a tap or an embedding model — and no run depends on
+# fetching one, which a sealed container cannot do (neither github nor
+# huggingface is on the egress allowlist). Env vars override for one-off runs.
+DEFAULT_CACHE_ROOT = Path.home() / ".cache" / "octobench"
+
 AUTH_ENV_KEYS = [
     "ANTHROPIC_API_KEY",
     "OPENAI_API_KEY",
@@ -239,6 +245,29 @@ class DockerExecutor(Executor):
         _ob = os.environ.get("OCTOMIND_BIN")
         if _ob and Path(_ob).exists():
             mounts += ["-v", f"{Path(_ob).resolve()}:/usr/local/bin/octomind:ro"]
+        # octobench: shared model cache, pre-seeded on the host. Octomind pulls its
+        # embedding model from huggingface at startup — measured at 32s before the
+        # first model request, and huggingface is NOT on the seal allowlist, so in a
+        # sealed run that fetch is blocked and paid for as retry/timeout on every
+        # session. Seeding it once removes both, and keeps the download out of the
+        # numbers we are actually measuring.
+        # Two caches, both fetched at startup and both off the allowlist:
+        # huggingface (88M, octomind's own embed model) and octolib/fastembed
+        # (1.2G, nomic + jina code embeddings).
+        _mc = os.environ.get("OCTOBENCH_MODEL_CACHE") or (DEFAULT_CACHE_ROOT / "models")
+        if _mc:
+            _mc_root = Path(_mc).resolve()
+            for _sub, _dest in (
+                ("huggingface", "/root/.cache/huggingface"),
+                ("octolib", "/root/.cache/octolib"),
+            ):
+                if (_mc_root / _sub).is_dir():
+                    mounts += ["-v", f"{_mc_root / _sub}:{_dest}"]
+        # octobench: octofs override — octomind's file/shell tool server, pinned in
+        # the image but swappable to compare tool-server versions on one image.
+        _fb = os.environ.get("OCTOFS_BIN")
+        if _fb and Path(_fb).exists():
+            mounts += ["-v", f"{Path(_fb).resolve()}:/usr/local/bin/octofs:ro"]
         # octobench: same override for codex (new models can require a newer CLI
         # than the one baked in the image, e.g. gpt-5.6-sol needs >= 0.145.0).
         _cb = os.environ.get("CODEX_BIN")
@@ -257,16 +286,19 @@ class DockerExecutor(Executor):
         # role edits under test reach fresh containers without publishing.
         # Read-only is safe: octomind's silent `git pull` on it fails and the
         # staged copy is used as-is.
-        _tap = os.environ.get("OCTOMIND_TAP_CACHE")
+        _tap = os.environ.get("OCTOMIND_TAP_CACHE") or (DEFAULT_CACHE_ROOT / "tap")
         if _tap and Path(_tap).is_dir():
             mounts += ["-v", f"{Path(_tap).resolve()}:"
                              "/root/.local/share/octomind/taps/muvon/octomind-tap:ro"]
         # octolib embedding-model cache, warmed once on the host — mounted
         # read-only so octocode loads models from cache instead of fetching
-        # them from HF inside octomind's stdin-init timeout.
+        # them from HF inside octomind's stdin-init timeout. Legacy path: skip
+        # when the model-cache block above already mounted /root/.cache/octolib
+        # (docker hard-errors on a duplicate mount point).
         _oc_cache = Path(os.environ.get("OCTOLIB_CACHE",
                                         str(Path.home() / "octolib-cache")))
-        if _oc_cache.is_dir() and any(_oc_cache.iterdir()):
+        octolib_mounted = any("/root/.cache/octolib" in m for m in mounts)
+        if not octolib_mounted and _oc_cache.is_dir() and any(_oc_cache.iterdir()):
             mounts += ["-v", f"{_oc_cache.resolve()}:/root/.cache/octolib:ro"]
         # repo-in-image mode (SWE-bench): the repo lives inside the image at
         # `workdir`, so no host workspace/case is mounted.
