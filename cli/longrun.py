@@ -45,7 +45,12 @@ from cli.main import (
 from judges.llm_judge import run_judge
 from providers.factory import get_provider
 from runners.executor import Executor
-from scoring.aggregate import compute_cost, compute_efficiency_score, compute_final_score
+from scoring.aggregate import (
+    TOKEN_SEMANTICS,
+    compute_cost,
+    compute_efficiency_score,
+    compute_final_score,
+)
 
 
 def _utc_ts() -> str:
@@ -307,7 +312,7 @@ def _run_sequence(
                         "stdout": (provider_result.stdout or "")[-2000:],
                     },
                     "tokens": {
-                        "semantics": "separate_reasoning_v1",
+                        "semantics": TOKEN_SEMANTICS,
                         "input": provider_result.input_tokens,
                         "cached_input": provider_result.cached_input_tokens,
                         "output": provider_result.output_tokens,

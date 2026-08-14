@@ -23,7 +23,7 @@ from cli.main import (
 from judges.llm_judge import run_judge
 from providers.factory import get_provider
 from runners.executor import DockerExecutor
-from scoring.aggregate import compute_cost, compute_efficiency_score
+from scoring.aggregate import TOKEN_SEMANTICS, compute_cost, compute_efficiency_score
 
 # SWE-bench-Live: real, post-2024 GitHub issues, execution-verified, contamination-
 # resistant. We run one instance through the SAME conceptual flow as local cases
@@ -221,7 +221,10 @@ def run_instance(instance: Dict, target: Dict, repo_root: Path, models_cfg: Dict
     # same millisecond — docker then rejects the second with a name conflict and the
     # rep burns one of its MAXATT attempts on nothing. Appending is safe for the
     # cleanup filter, which matches on the `obsweb-<inst:22>` prefix.
-    name = f"obsweb-{safe_id(instance_id)[:22]}-{provider_name[:6]}-{int(time.time() * 1000)}-{os.getpid()}"
+    name = (
+        f"obsweb-{safe_id(instance_id)[:22]}-{provider_name[:6]}"
+        f"-{int(time.time() * 1000)}-{os.getpid()}"
+    )
     executor = DockerExecutor(
         derived, repo_root, repo_root, repo_config, name,
         workdir="/testbed", platform="linux/amd64",
@@ -318,14 +321,17 @@ def run_instance(instance: Dict, target: Dict, repo_root: Path, models_cfg: Dict
         executor.close()
 
     pricing = models_cfg.get("models", {}).get(benchmark_model, {}).get("pricing")
-    eval_cost = compute_cost(
-        pr.input_tokens,
-        pr.cached_input_tokens,
-        pr.output_tokens,
-        pricing,
-        pr.reasoning_tokens,
-    ) \
-        if pricing else None
+    eval_cost = (
+        compute_cost(
+            pr.input_tokens,
+            pr.cached_input_tokens,
+            pr.output_tokens,
+            pricing,
+            pr.reasoning_tokens,
+        )
+        if pricing
+        else None
+    )
 
     return {
         "case_id": instance_id,
@@ -343,7 +349,7 @@ def run_instance(instance: Dict, target: Dict, repo_root: Path, models_cfg: Dict
             "elapsed_ms": pr.elapsed_ms,
         },
         "tokens": {
-            "semantics": "separate_reasoning_v1",
+            "semantics": TOKEN_SEMANTICS,
             "input": pr.input_tokens, "cached_input": pr.cached_input_tokens,
             "output": pr.output_tokens, "reasoning": pr.reasoning_tokens, "total": pr.total_tokens,
         },

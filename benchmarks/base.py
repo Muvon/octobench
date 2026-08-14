@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from runners.executor import DockerExecutor, Executor, HostExecutor
-from scoring.aggregate import compute_efficiency_score, compute_final_score
+from scoring.aggregate import TOKEN_SEMANTICS, compute_efficiency_score, compute_final_score
 
 
 @dataclass
@@ -132,7 +132,7 @@ def base_record(
         "domain": instance.meta.get("domain", ""),
         "result": {"stdout": "", "stderr": "", "exit_code": 0, "elapsed_ms": 0},
         "tokens": {
-            "semantics": "separate_reasoning_v1",
+            "semantics": TOKEN_SEMANTICS,
             "input": None,
             "cached_input": None,
             "output": None,
@@ -162,7 +162,7 @@ def apply_provider_result(record: Dict, pr, pricing: Optional[Dict]) -> None:
         "elapsed_ms": pr.elapsed_ms,
     }
     record["tokens"] = {
-        "semantics": "separate_reasoning_v1",
+        "semantics": TOKEN_SEMANTICS,
         "input": pr.input_tokens,
         "cached_input": pr.cached_input_tokens,
         "output": pr.output_tokens,

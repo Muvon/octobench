@@ -177,6 +177,15 @@ def test_token_accounting() -> None:
         normalize_token_counts(old_folded) == (100, 200, 300, 400),
     )
 
+    ambiguous = {**old_folded, "cached_input": 400, "total": 1200}
+    try:
+        normalize_token_counts(ambiguous)
+    except ValueError:
+        ambiguous_rejected = True
+    else:
+        ambiguous_rejected = False
+    check("ambiguous legacy semantics rejected", ambiguous_rejected)
+
     current = {**old_separate, "semantics": TOKEN_SEMANTICS, "total": 1000}
     check(
         "current token semantics preserved",

@@ -21,7 +21,10 @@ from pathlib import Path
 
 import yaml
 
-from scoring.aggregate import compute_cost, normalize_token_counts
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from scoring.aggregate import compute_cost, normalize_token_counts  # noqa: E402
 
 
 def load(pattern: str) -> dict:
@@ -316,7 +319,7 @@ def main() -> None:
     lines.append(f"_Updated {stamp}. val = hidden gold tests; j = judge 0-100; "
                  f"cost; agent runtime (excludes setup, validation, and judging). "
                  f"LEAK = upstream solution access, excluded from passes._\n")
-    header = "| case path | " + " | ".join(l for l, _ in providers) + " |"
+    header = "| case path | " + " | ".join(label for label, _ in providers) + " |"
     lines.append(header)
     lines.append("|---" * (len(providers) + 1) + "|")
     for cid in order:
@@ -337,8 +340,8 @@ def main() -> None:
     all_harnesses = sorted({h for m in summary.values() for h in m})
 
     summary_lines = [
-        f"_Cross-model × harness matrix. Each cell = pass-rate · judge average · "
-        f"total/average cost · agent runtime · non-cache tokens._\n",
+        "_Cross-model × harness matrix. Each cell = pass-rate · judge average · "
+        "total/average cost · agent runtime · non-cache tokens._\n",
         "| model | " + " | ".join(all_harnesses) + " |",
         "|---" * (len(all_harnesses) + 1) + "|",
     ]

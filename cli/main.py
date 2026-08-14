@@ -21,7 +21,12 @@ import yaml
 from judges.llm_judge import run_judge
 from providers.factory import available_providers, get_provider
 from runners.executor import DockerExecutor, Executor, HostExecutor
-from scoring.aggregate import compute_cost, compute_efficiency_score, compute_final_score
+from scoring.aggregate import (
+    TOKEN_SEMANTICS,
+    compute_cost,
+    compute_efficiency_score,
+    compute_final_score,
+)
 
 
 def _load_gitignore_rules(workdir: Path) -> list[tuple[Path, str, bool, bool]]:
@@ -285,7 +290,13 @@ def clean_workspace(executor, workdir: Path, label: str, verbosity: str) -> None
 GUARDRAILS_TOML = """# Offline benchmark environment — injected by octobench.
 [[guard]]
 match   = "websearch"
-message = "Web search is DISABLED in this environment. You are running inside an offline benchmark harness, so external sources (upstream PRs, issue threads, changelogs, blog posts) are unavailable and must not be relied on. Derive the fix from this repository alone: read the code, run the failing tests, and let their behaviour define what correct means. Do not treat any remembered upstream patch as authoritative."
+message = (
+    "Web search is DISABLED in this environment. You are running inside an offline "
+    "benchmark harness, so external sources (upstream PRs, issue threads, changelogs, "
+    "blog posts) are unavailable and must not be relied on. Derive the fix from this "
+    "repository alone: read the code, run the failing tests, and let their behaviour "
+    "define what correct means. Do not treat any remembered upstream patch as authoritative."
+)
 """
 
 
@@ -808,7 +819,7 @@ def main() -> None:
                             "elapsed_ms": 0,
                         },
                         "tokens": {
-                            "semantics": "separate_reasoning_v1",
+                            "semantics": TOKEN_SEMANTICS,
                             "input": None,
                             "cached_input": None,
                             "output": None,
@@ -900,7 +911,7 @@ def main() -> None:
                                 "elapsed_ms": provider_result.elapsed_ms,
                             },
                             "tokens": {
-                                "semantics": "separate_reasoning_v1",
+                                "semantics": TOKEN_SEMANTICS,
                                 "input": provider_result.input_tokens,
                                 "cached_input": provider_result.cached_input_tokens,
                                 "output": provider_result.output_tokens,
@@ -910,14 +921,29 @@ def main() -> None:
                             "cost_usd": provider_result.provider_cost_usd,
                             "scripts": {
                                 "setup": setup_log,
-                                "quality": {"exit_code": 1, "stdout": "", "stderr": "skipped", "elapsed_ms": 0},
-                                "validate": {"exit_code": 1, "stdout": "", "stderr": "skipped", "elapsed_ms": 0},
+                                "quality": {
+                                    "exit_code": 1,
+                                    "stdout": "",
+                                    "stderr": "skipped",
+                                    "elapsed_ms": 0,
+                                },
+                                "validate": {
+                                    "exit_code": 1,
+                                    "stdout": "",
+                                    "stderr": "skipped",
+                                    "elapsed_ms": 0,
+                                },
                             },
                             "evidence": "",
                             "evidence_diff": "",
                             "provider_evidence": "",
                             "workdir": str(workdir_abs),
-                            "judge": {"score": 0, "reasoning": "provider infra failure", "issues": [], "confidence": 0.0},
+                            "judge": {
+                                "score": 0,
+                                "reasoning": "provider infra failure",
+                                "issues": [],
+                                "confidence": 0.0,
+                            },
                             "scoring": {},
                         }
                     )
@@ -999,7 +1025,7 @@ def main() -> None:
                         "elapsed_ms": provider_result.elapsed_ms,
                     },
                     "tokens": {
-                        "semantics": "separate_reasoning_v1",
+                        "semantics": TOKEN_SEMANTICS,
                         "input": provider_result.input_tokens,
                         "cached_input": provider_result.cached_input_tokens,
                         "output": provider_result.output_tokens,

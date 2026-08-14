@@ -19,11 +19,18 @@ def normalize_token_counts(tokens: Dict) -> tuple[int, int, int, int]:
     reasoning = int(tokens.get("reasoning") or 0)
     total = int(tokens.get("total") or 0)
     semantics = tokens.get("semantics")
-    folded = semantics == "reasoning_in_output_v0" or (
-        not semantics
-        and reasoning > 0
-        and total == fresh + cache + output
-    )
+    folded = semantics == "reasoning_in_output_v0"
+    if not semantics and reasoning > 0:
+        matches_separate = total in {
+            fresh + output,
+            fresh + output + reasoning,
+        }
+        matches_folded = total == fresh + cache + output
+        if matches_separate and matches_folded:
+            raise ValueError(
+                "ambiguous unmarked token semantics; set tokens.semantics explicitly"
+            )
+        folded = matches_folded
     if folded:
         output = max(output - reasoning, 0)
     return fresh, cache, output, reasoning
