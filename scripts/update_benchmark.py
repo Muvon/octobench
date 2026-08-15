@@ -56,6 +56,20 @@ def _count_steps(record: dict) -> int:
             obj = json.loads(line)
             if obj.get("type") == "tool_use":
                 steps += 1
+            elif record.get("provider") == "codex" and obj.get("type") == "item.started":
+                # Codex JSONL represents tool activity as typed items rather
+                # than generic tool_use events. Count each started action once;
+                # item.completed and item.updated are lifecycle events for the
+                # same action and must not inflate the total.
+                item_type = (obj.get("item") or {}).get("type")
+                if item_type in {
+                    "command_execution",
+                    "file_change",
+                    "mcp_tool_call",
+                    "web_search",
+                    "todo_list",
+                }:
+                    steps += 1
         except Exception:
             pass
     return steps + 1  # +1 for the final assistant message

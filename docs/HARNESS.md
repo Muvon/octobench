@@ -97,6 +97,14 @@ Stars are useful evidence, but stars alone are not proof of project quality. A
 less famous project is an exception and requires a documented reason plus
 stronger evidence of maintenance, review, real usage, and test quality.
 
+Rapidly growing newer repositories MAY also qualify even when their absolute
+star count is below long-established projects. Admission then requires recorded
+evidence of sustained recent adoption or star growth, active human maintainers,
+substantive review of the selected change, healthy CI, real downstream use, and
+a gold commit merged into the intended protected branch. A short-lived trend,
+an AI-generated codebase, or growth without a meaningful review history is not
+sufficient.
+
 The candidate itself MUST:
 
 - be merged, not merely proposed or closed;
