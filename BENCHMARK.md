@@ -168,7 +168,7 @@ branch, interleaved-commit checks) are in `docs/LONGRUN.md`.
 > clients under the current rules and will be re-run on the shared prompt.
 
 <!-- LONGRUN-RESULTS:BEGIN -->
-_Updated 2026-08-14 04:37 UTC. Cell = passed/turns · Σ sum of turn final scores · cost · total tokens (incl. cache reads) · agent wall time (sum of agent invocations; excludes setup/validation/judging)._
+_Updated 2026-08-14 08:08 UTC. Cell = passed/turns · Σ sum of turn final scores · cost · total tokens (incl. cache reads) · agent wall time (sum of agent invocations; excludes setup/validation/judging)._
 
 | sequence (turns) | opus | gpt56-sol | gpt56-luna | luna-octomind |
 |---|---|---|---|---|
@@ -180,7 +180,7 @@ _Updated 2026-08-14 04:37 UTC. Cell = passed/turns · Σ sum of turn final score
 | js/fastify (5) | 5/5 Σ422.1 $11.61 14.8M 30m | 4/5 Σ322.3 $2.54 3.0M 6m | 4/5 Σ335.8 $0.14 4.0M 6m | 5/5 Σ415.6 $0.40 13.7M 35m |
 | js/nest (5) | 5/5 Σ421.8 $5.18 5.3M 12m | 5/5 Σ404.8 $1.56 1.5M 5m | 5/5 Σ417.3 $0.15 4.9M 10m | 3/5 Σ289.0 $0.28 9.5M 27m |
 | js/vue (5) | 5/5 Σ421.8 $6.45 6.8M 14m | 5/5 Σ323.3 $1.53 1.5M 5m | 5/5 Σ414.7 $0.08 2.2M 6m | 5/5 Σ349.8 $0.33 11.7M 12m |
-| php/doctrine_orm (6) | 6/6 Σ498.6 $14.17 17.9M 21m | 4/6 Σ325.8 $2.89 3.6M 8m | 4/6 Σ341.7 $0.13 3.5M 8m | 3/6 Σ243.4 $0.40 12.3M 17m |
+| php/doctrine_orm (6) | 6/6 Σ498.6 $14.17 17.9M 21m | 4/6 Σ325.8 $2.89 3.6M 8m | 4/6 Σ341.7 $0.13 3.5M 8m | 4/6 Σ341.4 $0.67 24.5M 31m |
 | php/guzzle (5) | 4/5 Σ353.6 $24.42 34.3M 40m | 4/5 Σ325.8 $4.47 5.1M 13m | 4/5 Σ316.9 $0.29 8.6M 15m | 4/5 Σ334.0 $0.91 28.5M 50m |
 | php/phpspreadsheet (6) | 6/6 Σ501.8 $15.13 17.9M 67m | 5/6 Σ401.7 $3.84 4.0M 10m | 4/6 Σ338.4 $0.18 5.8M 10m | 5/6 Σ411.7 $0.56 19.5M 26m |
 | php/symfony (5) | 5/5 Σ425.5 $6.53 7.4M 12m | 5/5 Σ385.2 $1.50 1.2M 5m | 5/5 Σ415.0 $0.14 4.1M 7m | 5/5 Σ417.6 $0.24 7.7M 16m |
@@ -189,14 +189,14 @@ _Updated 2026-08-14 04:37 UTC. Cell = passed/turns · Σ sum of turn final score
 | python/pydantic (5) | 5/5 Σ398.6 $19.05 20.5M 31m | 5/5 Σ387.4 $1.93 2.0M 6m | 4/5 Σ333.9 $0.11 3.1M 7m | 5/5 Σ405.9 $0.31 10.5M 14m |
 | python/pytest (5) | 5/5 Σ413.7 $15.88 21.2M 45m | 5/5 Σ381.1 $2.30 2.4M 7m | 5/5 Σ389.2 $0.09 2.2M 6m | 5/5 Σ392.0 $0.48 15.2M 25m |
 | rust/clap (5) | 5/5 Σ413.7 $12.81 17.0M 25m | 5/5 Σ390.3 $3.24 3.9M 10m | 5/5 Σ405.9 $0.19 6.0M 8m | 5/5 Σ410.2 $0.27 8.8M 22m |
-| rust/gitoxide (6) | 5/6 Σ439.0 $14.75 18.3M 26m | 5/6 Σ408.2 $3.35 3.9M 7m | 5/6 Σ425.2 $0.18 5.6M 7m | 5/6 Σ409.5 $0.42 14.8M 19m |
-| rust/ruff (6) | 5/6 Σ423.7 $45.67 68.6M 203m | 6/6 Σ460.0 $15.70 24.7M 35m | 6/6 Σ469.8 $0.44 16.8M 17m | 3/6 Σ238.1 $0.53 17.4M 27m |
+| rust/gitoxide (6) | 5/6 Σ439.0 $14.75 18.3M 26m | 5/6 Σ408.2 $3.35 3.9M 7m | 5/6 Σ425.2 $0.18 5.6M 7m | 5/6 Σ424.8 $0.48 17.2M 24m |
+| rust/ruff (6) | 5/6 Σ423.7 $45.67 68.6M 203m | 6/6 Σ460.0 $15.70 24.7M 35m | 6/6 Σ469.8 $0.44 16.8M 17m | 5/6 Σ412.7 $0.92 33.5M 43m |
 | rust/tokio (5) | 5/5 Σ421.6 $8.30 8.6M 40m | 5/5 Σ391.7 $1.46 1.7M 4m | 5/5 Σ384.4 $0.07 2.1M 4m | 5/5 Σ408.7 $0.14 4.0M 8m |
 
 - **opus**: 20/20 sequences · 107/112 turns passed · ΣΣ 8966.0 · $341.94 · 436M tokens · 15.4h agent time
 - **gpt56-sol**: 20/20 sequences · 103/112 turns passed · ΣΣ 8049.8 · $73.88 · 94M tokens · 3.2h agent time
 - **gpt56-luna**: 20/20 sequences · 99/112 turns passed · ΣΣ 8125.8 · $3.92 · 130M tokens · 3.1h agent time
-- **luna-octomind**: 20/20 sequences · 96/112 turns passed · ΣΣ 7902.8 · $8.21 · 274M tokens · 9.0h agent time
+- **luna-octomind**: 20/20 sequences · 99/112 turns passed · ΣΣ 8190.7 · $8.92 · 304M tokens · 9.6h agent time
 <!-- LONGRUN-RESULTS:END -->
 
 ## What a case is
