@@ -9,6 +9,17 @@
    - `validate.sh`
 4. Add fixtures in `fixtures/`.
 
+For real-commit development cases under `cases/dev`, first follow the shared
+selection and admission rules in `HARNESS.md`, then use `ONESHOT.md` or
+`LONGRUN.md` for the format-specific workflow. The generic template above does
+not by itself satisfy the provenance, derivability, sealing, or fail-to-pass
+requirements of a development case.
+
+New real-commit one-shot cases and every long-run turn must include the
+classification fields defined in `HARNESS.md`: difficulty, task type, failure
+modes, prompt source/style, specification level, test visibility, and capability
+tags.
+
 ## Add a new provider (tool)
 1. Create `providers/<provider>.py` and implement `Provider.run_task(..., executor)`.
 2. Run the agent command via the injected `executor` (so it works in host and docker modes), not `subprocess` directly.

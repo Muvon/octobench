@@ -5,6 +5,12 @@ across multiple related tasks — mimicking a real developer's workflow where on
 fix leads to the next. Each turn is a separate user instruction in the **same
 agent session**, with source changes persisting across turns.
 
+Case selection, provenance, prompt fairness, leakage control, validation quality,
+and admission MUST follow the shared [Real-Commit Harnessing Protocol](HARNESS.md).
+This document defines only the mechanics and additional requirements specific to
+long-run sequences. See [One-Shot Real-Commit Cases](ONESHOT.md) for the
+single-task format.
+
 ## Concept
 
 A standard benchmark case is one-shot: one instruction, one validation. A
@@ -14,6 +20,13 @@ session. The agent solves turn 1, then turn 2 builds on the same codebase
 picked to share an intent thread — a maintainer fixing several related things
 in one area — so the session feels like real continuous work, not disjoint
 tasks.
+
+Connection should be substantive: shared subsystem, architecture, conventions,
+state, or maintainer goal should make knowledge from earlier turns useful. A
+sequence must not be an arbitrary bundle of unrelated PRs from the same repo.
+Prefer turns whose outcomes remain interpretable after an earlier failure. When
+a later task truly depends on an earlier one, record that dependency so a
+cascading failure is not mistaken for a separate capability failure.
 
 This tests:
 - **Context retention** — does the agent remember conventions it learned in turn 1?
@@ -30,10 +43,16 @@ cases/dev/longrun/rust/tokio/
 └── setup.sh        # one-time repo checkout + build prep
 ```
 
+Use the concise repository slug for `<repo>`. Do not add campaign, batch,
+language, model, or outcome prefixes. The sequence `id`, display name, PR list,
+turn metadata, prompt sources, classifications, base, and gold SHAs must all describe
+the same chronological sequence according to the metadata contract in
+`HARNESS.md`.
+
 ### sequence.yaml
 
 ```yaml
-id: longrun_rust_tokio
+id: rust_tokio_runtime
 name: tokio async runtime fixes (5-turn sequence)
 language: rust
 system_prompt: |
@@ -42,15 +61,25 @@ system_prompt: |
   project's maintainers would. When done, stop.
 meta:
   repo: https://github.com/tokio-rs/tokio
+  target_branch: master
   base_sha: <commit before the oldest PR>
   prs: [8109, 8274, 8260, 8279, 8222]
 turns:
   - name: "Short title"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [race, hang]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: symptom-led
+    test_visibility: mixed
+    capability_tags: [debugging, concurrency]
     instruction: |
       Describe what the agent should do. Derived from the PR's test diff
-      following the derivability rule: everything the hidden tests assert
+      following the derivability rule: everything the validation tests assert
       must be derivable from this instruction alone.
     gold_sha: <merge commit SHA>
+    pr_url: https://github.com/tokio-rs/tokio/pull/8109
     test_paths:
       - path/to/test_file.rs
     test_command: |
@@ -237,30 +266,60 @@ in the agent image:
 
 ## Creating a New Long-Run Case
 
-1. **Pick a repo** with active maintenance, deterministic tests, and a recent
-   merge window (after model training cutoffs for contamination control).
+1. **Apply the shared harnessing protocol.** Define the campaign, project bar,
+   freshness window, human-provenance checks, prompt mix, and target client as
+   described in `HARNESS.md`.
 
-2. **Mine 5 PRs** that touch both production source and tests. Verify each PR's
-   test diff is deterministic (no network, no flaky timing).
+2. **Pick a repo** with active maintenance, deterministic tests, and a recent
+   merge window. The repo should contain enough related work for a coherent
+   multi-turn engineering thread.
 
-3. **Find the base SHA**: the common ancestor of all 5 PR commits.
+3. **Mine 5 or more chronological PRs** that touch production source and tests.
+   Verify each test diff is deterministic, selective, and network-independent.
+   Mix task size and prompt style when that reflects real work, but do not add an
+   unrelated turn merely for variety.
 
-4. **Derive instructions** from the test diffs (not the source diffs). Every
-   assertion in the gold tests must be derivable from the instruction alone.
-   See the derivability rule in the repo's onboarding instructions.
+4. **Map turn relationships.** Record which subsystem or intent connects the
+   turns and identify any hard dependency where a later task assumes an earlier
+   behavior change.
 
-5. **Create the case directory**:
+5. **Find the base SHA**: the valid common starting point for all selected
+   commits on one target-branch lineage.
+
+6. **Derive and classify each instruction** using the prompt-style,
+   classification, test-visibility, and derivability rules in `HARNESS.md`.
+   Reconstruct it from the issue, PR and review discussion, gold tests,
+   production solution, or reverse-spec analysis as appropriate. The final text
+   must remain a realistic request that could have preceded the solution. Every
+   validation assertion must be inferable for that turn without exposing its
+   gold implementation. Earlier conversation may supply learned repository
+   context, but it must not be the only source of a new public requirement
+   unless that dependency is intentional and recorded. Tag every turn
+   independently because task type, failure mode, complexity, prompt style, and
+   visible context can vary across a real session.
+
+7. **Create the candidate outside the discovered list.** Use a temporary or
+   working location while proving and running it. Its final admitted layout is:
    ```
    cases/dev/longrun/<lang>/<repo>/
    ├── sequence.yaml
    └── setup.sh
    ```
 
-6. **Verify fail-to-pass**: `scripts/verify_longrun.sh <sequence_dir>` proves
+8. **Verify fail-to-pass**: `scripts/verify_longrun.sh <sequence_dir>` proves
    BOTH legs per turn in the agent image, cumulatively (each turn's gold fix
    stays applied for the next turn, mirroring the real bench flow): gold tests
    must FAIL before the fix and PASS after applying the gold source diff.
    `scripts/verify_all_longrun.sh` runs every sequence in parallel.
+
+9. **Run, audit, and finalize the requested client/model.** Run the complete
+   sequence in the sealed environment. Inspect every turn's trace and patch,
+   classify failures using `HARNESS.md`, and distinguish independent turn
+   failures from cascades caused by earlier state. Repair and re-prove any case
+   or harness defect, then rerun the same requested client/model. A clean pass or
+   legitimate model failure may be finalized; an infrastructure, leakage,
+   nondeterminism, or fairness failure may not. Move the sequence into
+   `cases/dev/longrun/` only after finalization.
 
 Provenance rules (learned the hard way):
 - `gold_sha` MUST be the PR's true merge commit, reachable from the repo's

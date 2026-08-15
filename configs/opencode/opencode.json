@@ -15,6 +15,7 @@
         "glm-5.3": {
           "name": "GLM 5.3"
         }
+      }
     },
     "deepseek": {
       "npm": "@ai-sdk/openai-compatible",

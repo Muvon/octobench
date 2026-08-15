@@ -1,8 +1,16 @@
 id: example_case
 name: Example Case
 category: edit
-# simple | complex
-difficulty: simple
+# simple | medium | complex | expert
+difficulty: medium
+meta:
+  task_type: behavior-change
+  failure_modes: []
+  prompt_source: human-reconstructed
+  prompt_style: casual-chat
+  spec_level: behavioral
+  test_visibility: visible
+  capability_tags: [cross-file]
 system_prompt: |
   You are a coding assistant.
 instruction: |

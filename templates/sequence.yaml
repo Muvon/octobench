@@ -1,4 +1,4 @@
-id: example_longrun
+id: rust_example_sequence
 name: Example long-run sequence
 language: rust
 system_prompt: |
@@ -6,7 +6,9 @@ system_prompt: |
   Resolve the requested task completely, as the project's maintainers would. When done, stop.
 meta:
   repo: https://github.com/example/repo
+  target_branch: main
   base_sha: 0000000000000000000000000000000000000000
+  prs: [1, 2]
 # Each turn is one user message in the same session. The agent's source changes
 # persist across turns (realistic continuous workflow). Validation checks out
 # only the gold test files for that turn, overwriting any agent edits to tests.
@@ -14,6 +16,14 @@ meta:
 # repo's default branch (never a PR branch-head SHA); pr_url records provenance.
 turns:
   - name: "Turn 1 short title"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: symptom-led
+    test_visibility: mixed
+    capability_tags: [debugging, regression]
     instruction: |
       Describe the first task the agent should solve.
     gold_sha: 1111111111111111111111111111111111111111
@@ -24,10 +34,19 @@ turns:
       cargo test -p mycrate --lib test_name
 
   - name: "Turn 2 short title"
+    difficulty: complex
+    task_type: feature
+    failure_modes: []
+    prompt_source: pr-derived
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [api-design, cross-file]
     instruction: |
       Describe the second task. The agent continues in the same session,
       with full context of what it did in turn 1.
     gold_sha: 2222222222222222222222222222222222222222
+    pr_url: https://github.com/example/repo/pull/2
     test_paths:
       - path/to/test_file.rs
     test_command: |
