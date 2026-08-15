@@ -116,6 +116,42 @@ python3 -m cli.longrun run \
   --config configs/run-matrix.yaml
 ```
 
+### Sealed full campaigns
+
+Use the same setup → sealed agent → unsealed validation boundary described in
+`docs/USAGE.md`. Run the preflight there first. OpenCode on Alibaba GLM 5.2 uses
+the checked-in model/config pair (no temporary config required):
+
+```bash
+OCTOBENCH_SEAL_NETWORK=1 \
+OCTOBENCH_CLEAN_WORKSPACE=1 \
+OCTOBENCH_ALLOW_HOSTS=token-plan.ap-southeast-1.maas.aliyuncs.com \
+OCTOBENCH_SYSTEM_PROMPT=configs/common/system_prompt.md \
+OPENCODE_BIN=/absolute/path/to/opencode \
+OPENCODE_CONFIG_JSON=configs/opencode/opencode.json \
+.venv/bin/python -m cli.longrun run \
+  --sequences cases/dev/longrun \
+  --config configs/run-matrix.opencode-alibaba-glm52.yaml \
+  --executor docker --image octobench-agent:latest \
+  --out results-longrun-opencode-alibaba-glm52 --verbosity normal
+```
+
+For disconnect-safe execution, put the same command in a small launcher and run
+it in a named session:
+
+```bash
+tmux new-session -d -s octobench-longrun 'bash /absolute/path/to/launcher.sh'
+tmux attach -t octobench-longrun
+```
+
+Do not infer source freshness from Git metadata on an autosynced benchmark
+server. Verify the expected files/configs directly. After the campaign, audit
+every raw provider trace before accepting the table:
+
+```bash
+.venv/bin/python scripts/audit_web.py results-longrun-opencode-alibaba-glm52
+```
+
 ### CLI Options
 
 | Flag | Description |

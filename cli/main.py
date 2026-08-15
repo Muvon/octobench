@@ -325,15 +325,28 @@ def install_guardrails(executor: Executor) -> None:
 
 
 # Hosts that serve the upstream solution: the repo, its PRs, and raw file content.
-# Blackholed by name; the egress allowlist below is what actually enforces it.
-SEALED_HOSTS = (
+UPSTREAM_HOSTS = (
     "github.com www.github.com api.github.com codeload.github.com gist.github.com "
-    "raw.githubusercontent.com objects.githubusercontent.com "
+    "gist.githubusercontent.com raw.githubusercontent.com objects.githubusercontent.com "
     "patch-diff.githubusercontent.com gitlab.com bitbucket.org"
 )
 
-# The only egress the agent legitimately needs: the model endpoint. Everything
-# else is dropped, so blocking is not a question of enumerating what to deny.
+# Search and public code-search endpoints make the upstream patch discoverable
+# even when the repository host itself is blocked. Provider-native search tools
+# are disabled separately by each provider plus GUARDRAILS_TOML.
+SEARCH_HOSTS = (
+    "google.com www.google.com bing.com www.bing.com "
+    "duckduckgo.com html.duckduckgo.com lite.duckduckgo.com "
+    "search.brave.com api.search.brave.com search.yahoo.com "
+    "baidu.com www.baidu.com yandex.com www.yandex.com "
+    "grep.app sourcegraph.com searchcode.com"
+)
+
+SEALED_HOSTS = f"{UPSTREAM_HOSTS} {SEARCH_HOSTS}"
+
+# The scored agent phase needs only its model control plane. setup.sh runs before
+# sealing and validation runs after unsealing, so language package managers do
+# not need egress here. Override for a narrowly scoped one-provider campaign.
 DEFAULT_ALLOW_HOSTS = (
     "api.deepseek.com token-plan.ap-southeast-1.maas.aliyuncs.com api.z.ai "
     "api.anthropic.com chatgpt.com api.openai.com openrouter.ai ollama.com"
@@ -341,15 +354,17 @@ DEFAULT_ALLOW_HOSTS = (
 
 
 def seal_network(executor: Executor) -> None:
-    """Cut the agent's route to the upstream answer, after setup has used it.
+    """Restrict the scored agent phase to model-control-plane egress.
 
     Cases are harvested from merged PRs, so the current upstream file already
     contains the fix — reaching it is reading the answer key. setup.sh needs
     github to check the repo out, so this runs between setup and the agent.
 
-    Blackholed in /etc/hosts, plus an iptables DROP on the addresses those names
-    resolved to before sealing, so a raw-IP request fails too. Without iptables
-    in the image only the name-based block applies.
+    This is deliberately default-deny. A denylist cannot guarantee contamination
+    resistance because mirrors, proxies, package registries, and new search hosts
+    can expose the same solution. Provider-native search tools are disabled
+    separately. Known upstream/search names are also blackholed so attempts fail
+    fast instead of waiting on the final firewall rejection.
 
     Must be lifted by `unseal_network` before validation: every case's
     validate.sh fetches its gold tests from the same hosts.
@@ -359,7 +374,7 @@ def seal_network(executor: Executor) -> None:
         "set -e\n"
         "command -v iptables >/dev/null 2>&1 || { echo NO_IPTABLES; exit 1; }\n"
         "[ -f /etc/hosts.octobench-preseal ] || cp /etc/hosts /etc/hosts.octobench-preseal\n"
-        # Resolve the allowlist BEFORE the deny rule lands.
+        # Resolve the model allowlist before the deny rule lands.
         "ALLOW_IPS=\"\"\n"
         "for h in " + " ".join(allow) + "; do\n"
         "  ips=$(getent ahostsv4 \"$h\" 2>/dev/null | awk '{print $1}' | sort -u)\n"

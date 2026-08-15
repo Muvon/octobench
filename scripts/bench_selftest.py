@@ -23,6 +23,7 @@ from scoring.aggregate import (  # noqa: E402
     compute_cost,
     normalize_token_counts,
 )
+from providers.opencode import OpencodeProvider  # noqa: E402
 
 _passed = 0
 _failed = 0
@@ -193,6 +194,49 @@ def test_token_accounting() -> None:
     )
 
 
+def test_provider_commands() -> None:
+    class Result:
+        stdout = ""
+        stderr = ""
+        exit_code = 0
+
+    class Executor:
+        argv = []
+        input_text = None
+
+        @staticmethod
+        def container_workspace() -> str:
+            return "/workspace"
+
+        @staticmethod
+        def workspace_host_path() -> Path:
+            return Path("/__octobench_selftest_missing__")
+
+        def run(self, argv, input_text=None):
+            self.argv = argv
+            self.input_text = input_text
+            return Result()
+
+    executor = Executor()
+    OpencodeProvider().run_task(
+        prompt="test",
+        workdir="/workspace",
+        provider_model="alibaba/glm-5.2",
+        session_name="selftest",
+        executor=executor,
+    )
+    check(
+        "opencode skips unconfigured plugin bootstrap",
+        executor.argv[:3] == ["opencode", "--pure", "run"],
+        str(executor.argv),
+    )
+    check(
+        "opencode closes inherited stdin",
+        executor.input_text == "",
+        repr(executor.input_text),
+    )
+
+
 def main() -> None:
     print("octobench benchmark framework self-test\n")
     test_configs()
@@ -202,6 +246,7 @@ def main() -> None:
     test_ifbench()
     test_scoring()
     test_token_accounting()
+    test_provider_commands()
     print(f"\n{_passed} passed, {_failed} failed")
     sys.exit(1 if _failed else 0)
 

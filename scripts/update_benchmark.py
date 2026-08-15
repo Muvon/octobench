@@ -186,7 +186,8 @@ def _provider_actions(trace: Path, provider: str) -> list[tuple[str, bool]]:
             if item.get("type") == "command_execution":
                 action = item.get("command")
                 network = bool(re.search(
-                    r"\b(?:git\s+(?:fetch|clone|ls-remote)|curl|wget)\b", action,
+                    r"\b(?:git\s+(?:fetch|clone|pull|ls-remote)|curl|wget|ssh|scp|rsync)\b",
+                    action,
                     re.IGNORECASE,
                 ))
         elif provider == "octomind" and event.get("type") == "tool_use":
@@ -200,7 +201,7 @@ def _provider_actions(trace: Path, provider: str) -> list[tuple[str, bool]]:
                 tool == "knowledge" and bool(params.get("source"))
             ) or (
                 tool == "shell" and bool(re.search(
-                    r"\b(?:git\s+(?:fetch|clone|ls-remote)|curl|wget)\b",
+                    r"\b(?:git\s+(?:fetch|clone|pull|ls-remote)|curl|wget|ssh|scp|rsync)\b",
                     str(params.get("command", "")), re.IGNORECASE,
                 ))
             )
@@ -212,9 +213,9 @@ def _provider_actions(trace: Path, provider: str) -> list[tuple[str, bool]]:
                 "tool": tool,
                 "input": inputs,
             })
-            network = tool == "webfetch" or (
+            network = tool in {"webfetch", "websearch"} or (
                 tool == "bash" and bool(re.search(
-                    r"\b(?:git\s+(?:fetch|clone|ls-remote)|curl|wget)\b",
+                    r"\b(?:git\s+(?:fetch|clone|pull|ls-remote)|curl|wget|ssh|scp|rsync)\b",
                     str(inputs.get("command", "")), re.IGNORECASE,
                 ))
             )
@@ -241,6 +242,13 @@ def audit_integrity(record: dict, case: dict | None) -> list[str]:
     pr = str(meta.get("pr", ""))
     gold = str(meta.get("gold_sha", ""))
     violations = set()
+
+    search_re = re.compile(
+        r"\b(?:websearch|web_search|search_query)\b|"
+        r"https?://(?:www\.)?(?:google|bing|duckduckgo)\.|"
+        r"https?://(?:search\.brave|grep\.app|sourcegraph\.com)",
+        re.IGNORECASE,
+    )
 
     hidden_re = re.compile(
         r"(?<![A-Za-z0-9_.-])/(?:case|cases)(?:/|\b)|\$CASE_DIR|\bCASE_DIR=",
@@ -272,6 +280,8 @@ def audit_integrity(record: dict, case: dict | None) -> list[str]:
         for action, network in _provider_actions(trace, provider):
             if hidden_re.search(action):
                 violations.add("hidden case assets")
+            if network and search_re.search(action):
+                violations.add("web search")
             if not network or not slug or not same_repo_re.search(action):
                 continue
             if current_source_re.search(action) or repo_network_re.search(action):

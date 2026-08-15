@@ -11,10 +11,12 @@ if TYPE_CHECKING:
 
 
 class OpencodeProvider(Provider):
-    """opencode (sst/opencode) at its out-of-the-box default: `opencode run`
-    with --auto permission approval, model via -m provider/model. The --format
-    json event stream carries per-step token usage (summed across steps: each
-    step is one API request) and the final assistant text."""
+    """opencode (sst/opencode) via `opencode --pure run` with --auto permission
+    approval and model via -m provider/model. No plugins are configured for the
+    benchmark, so --pure preserves the agent surface while preventing opencode's
+    unrelated first-run plugin install from entering the sealed/scored phase.
+    The --format json event stream carries per-step token usage (summed across
+    steps: each step is one API request) and the final assistant text."""
 
     name = "opencode"
 
@@ -29,6 +31,7 @@ class OpencodeProvider(Provider):
     ) -> ProviderRunResult:
         cmd = [
             "opencode",
+            "--pure",
             "run",
             "--auto",
             "--format",
@@ -38,8 +41,12 @@ class OpencodeProvider(Provider):
             prompt,
         ]
 
+        # DockerExecutor uses `docker exec -i` because other providers receive
+        # their prompt on stdin. OpenCode receives its prompt as argv; explicitly
+        # close stdin or a tmux-backed campaign leaves the pipe open and
+        # `opencode run` waits in its event loop before creating a session.
         start = time.time()
-        proc = executor.run(cmd)
+        proc = executor.run(cmd, input_text="")
         elapsed_ms = int((time.time() - start) * 1000)
 
         input_tokens = 0

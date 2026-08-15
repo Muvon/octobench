@@ -73,6 +73,66 @@ read-only, and `IS_SANDBOX=1` lets claude run headless as root. The workspace is
 host dir bind-mounted at `/workspace`, so before/after snapshots still happen on the
 host. Agents are pinned Linux binaries baked into the image (no compiling).
 
+### Sealed real-commit campaigns
+
+Set `OCTOBENCH_SEAL_NETWORK=1` for `cases/dev` runs. The lifecycle is deliberately
+three-phase:
+
+1. `setup.sh` runs unsealed and installs every project dependency.
+2. The scored agent phase is default-deny and can reach only configured model
+   control-plane hosts. Provider-native web search is disabled too. OpenCode runs
+   with `--pure`; no benchmark plugins are configured, and this prevents its
+   unrelated first-run plugin installer from entering the sealed phase.
+3. The harness unseals before validation fetches hidden gold tests.
+
+A destination denylist is insufficient here: mirrors, package registries, proxy
+sites, and new search domains can all expose an upstream solution. If a task needs
+a package download during phase 2, fix its `setup.sh`; do not widen the scored
+phase. Before a campaign, prove the current image and prompt/config contract:
+
+```bash
+.venv/bin/python scripts/bench_selftest.py
+.venv/bin/python scripts/sync_system_prompt.py --check
+.venv/bin/python scripts/seal_probe.py
+```
+
+One-shot Codex campaign (all discovered one-shot cases):
+
+```bash
+OCTOBENCH_SEAL_NETWORK=1 \
+OCTOBENCH_CLEAN_WORKSPACE=1 \
+OCTOBENCH_SYSTEM_PROMPT=configs/common/system_prompt.md \
+.venv/bin/python -m cli.main run \
+  --cases cases/dev/oneshot \
+  --config configs/run-matrix.cases-codex.yaml \
+  --executor docker --image octobench-agent:latest \
+  --out results-oneshot-codex --verbosity normal
+```
+
+One-shot OpenCode on Alibaba GLM 5.2:
+
+```bash
+OCTOBENCH_SEAL_NETWORK=1 \
+OCTOBENCH_CLEAN_WORKSPACE=1 \
+OCTOBENCH_ALLOW_HOSTS=token-plan.ap-southeast-1.maas.aliyuncs.com \
+OCTOBENCH_SYSTEM_PROMPT=configs/common/system_prompt.md \
+OPENCODE_BIN=/absolute/path/to/opencode \
+OPENCODE_CONFIG_JSON=configs/opencode/opencode.json \
+.venv/bin/python -m cli.main run \
+  --cases cases/dev/oneshot \
+  --config configs/run-matrix.opencode-alibaba-glm52.yaml \
+  --executor docker --image octobench-agent:latest \
+  --out results-oneshot-opencode-alibaba-glm52 --verbosity normal
+```
+
+Run long campaigns inside `tmux` so an SSH disconnect cannot terminate them;
+the equivalent long-run command is documented in `docs/LONGRUN.md`. Afterward,
+audit raw tool traces before publishing results:
+
+```bash
+.venv/bin/python scripts/audit_web.py results-oneshot-codex results-oneshot-opencode-alibaba-glm52
+```
+
 ## SWE-bench-Live
 Run one real GitHub issue end-to-end (agent fix + the instance's own tests as the
 verdict):
