@@ -632,19 +632,6 @@ require_plan_complete = true
 # octobench: observe-before-changing invariant (new pre-gate; see octomind gate docs)
 require_repro_before_mutation = true
 
-# Adaptive external plan manager required by current Octomind HEAD. Keep its
-# helper model aligned with the existing supervisor, gate, and condense path.
-[supervisor.plan]
-enabled = true
-model = "ollama:deepseek-v4-flash"
-# Output budget for the planner's structured JSON decision.
-max_tokens = 2048
-# Input budget for the newest assistant/tool trajectory slice.
-trajectory_max_tokens = 4096
-# Conservative automatic-adoption thresholds; explicit signals still work.
-adoption_min_actions = 8
-adoption_min_distinct_actions = 4
-
 # Goal recitation: re-inject the live goal (anchor intent + next_steps) at the
 # context tail each turn on long (already-compacted) sessions, so it stays in the
 # high-attention recency window instead of buried in the mid-transcript summary.
@@ -665,7 +652,7 @@ enabled = true
 # Per-result trigger (estimated tokens). 0 = off. Keep well below
 # mcp_response_tokens_threshold: that cap is the backstop, this is the smart
 # path that fires earlier.
-tokens_threshold = 5000
+tokens_threshold = 4000
 # Model that does the narrowing (cheap + fast recommended).
 model = "ollama:deepseek-v4-flash"
 
