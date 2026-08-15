@@ -6,7 +6,16 @@ meta:
   repo: https://github.com/Seldaek/monolog
   pr_url: https://github.com/Seldaek/monolog/pull/2015
   pr: 2015
-  scenario: feature
+  task_type: feature
+  failure_modes: []
+  prompt_source: reverse-spec
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags:
+    - api-design
+    - error-handling
+    - serialization
   base_sha: b321dd6749f0bf7189444158a3ce785cc16d69b0
   gold_sha: 108867b3552775777dea2c71e014e233147f440f
   test_paths:
@@ -22,13 +31,12 @@ instruction: |
   limits.
 
   Requirements:
-  - A `maxTraceLength` option limits how many stack frames a normalized exception
-    includes. It defaults to unlimited, so existing output is unchanged unless the
-    option is set.
-  - Read and written through `getMaxTraceLength()` and `setMaxTraceLength()`,
-    following the conventions the neighbouring normalization options already use,
-    including what the setter returns.
-  - Setting it to 0 means no trace frames are included at all.
+  - The option is nullable: `getMaxTraceLength(): ?int` returns `null` by default,
+    and `setMaxTraceLength(?int $maxTraceLength): self` accepts `null` to restore
+    unlimited output and returns the formatter instance.
+  - A non-null `maxTraceLength` limits how many stack frames a normalized
+    exception includes. Existing output is unchanged while the option is `null`.
+  - Setting it to `0` omits the normalized exception's `trace` field entirely.
   - The limit applies to every exception in the chain, so a previous exception's
     trace is capped the same way.
   - It composes with the existing base-path stripping: frames that survive the

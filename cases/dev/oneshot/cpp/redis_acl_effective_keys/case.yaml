@@ -1,15 +1,19 @@
 id: dev3_cpp_redis_acl_effective_keys
 name: Redis ACL effective-key validation
 category: dev
-difficulty: complex
+difficulty: expert
 timeout_minutes: 90
 meta:
   repo: https://github.com/redis/redis
   pr_url: https://github.com/redis/redis/pull/15478
   pr: 15478
-  scenario: security-bug-fix
-  prompt_source: human-prompt
-  prompt_style: behavior-rich
+  task_type: bug-fix
+  failure_modes: [security, accepted-invalid-input]
+  prompt_source: human-reconstructed
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [security, parser, cross-file, repository-navigation]
   base_sha: ba99faa230643931f91d2d5d68a0393e25fa07f5
   gold_sha: d3315247fa1cf9ce079eb7b6e77a7d06ac643b2a
   test_paths:

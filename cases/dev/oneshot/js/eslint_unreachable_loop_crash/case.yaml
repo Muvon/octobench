@@ -6,7 +6,13 @@ meta:
   repo: https://github.com/eslint/eslint
   pr_url: https://github.com/eslint/eslint/pull/21116
   pr: 21116
-  scenario: crash-fix
+  task_type: bug-fix
+  failure_modes: [crash]
+  prompt_source: reverse-spec
+  prompt_style: reproduction-report
+  spec_level: behavioral
+  test_visibility: mixed
+  capability_tags: [debugging, static-analysis, boundary-analysis]
   base_sha: 044a627fa3e28ee1410d515acc5378eb4b49f8ba
   gold_sha: 90910715011211a20d011d807d398a7005127f35
   test_paths:

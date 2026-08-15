@@ -6,7 +6,13 @@ meta:
   repo: https://github.com/nodejs/undici
   pr_url: https://github.com/nodejs/undici/pull/5534
   pr: 5534
-  scenario: feature
+  task_type: feature
+  failure_modes: []
+  prompt_source: reverse-spec
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [api-design, async, error-handling]
   base_sha: 3c662a598cae8ea6dc5b605a2a0de0de11647437
   gold_sha: 6de5935f8add8d1fe3734281a8db1eb28f7fe729
   test_paths:

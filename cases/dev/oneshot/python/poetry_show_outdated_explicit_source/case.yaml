@@ -7,10 +7,18 @@ meta:
   pr_url: https://github.com/python-poetry/poetry/pull/10982
   pr: 10982
   issue_url: https://github.com/python-poetry/poetry/issues/10425
-  scenario: cli-output-contract
-  prompt_source: acceptance-story
+  task_type: bug-fix
+  failure_modes:
+    - wrong-result
+  prompt_source: human-reconstructed
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags:
+    - dependency-resolution
+    - configuration
+    - cli
   lane: B
-  behavior_category: cli-exit-status-and-output
   merged_at: 2026-08-01T07:56:00Z
   base_sha: 3a95c37c5d5ec600556f519e60e4340f35bbcac1
   gold_sha: 62018d105562e1365bf79607edcc29ed794e4635

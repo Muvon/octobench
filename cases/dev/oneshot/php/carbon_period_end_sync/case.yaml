@@ -7,7 +7,17 @@ meta:
   repo: https://github.com/briannesbitt/Carbon
   pr_url: https://github.com/briannesbitt/Carbon/pull/3333
   pr: 3333
-  scenario: bug-fix
+  task_type: bug-fix
+  failure_modes:
+    - wrong-result
+  prompt_source: reverse-spec
+  prompt_style: acceptance-spec
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags:
+    - debugging
+    - state-management
+    - compatibility
   base_sha: 3db26e52db996da1d720d74bbbc99c1300fc0160
   gold_sha: 2c330722d22555ad20f3bcfdb2c1ba5a56a0b5f5
   test_paths:

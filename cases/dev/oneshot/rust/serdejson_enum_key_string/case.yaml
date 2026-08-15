@@ -7,8 +7,17 @@ meta:
   pr_url: https://github.com/serde-rs/json/pull/1324
   issue_url: https://github.com/serde-rs/json/issues/979
   pr: 1324
-  scenario: parser-validation
+  task_type: bug-fix
+  failure_modes:
+    - accepted-invalid-input
   prompt_source: original-issue
+  prompt_style: issue-form
+  spec_level: symptom-led
+  test_visibility: mixed
+  capability_tags:
+    - parser
+    - serialization
+    - protocol
   issue: 979
   base_sha: 5d30df60e916e9b8fc46c74794007ff271fdfbbf
   gold_sha: 1a360b0a6c003912afc3503c834b0edd798bca28

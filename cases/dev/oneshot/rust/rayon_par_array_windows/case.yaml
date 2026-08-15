@@ -6,7 +6,17 @@ meta:
   repo: https://github.com/rayon-rs/rayon
   pr_url: https://github.com/rayon-rs/rayon/pull/1293
   pr: 1293
-  scenario: feature
+  task_type: feature
+  failure_modes: []
+  prompt_source: reverse-spec
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags:
+    - api-design
+    - concurrency
+    - iterator
+    - cross-file
   base_sha: 56bbf0623b9ad3cd6e91e169c5a8a1c10b319b4b
   gold_sha: c9ae0472072c60cc9d911c16fd42cd1eb84a5d0a
   test_paths:

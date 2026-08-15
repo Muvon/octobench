@@ -9,8 +9,13 @@ meta:
   issue_url: https://github.com/axios/axios/issues/11108
   pr: 11109
   issue: 11108
-  scenario: error-handling-robustness
-  prompt_source: human-prompt
+  task_type: bug-fix
+  failure_modes: [wrong-result]
+  prompt_source: human-reconstructed
+  prompt_style: symptom-report
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [debugging, error-handling, compatibility]
   base_sha: 712e02373f1c5ac72fdf5da16f04838338ba817e
   gold_sha: a75bf44647e5132e39b778730394b0a2b983265c
   test_paths:

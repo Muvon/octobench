@@ -7,9 +7,18 @@ meta:
   pr_url: https://github.com/fastapi/fastapi/pull/15515
   issue_url: https://github.com/fastapi/fastapi/issues/15500
   pr: 15515
-  scenario: protocol-bug-fix
-  prompt_source: human-prompt
-  prompt_style: concise
+  task_type: bug-fix
+  failure_modes:
+    - wrong-result
+    - data-loss
+  prompt_source: human-reconstructed
+  prompt_style: outcome-request
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags:
+    - protocol
+    - text-processing
+    - compatibility
   base_sha: 31ce3cb8d73a6e20221315a90dd98a117f0101a0
   gold_sha: 0f3e7bd682a81488919227f2b5f1f7de1718ecdd
   test_paths:

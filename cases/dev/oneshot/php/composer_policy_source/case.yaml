@@ -6,9 +6,17 @@ meta:
   repo: https://github.com/composer/composer
   pr_url: https://github.com/composer/composer/pull/12993
   pr: 12993
-  scenario: user-facing-diagnostics
-  prompt_source: human-prompt
-  prompt_style: concise
+  task_type: behavior-change
+  failure_modes:
+    - wrong-result
+  prompt_source: human-reconstructed
+  prompt_style: acceptance-spec
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags:
+    - diagnostics
+    - error-handling
+    - cross-file
   base_sha: 138899a081757ceb770bd53b1ca575244d8aed06
   gold_sha: bb38c69cac82c5c6caeda8721715b0f9f9e7b6c2
   test_paths:

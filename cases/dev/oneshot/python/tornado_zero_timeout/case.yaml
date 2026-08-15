@@ -8,8 +8,17 @@ meta:
   issue_url: https://github.com/tornadoweb/tornado/issues/3271
   pr: 3621
   issue: 3271
-  scenario: falsy-boundary
-  prompt_source: human-prompt
+  task_type: bug-fix
+  failure_modes:
+    - hang
+  prompt_source: human-reconstructed
+  prompt_style: casual-chat
+  spec_level: symptom-led
+  test_visibility: mixed
+  capability_tags:
+    - async
+    - boundary-analysis
+    - lifecycle
   base_sha: affd7939a7985d3eef5b7bec39697287007a5328
   gold_sha: 18e15a5e0093b398a216fb9f85af69a3279b6e64
   test_paths:

@@ -7,8 +7,17 @@ meta:
   pr_url: https://github.com/pydantic/pydantic/pull/13516
   issue_url: https://github.com/pydantic/pydantic/issues/13507
   pr: 13516
-  scenario: schema-validation-divergence
+  task_type: bug-fix
+  failure_modes:
+    - wrong-result
   prompt_source: original-issue
+  prompt_style: issue-form
+  spec_level: full-spec
+  test_visibility: mixed
+  capability_tags:
+    - schema
+    - type-system
+    - serialization
   issue: 13507
   base_sha: d0ffa0951e47fd7349032e4b2ea9a54dc28fd435
   gold_sha: 60d4c4873e44d587c8d70d7a1c731f7361fe55eb

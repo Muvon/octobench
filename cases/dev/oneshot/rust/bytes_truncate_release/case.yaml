@@ -6,7 +6,17 @@ meta:
   repo: https://github.com/tokio-rs/bytes
   pr_url: https://github.com/tokio-rs/bytes/pull/842
   pr: 842
-  scenario: resource-lifecycle
+  task_type: bug-fix
+  failure_modes:
+    - resource-leak
+  prompt_source: reverse-spec
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags:
+    - memory-management
+    - lifecycle
+    - state-management
   base_sha: 002df10b8c610788b2730ec1234934e81aaa2880
   gold_sha: d5c8ad3227afe459c09f1d0d85455abf00f0381a
   test_paths:

@@ -1,16 +1,20 @@
 id: dev5_js_vite_hmr_restart_stale
 name: Vite crashes when the server restarts during a hot update
 category: dev
-difficulty: complex
+difficulty: expert
 timeout_minutes: 45
 meta:
   repo: https://github.com/vitejs/vite
   pr_url: https://github.com/vitejs/vite/pull/22992
   pr: 22992
-  scenario: restart-race
-  prompt_source: acceptance-story
+  task_type: bug-fix
+  failure_modes: [crash, race]
+  prompt_source: human-reconstructed
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [concurrency, lifecycle, state-management, cross-file]
   lane: B
-  behavior_category: retry-restart-after-partial-failure
   merged_at: 2026-07-24T05:49:00Z
   base_sha: 95a3cdab83e1125b03d2e8dd942fb6b64209e5fa
   gold_sha: b1186c36d06bb94941c58e8272fc4acb8512c93b

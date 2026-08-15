@@ -7,10 +7,20 @@ meta:
   pr_url: https://github.com/BurntSushi/ripgrep/pull/3496
   pr: 3496
   issue_url: https://github.com/BurntSushi/ripgrep/issues/2565
-  scenario: traversal-work-skipping
-  prompt_source: acceptance-story
+  task_type: performance
+  failure_modes:
+    - performance-regression
+    - wrong-result
+  prompt_source: human-reconstructed
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags:
+    - filesystem
+    - traversal
+    - performance
+    - error-handling
   lane: B
-  behavior_category: filesystem-and-path-handling
   merged_at: 2026-07-29T15:00:00Z
   base_sha: dffd776a737dc19a48b758dd6a621de113794121
   gold_sha: 435f59fc4b43af3ab32f34d53fa34978f393fe52

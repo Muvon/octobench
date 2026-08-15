@@ -6,8 +6,18 @@ meta:
   repo: https://github.com/image-rs/image
   pr_url: https://github.com/image-rs/image/pull/3003
   pr: 3003
-  scenario: decoder-correctness
-  prompt_source: human-prompt
+  task_type: bug-fix
+  failure_modes:
+    - wrong-result
+    - data-loss
+  prompt_source: human-reconstructed
+  prompt_style: symptom-report
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags:
+    - decoder
+    - binary-format
+    - image-processing
   merged_at: 2026-06-28T21:10:15Z
   base_sha: 86e7792285a05049e43f68a7fd55de66ca88e5ab
   gold_sha: 3f2b621ebc8a35bd098eaf18e2dc840883cdd9af

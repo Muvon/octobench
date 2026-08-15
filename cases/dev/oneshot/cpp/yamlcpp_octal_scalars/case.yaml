@@ -7,8 +7,13 @@ meta:
   pr_url: https://github.com/jbeder/yaml-cpp/pull/1451
   issue_url: https://github.com/jbeder/yaml-cpp/issues/1251
   pr: 1451
-  scenario: parser-spec-compliance
+  task_type: bug-fix
+  failure_modes: [rejected-valid-input, wrong-result]
   prompt_source: original-issue
+  prompt_style: issue-form
+  spec_level: behavioral
+  test_visibility: mixed
+  capability_tags: [debugging, parser, compatibility]
   issue: 1251
   base_sha: eadeac64e1a0619b5efa5a5674b5edb1a71a8885
   gold_sha: 847020a9cd706412eae6d73a0ba12ec02428bc5b

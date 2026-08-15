@@ -1,15 +1,25 @@
 id: dev5_php_dbal_sqlite_alter_preserves_constraints
 name: DBAL SQLite alterTable drops indexes and foreign keys of an introspected table
 category: dev
-difficulty: medium
+difficulty: complex
 meta:
   repo: https://github.com/doctrine/dbal
   pr_url: https://github.com/doctrine/dbal/pull/7392
   pr: 7392
-  scenario: schema-migration-compat
-  prompt_source: support-ticket
+  task_type: bug-fix
+  failure_modes:
+    - data-loss
+    - compatibility
+  prompt_source: human-reconstructed
+  prompt_style: reproduction-report
+  spec_level: behavioral
+  test_visibility: mixed
+  capability_tags:
+    - database
+    - schema-migration
+    - compatibility
+    - cross-file
   lane: A
-  behavior_category: backward-compat-two-representations
   merged_at: 2026-07-24T13:40:00Z
   base_sha: 6d8aa68d21f903101b6632e76a40a8626e61c56a
   gold_sha: 34b62998bf626326184bc25f58b39518d04928ce

@@ -6,7 +6,13 @@ meta:
   repo: https://github.com/pinojs/pino-pretty
   pr_url: https://github.com/pinojs/pino-pretty/pull/671
   pr: 671
-  scenario: security-output-sanitization
+  task_type: bug-fix
+  failure_modes: [security]
+  prompt_source: reverse-spec
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [security, text-processing, trust-boundary, cross-file]
   base_sha: a93ed108418d64c089ba9474cc96685dc2e417f2
   gold_sha: 87ed39f620160e0e1ccb6edf36c2901f8d5de741
   test_paths:

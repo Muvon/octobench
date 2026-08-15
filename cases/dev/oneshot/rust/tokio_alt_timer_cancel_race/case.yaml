@@ -1,15 +1,25 @@
 id: dev3_rust_tokio_alt_timer_cancel_race
 name: Tokio alternate-timer cancellation race
 category: dev
-difficulty: complex
+difficulty: expert
 timeout_minutes: 45
 meta:
   repo: https://github.com/tokio-rs/tokio
   pr_url: https://github.com/tokio-rs/tokio/pull/8252
   pr: 8252
-  scenario: concurrency-resource-leak
-  prompt_source: human-prompt
-  prompt_style: concise
+  task_type: bug-fix
+  failure_modes:
+    - race
+    - resource-leak
+  prompt_source: human-reconstructed
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags:
+    - concurrency
+    - lifecycle
+    - memory-management
+    - state-management
   base_sha: a46338401b9e0ffc9bd68c31100ee99cee717481
   gold_sha: 91d3b4c0bccf2234fc3ed19e605e2cd402f19437
   test_paths:

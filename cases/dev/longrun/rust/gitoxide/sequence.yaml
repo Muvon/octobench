@@ -10,6 +10,14 @@ meta:
   prs: [2856, 2857, 2860, 2858, 2863, 2866]
 turns:
   - name: "Keep the value when a line continuation is followed by an empty line"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [data-loss, wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: full-spec
+    test_visibility: mixed
+    capability_tags: [parser, state-management, compatibility]
     instruction: |
       In the gix-config event parser
       (`gix-config/src/parse/from_bytes/mod.rs`), a value that ends in a
@@ -46,6 +54,14 @@ turns:
       cargo test -p gix-config
 
   - name: "Don't reject mailmap lines with content after the second email"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [rejected-valid-input, compatibility]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [parser, compatibility, error-handling]
     instruction: |
       `gix-mailmap`'s line parser is stricter than Git's. `parse_line` in
       `gix-mailmap/src/parse.rs` parses two name/email pairs and then
@@ -81,6 +97,14 @@ turns:
       cargo test -p gix-mailmap
 
   - name: "Decode the config backslash-b escape to the backspace byte"
+    difficulty: simple
+    task_type: bug-fix
+    failure_modes: [wrong-result, data-loss]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [parser, text-processing, compatibility]
     instruction: |
       `gix-config` mis-decodes the `\b` escape in config values.
       `normalize_inner` in `gix-config/src/value/normalize.rs` treats `\b`
@@ -106,6 +130,14 @@ turns:
       cargo test -p gix-config --test config
 
   - name: "An implicit boolean followed by whitespace is true, like in Git"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: full-spec
+    test_visibility: mixed
+    capability_tags: [parser, state-management, compatibility]
     instruction: |
       `BodyData` in `gix-config/src/file/section/body.rs` decides whether a
       key has a value by comparing offsets: it assumes a value exists
@@ -144,6 +176,14 @@ turns:
       cargo test -p gix-config --test config
 
   - name: "Color names ignore case, and bright requires a standard color"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [rejected-valid-input, accepted-invalid-input]
+    prompt_source: reverse-spec
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [parser, normalization, validation]
     instruction: |
       `Name::from_str` and `Attribute::from_str` in
       `gix-config-value/src/color.rs` match color and attribute spellings
@@ -180,6 +220,14 @@ turns:
       cargo test -p gix-config-value --test value -- color
 
   - name: "A trailing DOS EOF marker doesn't make a text file binary"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result, compatibility]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [binary-format, text-processing, compatibility]
     instruction: |
       `eol::Stats::from_bytes` in `gix-filter/src/eol/utils.rs` counts a
       trailing DOS end-of-file marker (byte `0x1a`) as an unprintable byte,

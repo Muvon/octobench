@@ -10,6 +10,14 @@ meta:
   prs: [3875, 3888, 3893, 3894, 3895]
 turns:
   - name: "Stop re-applying delay option on redirects"
+    difficulty: simple
+    task_type: bug-fix
+    failure_modes: [performance-regression]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [protocol, lifecycle, state-management]
     instruction: |
       When following a redirect, the `delay` request option is re-applied to the
       redirected request. If the original request had `delay => 1`, the redirect
@@ -28,6 +36,14 @@ turns:
       vendor/bin/phpunit tests/RedirectMiddlewareTest.php
 
   - name: "Canonicalize IPv6 hosts in Digest and cookie identities"
+    difficulty: expert
+    task_type: bug-fix
+    failure_modes: [security, wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [security, protocol, normalization, cross-file]
     instruction: |
       Guzzle keys host-scoped state (the Digest challenge cache, the cookie
       jar) on raw host text, so equivalent spellings of one IPv6 address
@@ -80,6 +96,14 @@ turns:
       vendor/bin/phpunit tests/HostIdentityTest.php tests/Cookie/SetCookieTest.php tests/Cookie/CookieJarTest.php tests/AuthMiddlewareTest.php
 
   - name: "Protect secure cookies from insecure responses"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [security, accepted-invalid-input]
+    prompt_source: reverse-spec
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [security, protocol, trust-boundary, state-management]
     instruction: |
       Guzzle's cookie jar stores whatever a response sends, even when the
       request was made over plain HTTP, so anyone on an insecure connection can
@@ -127,6 +151,14 @@ turns:
       vendor/bin/phpunit tests/Cookie/CookieJarTest.php
 
   - name: "Enforce secure cookie name prefixes"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [security, accepted-invalid-input]
+    prompt_source: reverse-spec
+    prompt_style: follow-up
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [security, protocol, parser, trust-boundary]
     instruction: |
       Cookie name prefixes (`__Secure-` and `__Host-`) are not currently validated.
       Per the Cookie Prefix draft, these prefixes impose security constraints:
@@ -151,6 +183,14 @@ turns:
       vendor/bin/phpunit tests/Cookie/CookieJarTest.php
 
   - name: "Validate Basic authentication credentials"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [security, accepted-invalid-input]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [security, validation, protocol]
     instruction: |
       The `auth` request option with Basic authentication (`['username', 'password']`
       or `['username', 'password', 'basic']`) does not validate the credentials.

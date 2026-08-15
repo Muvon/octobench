@@ -1,15 +1,25 @@
 id: dev3_rust_rustls_misplaced_extensions
 name: rustls misplaced TLS extension rejection
 category: dev
-difficulty: complex
+difficulty: expert
 timeout_minutes: 45
 meta:
   repo: https://github.com/rustls/rustls
   pr_url: https://github.com/rustls/rustls/pull/3172
   pr: 3172
-  scenario: protocol-security-fix
-  prompt_source: human-prompt
-  prompt_style: behavior-rich
+  task_type: bug-fix
+  failure_modes:
+    - security
+    - accepted-invalid-input
+  prompt_source: human-reconstructed
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags:
+    - security
+    - protocol
+    - parser
+    - cross-file
   base_sha: ce23b5429ad617e932c896150ded30e3c7a0d0a7
   gold_sha: 7b7f4511a4f8395e67a1d8b0e97e840b0fa117eb
   test_paths:

@@ -10,6 +10,14 @@ meta:
   prs: [1185, 1187, 1188, 1191, 1190, 1189, 1193]
 turns:
   - name: "Bound hex ipv4 number by value not digit count"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [rejected-valid-input]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [parser, boundary-analysis, debugging]
     instruction: |
       `parse_ipv4_number` in `include/ada/url_ip-inl.h` rejects a
       hexadecimal component once it has consumed 8 digits. That bound is
@@ -35,6 +43,14 @@ turns:
       cmake --build build --target basic_tests -j"$(nproc)" && (cd build/tests && ./basic_tests)
 
   - name: "Reject unterminated group in URL pattern constructor string parser"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [accepted-invalid-input]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [parser, state-management, debugging]
     instruction: |
       In `constructor_string_parser<regex_provider>::parse`
       (`include/ada/url_pattern_helpers-inl.h`), the branch that handles an
@@ -65,6 +81,14 @@ turns:
       cmake --build build --target wpt_urlpattern_tests -j"$(nproc)" && (cd build/tests && ./wpt_urlpattern_tests)
 
   - name: "Report capture groups for empty input in regex_search"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [regex, parser, boundary-analysis]
     instruction: |
       `std_regex_provider::regex_search` in `src/url_pattern_regex.cpp`
       returns an empty match vector as soon as the input string is empty, on
@@ -96,6 +120,14 @@ turns:
       cmake --build build --target wpt_urlpattern_tests -j"$(nproc)" && (cd build/tests && ./wpt_urlpattern_tests)
 
   - name: "Keep braces around a prefixed part in generate_pattern_string"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [serialization, parser, compatibility]
     instruction: |
       `generate_pattern_string` in `src/url_pattern_helpers.cpp` decides
       whether a part needs braces. Its `needs_grouping` condition only
@@ -129,6 +161,14 @@ turns:
       cmake --build build --target wpt_urlpattern_tests -j"$(nproc)" && (cd build/tests && ./wpt_urlpattern_tests)
 
   - name: "Treat file as a special scheme in URL pattern protocol check"
+    difficulty: simple
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [protocol, parser, compatibility]
     instruction: |
       `protocol_component_matches_special_scheme` in
       `include/ada/url_pattern_helpers-inl.h` enumerates the special
@@ -157,6 +197,14 @@ turns:
       cmake --build build --target wpt_urlpattern_tests -j"$(nproc)" && (cd build/tests && ./wpt_urlpattern_tests)
 
   - name: "Account for IDNA expansion in can_parse size shortcut"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: full-spec
+    test_visibility: mixed
+    capability_tags: [unicode, boundary-analysis, parser]
     instruction: |
       `can_parse` in `src/implementation.cpp` must agree with
       `parse().has_value()`, including the post-normalization max-length
@@ -187,6 +235,14 @@ turns:
       cmake --build build --target max_input_length -j"$(nproc)" && (cd build/tests && ./max_input_length)
 
   - name: "Enforce max input length on href_from_file and search params"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [accepted-invalid-input, performance-regression]
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: mixed
+    capability_tags: [security, boundary-analysis, cross-file, api-design]
     instruction: |
       `get_max_input_length()` currently only bounds `ada::parse` and the
       setters. Two other entry points take untrusted input and ignore it.

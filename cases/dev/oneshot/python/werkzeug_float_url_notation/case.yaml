@@ -7,7 +7,17 @@ meta:
   repo: https://github.com/pallets/werkzeug
   pr_url: https://github.com/pallets/werkzeug/pull/3147
   pr: 3147
-  scenario: bug-fix
+  task_type: bug-fix
+  failure_modes:
+    - wrong-result
+  prompt_source: reverse-spec
+  prompt_style: symptom-report
+  spec_level: behavioral
+  test_visibility: mixed
+  capability_tags:
+    - serialization
+    - protocol
+    - boundary-analysis
   base_sha: b97e13cc74d8a45dca260d4037edd7d1f5094042
   gold_sha: a7e3ab2b42ab509148d2864e64a8f8378a638e7e
   test_paths:

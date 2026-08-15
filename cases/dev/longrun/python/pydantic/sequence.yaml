@@ -10,6 +10,14 @@ meta:
   prs: [13438, 13456, 13483, 13495, 13516]
 turns:
   - name: "Thread-safe model_rebuild"
+    difficulty: expert
+    task_type: bug-fix
+    failure_modes: [race, wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [concurrency, lifecycle, state-management, cross-file]
     instruction: |
       `BaseModel.model_rebuild()` is not thread-safe. When two threads call `model_rebuild()`
       concurrently on the same incomplete model, or when rebuilding one model triggers a nested
@@ -33,6 +41,14 @@ turns:
       python3 -m pytest -o addopts='' tests/test_main.py::test_model_rebuild_nested_during_parametrization tests/test_main.py::test_model_rebuild_already_rebuilt_by_other_thread -xvs
 
   - name: "RootModel.model_dump signature sync"
+    difficulty: simple
+    task_type: maintenance
+    failure_modes: [compatibility]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [api-design, type-system, compatibility]
     instruction: |
       Under `TYPE_CHECKING`, `RootModel.model_dump` does not have the same parameter signature
       as `BaseModel.model_dump`. The parameters (names, kinds, defaults, annotations) must match
@@ -46,6 +62,14 @@ turns:
       python3 -m pytest -o addopts='' tests/test_root_model.py::test_type_checking_model_dump_signature_in_sync_with_base_model -xvs
 
   - name: "Type variable substitution in __pydantic_extra__"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [type-system, generics, schema, serialization]
     instruction: |
       When a `Generic` `BaseModel` subclass has `extra='allow'`, the type variable in
       `__pydantic_extra__` is not properly substituted for the concrete type in subclasses.
@@ -73,6 +97,14 @@ turns:
       python3 -m pytest -o addopts='' tests/test_main.py::test_extra_generic_class_subclass -xvs
 
   - name: "URL ordering returns NotImplemented for foreign types"
+    difficulty: simple
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [operator-semantics, type-dispatch, compatibility]
     instruction: |
       URL ordering comparisons (`<`, `>`, `<=`, `>=`) against foreign types (strings, integers,
       `None`, or a different URL type like `HttpUrl` vs `AnyUrl`) silently return `False`
@@ -90,6 +122,14 @@ turns:
       python3 -m pytest -o addopts='' tests/test_networks.py::test_any_url_ordering_not_implemented tests/test_networks.py::test_any_url_ordering_is_consistent -xvs
 
   - name: "Pipeline constraints with cross-type arguments and transforms"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: full-spec
+    test_visibility: mixed
+    capability_tags: [schema, type-system, validation, state-management]
     instruction: |
       In the experimental pipeline API (`pydantic/experimental/pipeline.py`), the constraint
       methods `ge()`, `le()`, `gt()`, `lt()`, and `multiple_of()` fail in two scenarios:

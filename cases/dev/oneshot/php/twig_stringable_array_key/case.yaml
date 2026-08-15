@@ -6,7 +6,18 @@ meta:
   repo: https://github.com/twigphp/Twig
   pr_url: https://github.com/twigphp/Twig/pull/4856
   pr: 4856
-  scenario: simple-edit
+  task_type: bug-fix
+  failure_modes:
+    - wrong-result
+    - compatibility
+  prompt_source: reverse-spec
+  prompt_style: symptom-report
+  spec_level: behavioral
+  test_visibility: mixed
+  capability_tags:
+    - type-dispatch
+    - compatibility
+    - debugging
   base_sha: 2fb736d03319099b4847f73b0bddb8b883408854
   gold_sha: 8ada671fc39a235b48ef7d18020ab43658e98917
   test_paths:

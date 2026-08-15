@@ -10,6 +10,14 @@ meta:
   prs: [12479, 12485, 12460, 12535, 12536, 12541]
 turns:
   - name: "Harden CursorPaginator against untrusted cursor payloads"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [security, accepted-invalid-input]
+    prompt_source: reverse-spec
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [security, validation, serialization, trust-boundary]
     instruction: |
       `Cursor::fromEncodedString()` and `CursorPaginator::paginate()` (in
       `src/Tools/Pagination/`) trust the decoded cursor payload more than
@@ -46,6 +54,14 @@ turns:
       vendor/bin/phpunit tests/Tests/ORM/Tools/Pagination
 
   - name: "Fix cursor building when ordering by a ManyToOne association"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [crash, wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [database, object-mapping, type-dispatch]
     instruction: |
       Paginating a query ordered by a to-one association — `ORDER BY
       b.author` rather than `ORDER BY b.author.id` — builds a broken
@@ -78,6 +94,14 @@ turns:
       vendor/bin/phpunit tests/Tests/ORM/Tools/Pagination
 
   - name: "SchemaValidator reports inversedBy targeting a different entity"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [accepted-invalid-input]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [validation, object-mapping, graph-traversal]
     instruction: |
       `SchemaValidator` (in `src/Tools/SchemaValidator.php`) already
       cross-checks that an owning side's `inversedBy` names a real field
@@ -109,6 +133,14 @@ turns:
       vendor/bin/phpunit tests/Tests/ORM/Tools/SchemaValidatorTest.php
 
   - name: "Reject IDENTITY() on inverse-side associations"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [accepted-invalid-input, wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: full-spec
+    test_visibility: mixed
+    capability_tags: [parser, database, error-handling]
     instruction: |
       `IDENTITY()` only makes sense on a to-one *owning* side, where the
       foreign key column lives on the queried table. Today
@@ -143,6 +175,14 @@ turns:
       vendor/bin/phpunit tests/Tests/ORM/Query/SelectSqlGenerationTest.php
 
   - name: "Validate ManyToOne associations used as sole identifiers"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [accepted-invalid-input]
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [validation, object-mapping, database]
     instruction: |
       An entity whose only identifier is a many-to-one association is a
       modelling mistake: the identifier is unique by definition, so the
@@ -179,6 +219,14 @@ turns:
       vendor/bin/phpunit tests/Tests/ORM/Tools/SchemaValidatorTest.php
 
   - name: "Allow NULL literal in SELECT and CASE expressions"
+    difficulty: complex
+    task_type: feature
+    failure_modes: []
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [parser, database, serialization, cross-file]
     instruction: |
       DQL cannot express a literal `NULL` in a scalar position.
       `SELECT NULL`, a `NULL` branch in a CASE expression and `NULL` as a

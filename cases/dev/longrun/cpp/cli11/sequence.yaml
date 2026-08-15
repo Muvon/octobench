@@ -10,6 +10,14 @@ meta:
   prs: [1358, 1371, 1360, 1361, 1362, 1364, 1366, 1369]
 turns:
   - name: "Chain name transforms so ignore_case and ignore_underscore both apply"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [parser, state-management, compatibility]
     instruction: |
       `App::check_name_detail` in `include/CLI/impl/App_inl.hpp` applies its
       name transforms in sequence: the `ignore_underscore_` branch strips
@@ -34,6 +42,14 @@ turns:
       cmake --build build --target SubcommandTest -j"$(nproc)" && ctest --test-dir build -R '^SubcommandTest$' --output-on-failure
 
   - name: "Indent nested option groups in help output"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: mixed
+    capability_tags: [text-processing, api-design, formatting]
     instruction: |
       Nested option groups render flat in help output: a subgroup of a
       group is printed at the same indentation as its parent, so the
@@ -64,6 +80,14 @@ turns:
       cmake --build build --target OptionGroupTest -j"$(nproc)" && ctest --test-dir build -R '^OptionGroupTest$' --output-on-failure
 
   - name: "Clear proc_results_ in Option::clear()"
+    difficulty: simple
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [state-management, lifecycle, debugging]
     instruction: |
       `Option::clear()` in `include/CLI/Option.hpp` clears `results_` and
       resets the option state, but leaves `proc_results_` populated. A
@@ -84,6 +108,14 @@ turns:
       cmake --build build --target AppTest -j"$(nproc)" && ctest --test-dir build -R '^AppTest$' --output-on-failure
 
   - name: "Correct multiline string value extraction for indented keys"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result, data-loss]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [parser, text-processing, boundary-analysis]
     instruction: |
       In `ConfigBase::from_config` (`include/CLI/impl/Config_inl.hpp`), the
       multiline-string branch slices the value out of the raw line buffer
@@ -109,6 +141,14 @@ turns:
       cmake --build build --target ConfigFileTest -j"$(nproc)" && ctest --test-dir build -R '^ConfigFileTest$' --output-on-failure
 
   - name: "Fix type-conversion edge cases in TypeTools and Option reduce"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result, accepted-invalid-input]
+    prompt_source: reverse-spec
+    prompt_style: review-and-fix
+    spec_level: full-spec
+    test_visibility: mixed
+    capability_tags: [type-system, parser, boundary-analysis, cross-file]
     instruction: |
       Five conversion edge cases, four in `include/CLI/TypeTools.hpp` and
       one in `include/CLI/impl/Option_inl.hpp`.
@@ -160,6 +200,14 @@ turns:
       cmake --build build --target HelpersTest --target OptionTypeTest -j"$(nproc)" && ctest --test-dir build -R '^(HelpersTest|OptionTypeTest)$' --output-on-failure
 
   - name: "Fix StringTools edge cases in split_up, remove_quotes, append_codepoint, escape_detect"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result, crash]
+    prompt_source: reverse-spec
+    prompt_style: review-and-fix
+    spec_level: full-spec
+    test_visibility: mixed
+    capability_tags: [text-processing, parser, unicode, cross-file]
     instruction: |
       Four fixes in `include/CLI/impl/StringTools_inl.hpp`.
 
@@ -209,6 +257,14 @@ turns:
       cmake --build build --target AppTest --target ConfigFileTest --target HelpersTest -j"$(nproc)" && ctest --test-dir build -R '^(AppTest|ConfigFileTest|HelpersTest)$' --output-on-failure
 
   - name: "Validator correctness nits"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [rejected-valid-input, crash]
+    prompt_source: reverse-spec
+    prompt_style: review-and-fix
+    spec_level: full-spec
+    test_visibility: mixed
+    capability_tags: [validation, boundary-analysis, cross-file]
     instruction: |
       A round of correctness nits across the validators.
 
@@ -244,6 +300,14 @@ turns:
       cmake --build build --target HelpersTest -j"$(nproc)" && ctest --test-dir build -R '^HelpersTest$' --output-on-failure
 
   - name: "Fix config reader/writer, formatter, and ExtrasError bugs"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result, data-loss]
+    prompt_source: reverse-spec
+    prompt_style: review-and-fix
+    spec_level: full-spec
+    test_visibility: mixed
+    capability_tags: [parser, formatting, error-handling, cross-file]
     instruction: |
       A batch of config-reader, config-writer and formatter bugs.
 

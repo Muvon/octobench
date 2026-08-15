@@ -6,9 +6,13 @@ meta:
   repo: https://github.com/webpack/webpack
   pr_url: https://github.com/webpack/webpack/pull/21468
   pr: 21468
-  scenario: resource-lifecycle
-  prompt_source: human-prompt
-  prompt_style: behavior-rich
+  task_type: bug-fix
+  failure_modes: [resource-leak, hang]
+  prompt_source: human-reconstructed
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [lifecycle, concurrency, state-management]
   base_sha: 508e10f54e0c581f6baf4189ee50b6f4ea2e57f5
   gold_sha: a24f33283f5b073f2e0e845badd1ec469272702b
   test_paths:

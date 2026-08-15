@@ -10,6 +10,14 @@ meta:
   prs: [4880, 4886, 4896, 4909, 4910, 4925]
 turns:
   - name: "Make a disconnected spreadsheet reusable"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [lifecycle, state-management, object-model]
     instruction: |
       `Spreadsheet::disconnectWorksheets()` is documented as a teardown
       helper, but it leaves the object in a state where the spreadsheet
@@ -39,6 +47,14 @@ turns:
       vendor/bin/phpunit tests/PhpSpreadsheetTests/ReuseDisconnectTest.php
 
   - name: "Add IReader2 interface with listWorksheetInfo/Names"
+    difficulty: complex
+    task_type: feature
+    failure_modes: []
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [api-design, compatibility, cross-file]
     instruction: |
       `listWorksheetInfo()` and `listWorksheetNames()` are implemented by
       every reader we ship but are not part of the `IReader` contract, so
@@ -75,6 +91,14 @@ turns:
       vendor/bin/phpunit tests/PhpSpreadsheetTests/IOFactoryRegisterTest.php tests/PhpSpreadsheetTests/Reader/Csv/SimpleCsvTest.php
 
   - name: "Widen and tighten getChartByIndex"
+    difficulty: medium
+    task_type: behavior-change
+    failure_modes: [accepted-invalid-input]
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [api-design, validation, type-dispatch]
     instruction: |
       `Worksheet::getChartByIndex()` (in
       `src/PhpSpreadsheet/Worksheet/Worksheet.php`) is typed `?string` even
@@ -108,6 +132,14 @@ turns:
       vendor/bin/phpunit tests/PhpSpreadsheetTests/Chart/ChartsByNameTest.php
 
   - name: "Navigate Cell as a cursor"
+    difficulty: complex
+    task_type: feature
+    failure_modes: []
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [api-design, boundary-analysis, object-model]
     instruction: |
       Add cursor-style navigation to `Cell`
       (`src/PhpSpreadsheet/Cell/Cell.php`), so callers can walk a sheet
@@ -143,6 +175,14 @@ turns:
       vendor/bin/phpunit tests/PhpSpreadsheetTests/Cell/CursorTest.php
 
   - name: "Allow multiple ranges when setting style"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [parser, state-management, object-model]
     instruction: |
       `Worksheet::getStyle()` accepts a comma-separated list of ranges, but
       `Style::applyFromArray()` (in `src/PhpSpreadsheet/Style/Style.php`)
@@ -176,6 +216,14 @@ turns:
       vendor/bin/phpunit tests/PhpSpreadsheetTests/Style/MultipleRangeTest.php
 
   - name: "Consistent highest row/column after row/column delete"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result, accepted-invalid-input]
+    prompt_source: reverse-spec
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [state-management, boundary-analysis, data-structure]
     instruction: |
       `removeRow()` and `removeColumn()` (in
       `src/PhpSpreadsheet/Worksheet/Worksheet.php`) do not maintain the

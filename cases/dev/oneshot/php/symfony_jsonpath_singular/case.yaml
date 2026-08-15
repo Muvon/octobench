@@ -6,7 +6,18 @@ meta:
   repo: https://github.com/symfony/symfony
   pr_url: https://github.com/symfony/symfony/pull/65005
   pr: 65005
-  scenario: parser-spec-compliance
+  task_type: bug-fix
+  failure_modes:
+    - accepted-invalid-input
+  prompt_source: reverse-spec
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: mixed
+  capability_tags:
+    - parser
+    - protocol
+    - boundary-analysis
+    - cross-file
   base_sha: 64418e15e4e806178c39cded5362a6c06ea43331
   gold_sha: b785a298870b3e421b24972a6eb7cc39c162b57a
   test_paths:

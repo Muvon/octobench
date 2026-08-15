@@ -10,6 +10,14 @@ meta:
   prs: [6414, 6441, 6400, 6413, 6454]
 turns:
   - name: "Don't emit usage placeholder for plain positionals in bash completions"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [shell, code-generation, formatting]
     instruction: |
       In `clap_complete/src/aot/shells/bash.rs`, `all_options_for_path()`
       builds the `opts="..."` word list that the generated bash completion
@@ -47,6 +55,14 @@ turns:
       cargo test -p clap_complete --test testsuite bash::
 
   - name: "Label a single alias as singular in help output"
+    difficulty: simple
+    task_type: behavior-change
+    failure_modes: []
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [formatting, text-processing, compatibility]
     instruction: |
       In `clap_builder/src/output/help_template.rs`, help output labels alias
       lists with a hard-coded plural, so `[aliases: --visible]` is printed
@@ -85,6 +101,14 @@ turns:
       cargo test -p clap --features "deprecated derive cargo env unicode string wrap_help unstable-ext" --test builder arg_aliases && cargo test -p clap --features "deprecated derive cargo env unicode string wrap_help unstable-ext" --test derive issues::issue_418
 
   - name: "Skip last(true) arguments in nushell completions"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result, compatibility]
+    prompt_source: reverse-spec
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [shell, code-generation, compatibility]
     instruction: |
       `clap_complete_nushell` emits completions for arguments declared with
       `Arg::last(true)` — the ones that may only appear after a `--`
@@ -119,6 +143,14 @@ turns:
       cargo test -p clap_complete_nushell --test nushell last_args
 
   - name: "Allow attribute values to be expressions starting with a string literal"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [rejected-valid-input, build-failure]
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: mixed
+    capability_tags: [parser, macros, syntax-tree, diagnostics]
     instruction: |
       `clap_derive` rejects attribute values that are expressions beginning
       with a string literal. For example
@@ -156,6 +188,14 @@ turns:
       cargo test -p clap --features "deprecated derive cargo env unicode string wrap_help unstable-ext" --test derive default_value::default_value_t_string_expr
 
   - name: "Render partially-optional values with brackets"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [formatting, api-design, boundary-analysis]
     instruction: |
       `Arg`'s `Display` implementation renders every value name of a
       multi-value argument as required (`<NAME>`), even when `num_args`

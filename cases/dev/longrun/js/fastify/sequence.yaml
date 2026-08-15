@@ -10,6 +10,14 @@ meta:
   prs: [6803, 6830, 6838, 6854, 6881]
 turns:
   - name: "Double slash when joining nested prefixes"
+    difficulty: simple
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: symptom-report
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [routing, path-handling, debugging]
     instruction: |
       When a plugin is registered with a prefix that has a trailing slash (e.g. `/v1/`) and a
       nested plugin is registered with a prefix that has no leading slash (e.g. `inner`), the
@@ -26,6 +34,14 @@ turns:
       node --test test/route-prefix.test.js
 
   - name: "ContentType cache and quoted parameter values"
+    difficulty: medium
+    task_type: feature
+    failure_modes: []
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [protocol, caching, serialization]
     instruction: |
       The `ContentType` class should cache instances so that `ContentType.from('application/json')`
       returns the same object on repeated calls. A `ContentType.cache` Map should be accessible
@@ -42,6 +58,14 @@ turns:
       node --test test/content-type.test.js
 
   - name: "Normalize method in findRoute"
+    difficulty: simple
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [routing, normalization, boundary-analysis]
     instruction: |
       `fastify.findRoute({ method: 'get', url: '/artists/:artistId' })` returns null even when
       a GET route exists, because the method is not uppercased before lookup. The method should
@@ -57,6 +81,14 @@ turns:
       node --test test/find-route.test.js
 
   - name: "Reuse cached content types for response serialization"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: follow-up
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [caching, serialization, state-management]
     instruction: |
       When selecting a response serializer, Fastify re-parses the content type from the reply
       header instead of reusing the already-parsed `ContentType` instance. This causes a
@@ -75,6 +107,14 @@ turns:
       node --test test/schema-serialization.test.js
 
   - name: "Uncatchable throws in writeHead during async hooks"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [crash]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [async, error-handling, lifecycle]
     instruction: |
       When an async hook (`preSerialization` or `onSend`) calls `reply.header()` with an invalid
       header value (e.g. `'\n'`), the resulting throw inside `writeHead` becomes an uncatchable

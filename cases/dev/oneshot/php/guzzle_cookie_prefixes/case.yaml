@@ -7,7 +7,19 @@ meta:
   repo: https://github.com/guzzle/guzzle
   pr_url: https://github.com/guzzle/guzzle/pull/3894
   pr: 3894
-  scenario: security-input-validation
+  task_type: bug-fix
+  failure_modes:
+    - security
+    - accepted-invalid-input
+  prompt_source: reverse-spec
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags:
+    - security
+    - protocol
+    - parser
+    - trust-boundary
   base_sha: ecfbeb7a08fbbc5cfc0ab49ae56fcc71447160b5
   gold_sha: 7f8b93d1a9bed5bdd4ecb4e40c4a26898c8826e4
   test_paths:

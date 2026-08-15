@@ -8,8 +8,17 @@ meta:
   issue_url: https://github.com/toml-rs/toml/issues/440
   pr: 1194
   issue: 440
-  scenario: deserialization-round-trip
-  prompt_source: human-prompt
+  task_type: bug-fix
+  failure_modes:
+    - rejected-valid-input
+  prompt_source: human-reconstructed
+  prompt_style: casual-chat
+  spec_level: symptom-led
+  test_visibility: mixed
+  capability_tags:
+    - serialization
+    - type-dispatch
+    - compatibility
   base_sha: 4ec099fed591a172f82007cb2f9d605985bbecee
   gold_sha: 89f55411d47ee9fb349ab0704f287aa82aa12258
   test_paths:

@@ -1,16 +1,20 @@
 id: dev3_js_react_hidden_hydration_hang
 name: React hidden hydration update hang
 category: dev
-difficulty: complex
+difficulty: expert
 timeout_minutes: 240
 meta:
   repo: https://github.com/facebook/react
   pr_url: https://github.com/facebook/react/pull/37135
   issue_url: https://github.com/vercel/next.js/issues/95848
   pr: 37135
-  scenario: concurrency-bug-fix
-  prompt_source: human-prompt
-  prompt_style: concise
+  task_type: bug-fix
+  failure_modes: [hang, race]
+  prompt_source: human-reconstructed
+  prompt_style: reproduction-report
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [concurrency, state-management, hydration, cross-file]
   base_sha: 96fcba90138e9f1a73ee1cc4f79a653ec12fc3a9
   gold_sha: 9a81195bed0ded96e10a13f753dce05bee8cc97b
   test_paths:

@@ -10,6 +10,14 @@ meta:
   prs: [2720, 2775, 2793, ebe5e1bf3c, 2801]
 turns:
   - name: "Fix get_string() crash on incomplete JSON with allow_incomplete_json"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [crash]
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: mixed
+    capability_tags: [parser, memory-safety, boundary-analysis, cross-file]
     instruction: |
       With `SIMDJSON_EXPERIMENTAL_ALLOW_INCOMPLETE_JSON` defined, an On Demand
       parser should be able to walk a truncated document as far as the input
@@ -46,6 +54,14 @@ turns:
       cmake --build build --target ondemand_json_path_tests -j"$(nproc)" && ctest --test-dir build -R '^ondemand_json_path_tests$' --output-on-failure
 
   - name: "Parse DOM documents without padding (experimental)"
+    difficulty: expert
+    task_type: feature
+    failure_modes: []
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [parser, memory-safety, api-design, cross-file]
     instruction: |
       `dom::parser` can only parse buffers that carry SIMDJSON_PADDING
       readable bytes past the end of the document. The only way around it
@@ -88,6 +104,14 @@ turns:
       cmake --build build --target unpadded_tests -j"$(nproc)" && ctest --test-dir build -R '^unpadded_tests$' --output-on-failure
 
   - name: "Treat 20-digit positive overflow as BIGINT_NUMBER"
+    difficulty: simple
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [parser, arithmetic, boundary-analysis]
     instruction: |
       When parsing a 20-digit positive integer that overflows `uint64_t`
       (e.g. `18446744073709551616`), the parser incorrectly returns
@@ -109,6 +133,14 @@ turns:
       cmake --build build --target big_integer_tests ondemand_number_tests -j"$(nproc)" && ctest --test-dir build -R '^(big_integer_tests|ondemand_number_tests)$' --output-on-failure
 
   - name: "Reuse parser buffers when the requested capacity shrinks"
+    difficulty: medium
+    task_type: performance
+    failure_modes: [performance-regression]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [performance, memory-management, state-management]
     instruction: |
       `ondemand::parser::allocate` in
       include/simdjson/generic/ondemand/parser-inl.h takes its no-op fast
@@ -145,6 +177,14 @@ turns:
       cmake --build build --target ondemand_document_stream_tests -j"$(nproc)" && ctest --test-dir build -R '^ondemand_document_stream_tests$' --output-on-failure
 
   - name: "Fix throw on unterminated bracket-quoted JSONPath keys in wildcard walks"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [crash, hang]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: full-spec
+    test_visibility: mixed
+    capability_tags: [parser, error-handling, boundary-analysis]
     instruction: |
       When `at_path_with_wildcard()` receives a path with an unterminated
       bracket-quoted key (e.g. `$["a*` — the `]` is missing), the function

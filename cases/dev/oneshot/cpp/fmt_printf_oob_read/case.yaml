@@ -6,7 +6,13 @@ meta:
   repo: https://github.com/fmtlib/fmt
   pr_url: https://github.com/fmtlib/fmt/pull/4800
   pr: 4800
-  scenario: crash-fix
+  task_type: bug-fix
+  failure_modes: [crash, accepted-invalid-input]
+  prompt_source: reverse-spec
+  prompt_style: reproduction-report
+  spec_level: behavioral
+  test_visibility: mixed
+  capability_tags: [debugging, parser, memory-safety]
   base_sha: e60274b29c0a748df2c6280d0a374e6eef3b6c73
   gold_sha: 128ba144ab85ddd0ad9ea39f2febdfb51802cb1b
   test_paths:

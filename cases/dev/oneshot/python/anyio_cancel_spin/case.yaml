@@ -6,7 +6,17 @@ meta:
   repo: https://github.com/agronholm/anyio
   pr_url: https://github.com/agronholm/anyio/pull/1217
   pr: 1217
-  scenario: concurrency-livelock
+  task_type: bug-fix
+  failure_modes:
+    - hang
+  prompt_source: reverse-spec
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags:
+    - concurrency
+    - lifecycle
+    - state-management
   base_sha: 6bbc6c33caabc13af5bc4256f745027cf8d5d7b8
   gold_sha: dbba29d1ade7936f18fb71ba24aa92978673482a
   test_paths:

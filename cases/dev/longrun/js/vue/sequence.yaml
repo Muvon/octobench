@@ -10,6 +10,14 @@ meta:
   prs: [14778, 14902, 14914, 14964, 15084]
 turns:
   - name: "Prevent orphan effects created in a stopped scope"
+    difficulty: expert
+    task_type: bug-fix
+    failure_modes: [resource-leak, race]
+    prompt_source: reverse-spec
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [async, lifecycle, state-management, cross-file]
     instruction: |
       When a component's `setup()` contains a top-level `await`, the compiler
       splits it around `withAsyncContext()` and the `__restore()` callback,
@@ -50,6 +58,14 @@ turns:
       pnpm vitest run --project unit packages/runtime-core/__tests__/components/Suspense.spec.ts
 
   - name: "Preserve watch callback return value when wrapped for once: true"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [async, error-handling, callbacks]
     instruction: |
       `watch()` with `once: true` (in `packages/reactivity/src/watch.ts`)
       replaces the user callback with a wrapper that invokes it and then
@@ -81,6 +97,14 @@ turns:
       pnpm vitest run --project unit packages/reactivity/__tests__/watch.spec.ts
 
   - name: "Trigger immediate callback for empty watch sources"
+    difficulty: simple
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [state-management, boundary-analysis, callbacks]
     instruction: |
       `watch([], cb, { immediate: true })` never invokes the callback.
       Watching an empty array of sources is legitimate — it happens whenever
@@ -108,6 +132,14 @@ turns:
       pnpm vitest run --project unit packages/runtime-core/__tests__/apiWatch.spec.ts
 
   - name: "Avoid triggering effects when a reactive set fails"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [state-management, proxy-semantics, error-handling]
     instruction: |
       The mutable `set` trap on `reactive()` proxies (in
       `packages/reactivity/src/baseHandlers.ts`) calls `Reflect.set` and then
@@ -138,6 +170,14 @@ turns:
       pnpm vitest run --project unit packages/reactivity/__tests__/reactive.spec.ts
 
   - name: "Handle effect removal during scope stop"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [crash, wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [lifecycle, mutation-during-iteration, state-management]
     instruction: |
       `EffectScope.pause()`, `resume()` and `stop()` (in
       `packages/reactivity/src/effectScope.ts`) walk `this.scopes` and

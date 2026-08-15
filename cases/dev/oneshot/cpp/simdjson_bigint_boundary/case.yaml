@@ -7,8 +7,13 @@ meta:
   repo: https://github.com/simdjson/simdjson
   pr_url: https://github.com/simdjson/simdjson/pull/2793
   pr: 2793
-  scenario: parser-boundary
-  prompt_source: human-prompt
+  task_type: bug-fix
+  failure_modes: [rejected-valid-input]
+  prompt_source: human-reconstructed
+  prompt_style: symptom-report
+  spec_level: symptom-led
+  test_visibility: mixed
+  capability_tags: [debugging, parser, boundary-analysis]
   base_sha: 8e6bac94877f2d3d026000d36ce81e0aaf38d26f
   gold_sha: e3720ba824500473a20d095779afc129511c832f
   test_paths:

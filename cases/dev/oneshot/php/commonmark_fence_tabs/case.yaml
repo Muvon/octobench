@@ -7,8 +7,19 @@ meta:
   pr_url: https://github.com/thephpleague/commonmark/pull/1130
   issue_url: https://github.com/thephpleague/commonmark/issues/981
   pr: 1130
-  scenario: parser-tab-arithmetic
-  prompt_source: original-issue
+  task_type: bug-fix
+  failure_modes:
+    - wrong-result
+    - data-loss
+  prompt_source: composite
+  prompt_style: issue-form
+  spec_level: full-spec
+  test_visibility: mixed
+  capability_tags:
+    - debugging
+    - parser
+    - text-processing
+    - compatibility
   issue: 981
   base_sha: cfb11eca1dce491891141055b945724b25434c74
   gold_sha: 51b529fd295ade2e641e8a6152e72c16ce9735ac
@@ -61,3 +72,19 @@ instruction: |
 
   The resulting output is:
   (screenshot: the rendered code block is missing the first character of each line)
+
+  ### Maintainer clarification
+
+  Treat indentation by visual columns using four-column tab stops, rather than
+  treating every tab as a fixed number of bytes or characters. The accepted fix
+  must satisfy all of these behaviors:
+
+  - Tab-indented opening and closing fences and their content inside list items
+    must not lose the first character.
+  - A fenced block's info string must remain intact.
+  - Tabs beyond the structural indentation must remain literal tabs in the code
+    block's content.
+  - If indentation consumes only part of a tab, preserve the tab's remaining
+    visual width as spaces up to the next four-column tab stop. For example, after
+    one leading space, the remaining width of that tab is three spaces.
+  - Preserve the existing behavior of ordinary space-indented fenced blocks.

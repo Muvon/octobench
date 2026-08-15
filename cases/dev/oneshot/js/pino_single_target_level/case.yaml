@@ -7,8 +7,13 @@ meta:
   pr_url: https://github.com/pinojs/pino/pull/2432
   issue_url: https://github.com/pinojs/pino/issues/1996
   pr: 2432
-  scenario: transport-config-boundary
+  task_type: bug-fix
+  failure_modes: [wrong-result]
   prompt_source: original-issue
+  prompt_style: issue-form
+  spec_level: symptom-led
+  test_visibility: mixed
+  capability_tags: [debugging, configuration, lifecycle]
   issue: 1996
   base_sha: 7b2fee8700cb4ecab0d55dbe831d60b60fc16929
   gold_sha: ea99eee063c783964f51bf3ac2c2c2815263056e

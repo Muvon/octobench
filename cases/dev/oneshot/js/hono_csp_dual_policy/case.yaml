@@ -6,10 +6,14 @@ meta:
   repo: https://github.com/honojs/hono
   pr_url: https://github.com/honojs/hono/pull/5147
   pr: 5147
-  scenario: http-header-contract
-  prompt_source: support-ticket
+  task_type: bug-fix
+  failure_modes: [wrong-result]
+  prompt_source: human-reconstructed
+  prompt_style: reproduction-report
+  spec_level: behavioral
+  test_visibility: mixed
+  capability_tags: [debugging, security, protocol]
   lane: A
-  behavior_category: public-http-validation
   merged_at: 2026-07-24T08:48:00Z
   base_sha: c85aead088659b98b8d05a1187a07d064e12ffe6
   gold_sha: 402eb3abe561914f41ee0f8e37f1d7f211f1ee51

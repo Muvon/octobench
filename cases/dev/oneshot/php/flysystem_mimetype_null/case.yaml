@@ -8,8 +8,16 @@ meta:
   issue_url: https://github.com/thephpleague/flysystem/issues/1855
   pr: 1901
   issue: 1855
-  scenario: error-handling
-  prompt_source: human-prompt
+  task_type: bug-fix
+  failure_modes:
+    - crash
+  prompt_source: human-reconstructed
+  prompt_style: casual-chat
+  spec_level: symptom-led
+  test_visibility: hidden
+  capability_tags:
+    - error-handling
+    - api-design
   base_sha: 48ea21da9107519a161fc1cc03e19d1905d92cea
   gold_sha: af41ef031c70b94664addbda174c5e9d4529ac21
   test_paths:

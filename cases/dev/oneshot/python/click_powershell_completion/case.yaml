@@ -6,7 +6,17 @@ meta:
   repo: https://github.com/pallets/click
   pr_url: https://github.com/pallets/click/pull/3637
   pr: 3637
-  scenario: feature
+  task_type: feature
+  failure_modes: []
+  prompt_source: reverse-spec
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags:
+    - api-design
+    - shell
+    - cross-file
+    - compatibility
   base_sha: b551fe85714c906565303fae98136d7c72b252ea
   gold_sha: 7df2f82305f20f1611a9668b38d26933b648d807
   test_paths:

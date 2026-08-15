@@ -10,6 +10,14 @@ meta:
   prs: [14645, 13745, 14764, 14694, 14746]
 turns:
   - name: "Deduplicate Directory nodes on re-collection to preserve fixture identity"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [plugin-system, graph-identity, collection, state-management]
     instruction: |
       In `src/_pytest/main.py`, `Session._collect_one_node` caches one
       `CollectReport` per collector node in `self._collection_cache`. When
@@ -56,6 +64,14 @@ turns:
       python -m pytest "testing/test_conftest.py::test_fixture_closure_order_independence_with_parametrize"
 
   - name: "Warn when fixtures are hidden behind another decorator"
+    difficulty: expert
+    task_type: bug-fix
+    failure_modes: [wrong-result, compatibility]
+    prompt_source: reverse-spec
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [reflection, descriptors, plugin-system, cross-file]
     instruction: |
       Fixtures hidden behind another decorator are discovered
       silently-or-not-at-all, and users get only a confusing
@@ -115,6 +131,14 @@ turns:
       python -m pytest "testing/python/fixtures.py::test_custom_decorated_fixture_warning" "testing/python/fixtures.py::test_custom_decorated_fixture_above_classmethod_warning" "testing/python/fixtures.py::test_classmethod_above_fixture_warning" "testing/python/fixtures.py::test_staticmethod_above_fixture_warning" "testing/python/fixtures.py::test_fixture_above_classmethod_still_works" "testing/python/fixtures.py::test_fixture_above_staticmethod_still_works" "testing/python/fixtures.py::test_classmethod_above_fixture_warning_inherited"
 
   - name: "Improve deprecation message for class-scoped fixtures as instance methods"
+    difficulty: medium
+    task_type: behavior-change
+    failure_modes: []
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [diagnostics, error-handling, plugin-system]
     instruction: |
       The `PytestRemovedIn10Warning` emitted for a class-scoped fixture
       declared as an instance method is a fixed string, so a user with many
@@ -155,6 +179,14 @@ turns:
       python -m pytest "testing/deprecated_test.py::test_class_scope_instance_method_is_deprecated"
 
   - name: "Make rootdir conftest fixtures visible to items collected outside the rootdir"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [rejected-valid-input, compatibility]
+    prompt_source: reverse-spec
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [plugin-system, path-handling, scope-resolution, cross-file]
     instruction: |
       Since fixture scoping moved from nodeid-prefix matching to node-based
       matching, a `conftest.py` located directly in the rootdir is attached to
@@ -207,6 +239,14 @@ turns:
       python -m pytest "testing/test_conftest.py::test_rootdir_conftest_visible_outside_rootdir" "testing/test_doctest.py::TestDoctestNamespaceFixture::test_namespace_fixture_from_rootdir_when_modules_outside_rootdir"
 
   - name: "Reorder parametrized tests by param value, not index"
+    difficulty: complex
+    task_type: performance
+    failure_modes: [performance-regression]
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [scheduling, equality-semantics, caching, state-management]
     instruction: |
       `reorder_items` groups items by higher-than-function-scoped parameters
       so an expensive fixture is set up once per parameter value. Today the

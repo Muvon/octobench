@@ -7,9 +7,18 @@ meta:
   pr_url: https://github.com/celery/celery/pull/10435
   issue_url: https://github.com/celery/celery/issues/10434
   pr: 10435
-  scenario: concurrency-bug-fix
-  prompt_source: human-prompt
-  prompt_style: behavior-rich
+  task_type: bug-fix
+  failure_modes:
+    - data-loss
+    - race
+  prompt_source: human-reconstructed
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags:
+    - concurrency
+    - state-management
+    - error-handling
   base_sha: dd7c23862eb08a2cfde7da6926f28410b699c077
   gold_sha: f85031f61247dae1dcf19ca88cc057edba1534ee
   test_paths:

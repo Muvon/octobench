@@ -6,7 +6,13 @@ meta:
   repo: https://github.com/jbeder/yaml-cpp
   pr_url: https://github.com/jbeder/yaml-cpp/pull/1447
   pr: 1447
-  scenario: feature
+  task_type: feature
+  failure_modes: []
+  prompt_source: reverse-spec
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [api-design, serialization, cross-file]
   base_sha: 29a6f43950ce22be9f90ea1071e94bcb675c8c51
   gold_sha: ee52744a3196c32f29536b4671c703146cac9cb6
   test_paths:

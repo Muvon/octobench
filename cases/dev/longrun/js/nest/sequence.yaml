@@ -10,6 +10,14 @@ meta:
   prs: [16967, 16987, 16993, 17009, 17393]
 turns:
   - name: "Identify decorator type in invalid-class-module error"
+    difficulty: medium
+    task_type: behavior-change
+    failure_modes: []
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [diagnostics, dependency-injection, cross-file]
     instruction: |
       A class decorated with `@Injectable()`, `@Controller()` or `@Catch()`
       that is mistakenly listed in a module's `imports` array currently
@@ -49,6 +57,14 @@ turns:
       node --loader ts-node/esm ./node_modules/mocha/bin/mocha.js packages/core/test/errors/test/messages.spec.ts
 
   - name: "Include received value type in invalid-module error"
+    difficulty: medium
+    task_type: behavior-change
+    failure_modes: []
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [diagnostics, type-dispatch, cross-file]
     instruction: |
       `INVALID_MODULE_MESSAGE` (in `packages/core/errors/messages.ts`) tells
       the user that an unexpected value showed up at index *i* of a module's
@@ -84,6 +100,14 @@ turns:
       node --loader ts-node/esm ./node_modules/mocha/bin/mocha.js packages/core/test/errors/test/messages.spec.ts
 
   - name: "Fix in-flight request-scoped factory injection"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [race, wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [concurrency, dependency-injection, state-management]
     instruction: |
       Under concurrent in-flight requests, a request-scoped factory provider
       can be invoked with `undefined` dependencies.
@@ -119,6 +143,14 @@ turns:
       node --loader ts-node/esm ./node_modules/mocha/bin/mocha.js packages/core/test/injector/injector.spec.ts
 
   - name: "Reset dependency-tree cache on metadata changes"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [dependency-injection, caching, graph-traversal, state-management]
     instruction: |
       `InstanceWrapper` (in `packages/core/injector/instance-wrapper.ts`)
       memoises `isTreeStatic` and `isTreeDurable` the first time the
@@ -157,6 +189,14 @@ turns:
       node --loader ts-node/esm ./node_modules/mocha/bin/mocha.js packages/core/test/injector/instance-wrapper.spec.ts
 
   - name: "Resolve barrier immediately when target count is zero"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [hang]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [concurrency, boundary-analysis, state-management]
     instruction: |
       `Barrier(targetCount)` (in `packages/core/helpers/barrier.ts`) hands
       out a promise that resolves once `signal()` has been called

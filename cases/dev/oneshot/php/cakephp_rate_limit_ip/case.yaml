@@ -6,9 +6,18 @@ meta:
   repo: https://github.com/cakephp/cakephp
   pr_url: https://github.com/cakephp/cakephp/pull/19565
   pr: 19565
-  scenario: security-bug-fix
-  prompt_source: human-prompt
-  prompt_style: behavior-rich
+  task_type: bug-fix
+  failure_modes:
+    - security
+  prompt_source: human-reconstructed
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags:
+    - security
+    - trust-boundary
+    - configuration
+    - protocol
   base_sha: 3971a307e0acc5aed8289daa14afb5b72ae0d634
   gold_sha: 950cbd2c4f15fd2a74049f67051b086347ae113f
   test_paths:

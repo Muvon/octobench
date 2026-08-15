@@ -7,9 +7,13 @@ meta:
   pr_url: https://github.com/opencv/opencv/pull/29580
   issue_url: https://github.com/opencv/opencv/issues/29578
   pr: 29580
-  scenario: crash-fix
-  prompt_source: human-prompt
-  prompt_style: concise
+  task_type: bug-fix
+  failure_modes: [crash, rejected-valid-input]
+  prompt_source: human-reconstructed
+  prompt_style: casual-chat
+  spec_level: symptom-led
+  test_visibility: mixed
+  capability_tags: [debugging, type-dispatch, compatibility]
   base_sha: eccd1c43c4d07816c434548d6ce1cf37126c1945
   gold_sha: 4bace2fc28191d28dc2d1b54573923853768b86c
   test_paths:

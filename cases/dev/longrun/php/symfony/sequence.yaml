@@ -10,6 +10,14 @@ meta:
   prs: [64697, 65002, 65026, 64696, 65034]
 turns:
   - name: "Keep the collection value type for iterable constructor parameters"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [type-system, serialization, object-mapping]
     instruction: |
       Denormalizing into a constructor parameter typed `iterable` throws away
       the richer type inferred for the matching property, losing the
@@ -43,6 +51,14 @@ turns:
       ./phpunit src/Symfony/Component/Serializer/Tests/Normalizer/AbstractObjectNormalizerTest.php
 
   - name: "Fix evaluating filter expressions wrapped in several parentheses"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result, accepted-invalid-input]
+    prompt_source: reverse-spec
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: mixed
+    capability_tags: [parser, recursion, validation]
     instruction: |
       `JsonCrawler` mis-parses filter expressions that carry redundant
       parentheses. In `src/Symfony/Component/JsonPath/JsonCrawler.php`,
@@ -76,6 +92,14 @@ turns:
       ./phpunit src/Symfony/Component/JsonPath/Tests/JsonCrawlerTest.php
 
   - name: "Drop the unbounded process-global key cache in Splitter"
+    difficulty: simple
+    task_type: performance
+    failure_modes: [resource-leak]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [memory-management, caching, lifecycle]
     instruction: |
       `Splitter` leaks memory for the lifetime of the process.
 
@@ -102,6 +126,14 @@ turns:
       ./phpunit src/Symfony/Component/JsonStreamer/Tests/Read/SplitterTest.php
 
   - name: "Generate unsealed array shapes for any normalizers"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [type-system, code-generation, configuration]
     instruction: |
       Generated config array shapes are sealed even when the node accepts
       arbitrary keys.
@@ -134,6 +166,14 @@ turns:
       ./phpunit src/Symfony/Component/Config/Tests/Definition/ArrayShapeGeneratorTest.php
 
   - name: "Handle the email.failed and email.suppressed Resend webhook events"
+    difficulty: medium
+    task_type: feature
+    failure_modes: []
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [protocol, event-mapping, error-handling]
     instruction: |
       The Resend webhook bridge does not understand two delivery event types.
 

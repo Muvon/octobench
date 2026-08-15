@@ -7,10 +7,14 @@ meta:
   repo: https://github.com/yhirose/cpp-httplib
   pr_url: https://github.com/yhirose/cpp-httplib/pull/2479
   pr: 2479
-  scenario: config-to-wire-format
-  prompt_source: acceptance-story
+  task_type: bug-fix
+  failure_modes: [wrong-result, data-loss]
+  prompt_source: human-reconstructed
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [debugging, protocol, compatibility]
   lane: B
-  behavior_category: configuration-precedence
   merged_at: 2026-07-02T01:18:00Z
   base_sha: 0ae93881b44bf94437843403bfcdc4f50445992e
   gold_sha: 3fe32b63b42d7b273cd4d76d69df0097560375d6

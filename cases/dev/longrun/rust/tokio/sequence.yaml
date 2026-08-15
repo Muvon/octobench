@@ -10,6 +10,14 @@ meta:
   prs: [8109, 8274, 8260, 8279, 8222]
 turns:
   - name: "Implement Peekable::size_hint"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [async, iterator, boundary-analysis]
     instruction: |
       `Peekable<T>` in `tokio-stream/src/stream_ext/peekable.rs` implements
       `Stream` but does not override `size_hint`. The default implementation
@@ -28,6 +36,14 @@ turns:
       cargo test -p tokio-stream --test stream_peekable
 
   - name: "Wake DelayQueue consumer after reset to expired time"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [hang]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [concurrency, scheduling, state-management, lifecycle]
     instruction: |
       In `tokio-util/src/time/delay_queue.rs`, the `reset_at` method inserts
       an item at a new time and resets the internal `Sleep` to the next
@@ -50,6 +66,14 @@ turns:
       cargo test -p tokio-util --features full --test time_delay_queue
 
   - name: "Wake mpsc receiver when queued reserve fails or is cancelled on closed channel"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [hang, race]
+    prompt_source: reverse-spec
+    prompt_style: implementation-request
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [concurrency, cancellation, lifecycle, state-management]
     instruction: |
       In `tokio/src/sync/mpsc/bounded.rs`, the `reserve_many` method acquires
       permits from the semaphore. If the reservation is cancelled or fails
@@ -72,6 +96,14 @@ turns:
       cargo test -p tokio --features full --test sync_mpsc
 
   - name: "Don't replace JoinQueue waker in try_join_next"
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [hang, race]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [concurrency, scheduling, lifecycle]
     instruction: |
       In `tokio-util/src/task/join_queue.rs`, the `try_poll_handle` method
       polls pending join handles with a noop waker. This can replace the real
@@ -89,6 +121,14 @@ turns:
       cargo test -p tokio-util --features full --test task_join_queue
 
   - name: "Don't skip the driver when before_park schedules work"
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [hang]
+    prompt_source: reverse-spec
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [concurrency, scheduler, io, lifecycle]
     instruction: |
       In `tokio/src/runtime/scheduler/current_thread/mod.rs`, the `Context`'s
       park logic checks `has_pending_work` after calling `before_park`. If

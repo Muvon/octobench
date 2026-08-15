@@ -6,7 +6,13 @@ meta:
   repo: https://github.com/gabime/spdlog
   pr_url: https://github.com/gabime/spdlog/pull/3633
   pr: 3633
-  scenario: lifetime-ub
+  task_type: bug-fix
+  failure_modes: [wrong-result, crash]
+  prompt_source: reverse-spec
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [debugging, lifecycle, memory-safety, cross-file]
   base_sha: 8671ca4d492c8ee1cdfd3dd88afb9f88dd268178
   gold_sha: 03bec982c294c54cb16452d2be083d73843849b9
   test_paths:

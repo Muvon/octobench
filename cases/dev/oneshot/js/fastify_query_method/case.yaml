@@ -7,7 +7,13 @@ meta:
   repo: https://github.com/fastify/fastify
   pr_url: https://github.com/fastify/fastify/pull/6832
   pr: 6832
-  scenario: feature
+  task_type: feature
+  failure_modes: []
+  prompt_source: reverse-spec
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [api-design, protocol, cross-file]
   base_sha: de3752df84bb8dd35a8226bb467f05862f4da57c
   gold_sha: 6e680c3e8150071be96cba6b30e1d74487559b54
   test_paths:
