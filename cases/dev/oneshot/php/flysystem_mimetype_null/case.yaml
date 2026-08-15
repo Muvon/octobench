@@ -1,5 +1,5 @@
 id: dev3_php_flysystem_mimetype_null
-name: Flysystem mimeType TypeError on null (human-prompt)
+name: Flysystem mimeType TypeError on null
 category: dev
 difficulty: simple
 meta:

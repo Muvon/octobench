@@ -1,5 +1,5 @@
 id: dev3_cpp_simdjson_bigint_boundary
-name: simdjson 20-digit positive big integers (human-prompt)
+name: simdjson 20-digit positive big integers
 category: dev
 difficulty: medium
 timeout_minutes: 75

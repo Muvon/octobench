@@ -1,5 +1,5 @@
 id: dev2_php_commonmark_fence_tabs
-name: CommonMark fenced-code tab handling (issue-driven)
+name: CommonMark fenced-code tab handling
 category: dev
 difficulty: complex
 meta:

@@ -1,5 +1,5 @@
 id: dev3_rust_toml_datetime_value
-name: TOML datetime lost through Value round-trip (human-prompt)
+name: TOML datetime lost through Value round-trip
 category: dev
 difficulty: medium
 meta:

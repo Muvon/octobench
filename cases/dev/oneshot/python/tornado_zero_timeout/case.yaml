@@ -1,5 +1,5 @@
 id: dev3_python_tornado_zero_timeout
-name: Tornado zero timeout hangs (human-prompt)
+name: Tornado zero timeout hangs
 category: dev
 difficulty: medium
 meta:

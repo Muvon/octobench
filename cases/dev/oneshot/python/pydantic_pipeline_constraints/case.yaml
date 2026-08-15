@@ -1,5 +1,5 @@
 id: dev2_python_pydantic_pipeline_constraints
-name: Pydantic pipeline constraint schema (issue-driven)
+name: Pydantic pipeline constraint schema
 category: dev
 difficulty: complex
 meta:

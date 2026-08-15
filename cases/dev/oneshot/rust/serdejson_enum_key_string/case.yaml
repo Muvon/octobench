@@ -1,5 +1,5 @@
 id: dev2_rust_serdejson_enum_key_string
-name: serde_json enum non-string key (issue-driven)
+name: serde_json enum non-string key
 category: dev
 difficulty: medium
 meta:

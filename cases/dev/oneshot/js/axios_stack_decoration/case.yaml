@@ -1,5 +1,5 @@
 id: dev3_js_axios_stack_decoration
-name: Axios stack decoration destroys request errors (human-prompt)
+name: Axios stack decoration destroys request errors
 category: dev
 difficulty: medium
 timeout_minutes: 45

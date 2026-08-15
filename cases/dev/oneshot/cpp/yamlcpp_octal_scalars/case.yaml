@@ -1,5 +1,5 @@
 id: dev2_cpp_yamlcpp_octal_scalars
-name: yaml-cpp YAML 1.2 octal scalars (issue-driven)
+name: yaml-cpp YAML 1.2 octal scalars
 category: dev
 difficulty: medium
 meta:
