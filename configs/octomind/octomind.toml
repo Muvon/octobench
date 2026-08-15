@@ -82,7 +82,7 @@ cache_keepalive_max_idle_seconds = 1800
 max_retries = 1
 
 # Base timeout for exponential backoff retry logic (config-only, no CLI override)
-retry_timeout = 30
+retry_timeout = 10
 
 # Per-request HTTP timeout in seconds — hard limit on how long a single
 # HTTP call to the LLM provider may take before being aborted.
@@ -413,7 +413,7 @@ name = "octocode"
 type = "stdio"
 command = "octocode"
 args = ["mcp", "--path=.", "--no-git"]
-timeout_seconds = 600
+timeout_seconds = 30
 tools = []
 
 # octobench: octofs serves the `shell` and `filesystem-*` capabilities the
@@ -424,7 +424,7 @@ name = "octofs"
 type = "stdio"
 command = "octofs"
 args = ["mcp"]
-timeout_seconds = 600
+timeout_seconds = 30
 tools = []
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -519,7 +519,7 @@ temperature = 0.3  # Lower temperature for consistent decisions
 top_p = 1.0
 top_k = 0
 max_retries = 1
-retry_timeout = 30
+retry_timeout = 10
 ignore_cost = false  # When true, compression decision API cost is not tracked (free)
 
 # ═══════════════════════════════════════════════════════════════════════
