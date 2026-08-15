@@ -11,8 +11,10 @@
       "models": {
         "glm-5.2": {
           "name": "GLM 5.2"
+        },
+        "glm-5.3": {
+          "name": "GLM 5.3"
         }
-      }
     },
     "deepseek": {
       "npm": "@ai-sdk/openai-compatible",

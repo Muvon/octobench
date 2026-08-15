@@ -1,0 +1,4 @@
+runs:
+  - provider: opencode
+    model: glm-5.2
+    provider_model: alibaba/glm-5.2
