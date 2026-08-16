@@ -22,7 +22,7 @@ log_level = "info"
 
 # Default model for all operations (provider:model format)
 # Examples: "openrouter:anthropic/claude-3.5-sonnet", "openai:gpt-4o", "deepseek:deepseek-chat"
-model = "alibaba:glm-5.2"
+model = "zai:glm-5.3"
 
 # Default tag used when no TAG is passed to `octomind run` (and acp/server).
 # Can be a role name (e.g. "developer") or a tap agent (e.g. "octomind:assistant").

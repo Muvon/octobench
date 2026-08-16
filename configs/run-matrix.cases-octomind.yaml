@@ -1,5 +1,4 @@
 runs:
   - provider: octomind
-    model: glm-5.2
-    # Agent served by Alibaba (token-plan maas endpoint); models.yaml maps glm-5.2 -> zai, so this overrides it.
-    provider_model: alibaba:glm-5.2
+    model: glm-5.3
+    provider_model: zai:glm-5.3
