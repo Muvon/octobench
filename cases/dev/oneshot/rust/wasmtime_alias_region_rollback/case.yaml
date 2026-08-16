@@ -1,0 +1,44 @@
+id: rust_wasmtime_alias_region_rollback
+name: Restore alias-region state after dead stores
+category: dev
+difficulty: expert
+timeout_minutes: 60
+meta:
+  repo: https://github.com/bytecodealliance/wasmtime
+  pr_url: https://github.com/bytecodealliance/wasmtime/pull/14134
+  issue_url: https://github.com/bytecodealliance/wasmtime/issues/14131
+  pr: 14134
+  task_type: bug-fix
+  failure_modes: [crash]
+  prompt_source: original-issue
+  prompt_style: reproduction-report
+  spec_level: symptom-led
+  test_visibility: hidden
+  capability_tags: [compiler, state-management, memory-model, debugging]
+  target_branch: main
+  merged_at: 2026-08-13T23:36:00Z
+  provenance_note: >-
+    Human-authored issue and maintainer fix, approved by a second Cranelift
+    maintainer who specifically identified the bug as subtle.
+  base_sha: eba60a7257cf24f03bc8d2246bca7edff170ba2d
+  gold_sha: b17fa0c15eff5a43cf029c5926182c709d6efa94
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - cranelift/filetests/filetests/alias/issue-14131-atomic.clif
+    - cranelift/filetests/filetests/alias/issue-14131.clif
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Cranelift's alias-analysis pass can hit its
+  `compute_block_input_states should have already found all observed stores`
+  debug assertion during dead-store elimination.
+
+  The failure is reproducible when a regionless store or an atomic store acts
+  as a fence, followed by two stores to the same alias region and then another
+  fence. The first regional store is eliminated, and processing the overwriting
+  store then observes an instruction that the initial observation pass did not.
+
+  Fix the alias-analysis state rollback so these inputs optimize without a
+  panic, while preserving correct dead-store elimination and fence semantics
+  for both ordinary regionless and atomic stores.

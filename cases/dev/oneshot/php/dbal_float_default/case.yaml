@@ -1,0 +1,40 @@
+id: php_dbal_float_default
+name: Stop phantom float-default schema diffs
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/doctrine/dbal
+  pr_url: https://github.com/doctrine/dbal/pull/7501
+  pr: 7501
+  task_type: bug-fix
+  failure_modes: [wrong-result]
+  prompt_source: pr-derived
+  prompt_style: symptom-report
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [schema, type-system, compatibility, cross-file]
+  target_branch: 4.4.x
+  merged_at: 2026-08-13T14:32:30Z
+  provenance_note: >-
+    Non-bot PR author; commit and PR metadata showed no declared AI use or AI
+    co-author marker; merged through the project's normal upstream process.
+  base_sha: 05c991939825430e5a2b0aa621956ee68500564d
+  gold_sha: 5f46f878094f6eddca2de3cc47364b29954b4e7a
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - tests/Functional/Schema/ComparatorTest.php
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Schema comparison never converges for `float` and `smallfloat` columns with
+  defaults. Databases introspect a default such as `50` as a string while the
+  desired schema holds `50.0` as a PHP float, so migrations repeatedly emit the
+  same ALTER (or rebuild a SQLite table) even after it has been applied.
+
+  Compare mapped float defaults by their PHP numeric value, as DBAL already
+  does for mapped integers. Equivalent string/float representations must
+  produce an empty diff in both comparison directions, while a genuinely
+  different default must still produce a schema diff. Apply the behavior to
+  both float mapping types without weakening comparison of other column
+  properties.

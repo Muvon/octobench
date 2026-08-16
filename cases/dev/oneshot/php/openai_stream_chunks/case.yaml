@@ -1,0 +1,41 @@
+id: php_openai_stream_chunks
+name: Process large streamed responses in chunks
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/openai-php/client
+  pr_url: https://github.com/openai-php/client/pull/795
+  pr: 795
+  task_type: performance
+  failure_modes: [performance-regression]
+  prompt_source: pr-derived
+  prompt_style: implementation-request
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [performance, streaming, parser, memory]
+  target_branch: main
+  merged_at: 2026-08-11T18:25:15Z
+  provenance_note: >-
+    Non-bot PR author; commit and PR metadata showed no declared AI use or AI
+    co-author marker; merged through the project's normal upstream process.
+  base_sha: 9b84990f4b6fd9a7d4240c0aa91627e12fdbb719
+  gold_sha: bfb0ed920df3eca610bebc5b914cefeca143c415
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - tests/Responses/StreamResponse.php
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  `StreamResponse` reads SSE bodies one byte at a time. A large Responses API
+  event such as compaction `encrypted_content` can cause millions of stream
+  reads and retain avoidable copies of the raw JSON.
+
+  Replace byte-at-a-time processing with a 64 KiB buffered reader while
+  preserving SSE line and event boundaries across arbitrary underlying read
+  sizes. Multiple events returned in one read must be yielded separately and
+  unchanged, including large encrypted content. A temporary empty read before
+  EOF is not end-of-stream: retry it without dropping the buffered partial
+  line. Release large raw payload references before yielding parsed response
+  objects and keep `[DONE]`, blank-line, and malformed-event behavior
+  compatible.

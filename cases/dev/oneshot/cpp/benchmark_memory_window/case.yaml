@@ -1,0 +1,40 @@
+id: cpp_benchmark_memory_window
+name: Exclude fixture callbacks from memory measurements
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/google/benchmark
+  pr_url: https://github.com/google/benchmark/pull/2276
+  issue_url: https://github.com/google/benchmark/issues/2149
+  pr: 2276
+  task_type: bug-fix
+  failure_modes: [wrong-result]
+  prompt_source: original-issue
+  prompt_style: localized-request
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [performance, lifecycle, instrumentation]
+  target_branch: main
+  merged_at: 2026-08-03T13:27:00Z
+  provenance_note: >-
+    Non-bot PR author; commit and PR metadata showed no declared AI use or AI
+    co-author marker; merged through the project's normal upstream process.
+  base_sha: bb682b4d7f6cf8bf9b01d26ea5498b9cc5115c3b
+  gold_sha: 977dfc2e3d90074956355aa2bde009ab4796145c
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - test/CMakeLists.txt
+    - test/memory_manager_ordering_gtest.cc
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  A registered `MemoryManager` currently measures allocations made by benchmark
+  fixture `Setup()` and `Teardown()` callbacks, even though those callbacks are
+  already outside the timed benchmark region. This makes exact allocation
+  counts describe framework/fixture work rather than the benchmark body.
+
+  Align the memory measurement window with the timed execution window:
+  `MemoryManager::Start()` and `Stop()` should bracket only the benchmarked
+  `RunInThread()` work, with setup before the window and teardown after it.
+  Preserve repetition, reporter, thread-manager, and error-handling behavior.

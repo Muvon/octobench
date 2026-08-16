@@ -287,17 +287,17 @@ def clean_workspace(executor, workdir: Path, label: str, verbosity: str) -> None
 # Offline benchmark: deny octomind's `websearch` capability. Agents were solving
 # by retrieving the upstream PR for the instance rather than deriving the fix,
 # which measures retrieval instead of engineering.
-GUARDRAILS_TOML = """# Offline benchmark environment — injected by octobench.
+GUARDRAILS_TOML = '''# Offline benchmark environment — injected by octobench.
 [[guard]]
 match   = "websearch"
-message = (
-    "Web search is DISABLED in this environment. You are running inside an offline "
-    "benchmark harness, so external sources (upstream PRs, issue threads, changelogs, "
-    "blog posts) are unavailable and must not be relied on. Derive the fix from this "
-    "repository alone: read the code, run the failing tests, and let their behaviour "
-    "define what correct means. Do not treat any remembered upstream patch as authoritative."
-)
+message = """
+Web search is DISABLED in this environment. You are running inside an offline benchmark
+harness, so external sources (upstream PRs, issue threads, changelogs, blog posts) are
+unavailable and must not be relied on. Derive the fix from this repository alone: read
+the code, run the failing tests, and let their behaviour define what correct means. Do
+not treat any remembered upstream patch as authoritative.
 """
+'''
 
 
 def install_guardrails(executor: Executor) -> None:

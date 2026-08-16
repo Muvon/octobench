@@ -1,0 +1,40 @@
+id: php_pest_skipped_hook_tia
+name: Complete TIA runs after hook skips
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/pestphp/pest
+  pr_url: https://github.com/pestphp/pest/pull/1863
+  issue_url: https://github.com/pestphp/pest/issues/1862
+  pr: 1863
+  task_type: bug-fix
+  failure_modes: [wrong-result]
+  prompt_source: original-issue
+  prompt_style: failure-report
+  spec_level: symptom-led
+  test_visibility: hidden
+  capability_tags: [lifecycle, test-runner, state-management]
+  target_branch: 5.x
+  merged_at: 2026-08-13T15:15:45Z
+  provenance_note: >-
+    Non-bot PR author; commit and PR metadata showed no declared AI use or AI
+    co-author marker; merged through the project's normal upstream process.
+  base_sha: a8d4770c0b1e7bc37d28f0b95aa5caaa01827d4d
+  gold_sha: 2e58918201f047cd9179e8944faa6dc478513815
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - tests/Features/Tia/CompleteRunWriteTier.php
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  TIA says it is enabled but silently falls back to the results-only tier when
+  the final test is skipped from a `beforeEach` hook. PHPUnit records the skip
+  result without emitting the normal prepared/finished lifecycle pair, so the
+  collector leaves that test marked unfinished and refuses to write the
+  complete-run graph.
+
+  A test that already has a recorded result, including a hook-level skip, must
+  count as finished. A genuinely interrupted test with no result must still be
+  detected as unfinished. Make this work in sequential and parallel TIA runs
+  without changing normal pass, fail, or skip reporting.

@@ -1,0 +1,46 @@
+id: js_nest_sse_abort_signal
+name: Expose SSE request lifetime as an abort signal
+category: dev
+difficulty: expert
+meta:
+  repo: https://github.com/nestjs/nest
+  pr_url: https://github.com/nestjs/nest/pull/17469
+  pr: 17469
+  task_type: feature
+  failure_modes: []
+  prompt_source: composite
+  prompt_style: implementation-request
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [api-design, lifecycle, concurrency, cross-file]
+  target_branch: master
+  merged_at: 2026-08-14T12:02:56Z
+  provenance_note: >-
+    Non-bot PR author; commit and PR metadata showed no declared AI use or AI
+    co-author marker; merged through the project's normal upstream process.
+  base_sha: 42f0cfdef7692fa57c9190a4ea9130920eb80ba5
+  gold_sha: b2e7fb5e763a3282c7b924a39e6adb373df7ea63
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - packages/core/test/interceptors/interceptors-consumer.spec.ts
+    - integration/nest-application/sse/e2e/express.spec.ts
+    - integration/nest-application/sse/e2e/fastify.spec.ts
+    - integration/nest-application/sse/e2e/utils.ts
+    - integration/nest-application/sse/src/app.controller.ts
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Add a public `@SseSignal()` route-parameter decorator that injects the
+  `AbortSignal` for the current Nest SSE response. The signal must exist before
+  an async `@Sse()` handler starts, work with both Express and Fastify request
+  wrappers, and represent the full response lifetime: abort it when the client
+  disconnects, when the Observable completes, or when it errors.
+
+  If the client disconnects while an async handler or interceptor is still
+  awaiting the producer Observable, do not subscribe that producer after it
+  eventually resolves. This avoids starting side effects solely to tear them
+  down. Setup-phase resources can instead observe the injected signal and clean
+  themselves up. Remove close listeners on all terminal paths, keep abort and
+  cleanup idempotent, and export the decorator through the normal public HTTP
+  decorator surface without changing regular non-SSE routes.

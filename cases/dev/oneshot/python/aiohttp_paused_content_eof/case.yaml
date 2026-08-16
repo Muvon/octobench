@@ -1,0 +1,42 @@
+id: python_aiohttp_paused_content_eof
+name: Complete paused Content-Length responses at EOF
+category: dev
+difficulty: expert
+timeout_minutes: 45
+meta:
+  repo: https://github.com/aio-libs/aiohttp
+  pr_url: https://github.com/aio-libs/aiohttp/pull/13349
+  issue_url: https://github.com/aio-libs/aiohttp/issues/13348
+  pr: 13349
+  task_type: bug-fix
+  failure_modes: [rejected-valid-input]
+  prompt_source: original-issue
+  prompt_style: symptom-report
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [async, parser, state-management, cross-file]
+  target_branch: master
+  merged_at: 2026-08-08T15:17:19Z
+  provenance_note: >-
+    Reported from a concrete S3 download failure; fixed by an aiohttp
+    maintainer in a human-authored commit with deterministic regression tests.
+  base_sha: 6264834e7023aadd85646fd79637942b9edbe22b
+  gold_sha: 26fde219b38ab0416f47b8165769d9df3f2ffece
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - tests/test_http_parser.py
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Since aiohttp 3.14, slowly consuming a large `Content-Length` response can
+  fail when the server sends the entire body and then closes while flow control
+  has the HTTP parser paused. `feed_eof()` raises `ContentLengthError` even
+  though its own message says the received and expected byte counts are equal.
+
+  Fix EOF handling so a fully received fixed-length body pending parser
+  completion drains and completes successfully. This must work in both the
+  accelerated and pure-Python parser paths, including compressed bodies whose
+  pending output must still be drained incrementally rather than expanded all
+  at once. A genuinely truncated fixed-length body must continue to raise
+  `ContentLengthError` with the correct received and expected counts.

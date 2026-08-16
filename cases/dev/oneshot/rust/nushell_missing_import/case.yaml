@@ -1,0 +1,38 @@
+id: rust_nushell_missing_import
+name: Preserve storage when an import file is missing
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/nushell/nushell
+  pr_url: https://github.com/nushell/nushell/pull/18809
+  issue_url: https://github.com/nushell/nushell/discussions/18692
+  pr: 18809
+  task_type: bug-fix
+  failure_modes: [data-loss]
+  prompt_source: original-issue
+  prompt_style: reproduction-report
+  spec_level: symptom-led
+  test_visibility: mixed
+  capability_tags: [debugging, data-integrity, error-handling]
+  target_branch: main
+  merged_at: 2026-08-10T13:52:22Z
+  provenance_note: >-
+    Non-bot PR author; commit and PR metadata showed no declared AI use or AI
+    co-author marker; merged through the project's normal upstream process.
+  base_sha: faa6c11a792df6a1feeffdcb0d5d5188a802fb90
+  gold_sha: 7d70a8fa3acc23e7895a6874582f95c6048baa47
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - crates/nu-command/tests/commands/stor.rs
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  `stor import --file-name <path>` reports success when the path does not
+  exist, creates an empty file, and silently replaces the current in-memory
+  database with an empty one. Existing tables and rows are lost.
+
+  A missing import source must instead return Nushell's file-not-found error,
+  point the diagnostic at the supplied path, leave the in-memory database
+  untouched, and avoid creating the missing file. Keep `stor export` behavior
+  unchanged; creating its destination is valid.

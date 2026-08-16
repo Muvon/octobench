@@ -1,0 +1,42 @@
+id: rust_uv_cache_space_fallback
+name: Fall back when physical cache accounting is unsupported
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/astral-sh/uv
+  pr_url: https://github.com/astral-sh/uv/pull/21133
+  pr: 21133
+  task_type: bug-fix
+  failure_modes: [compatibility]
+  prompt_source: pr-derived
+  prompt_style: outcome-request
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [filesystem, compatibility, error-handling, cross-file]
+  target_branch: main
+  merged_at: 2026-08-14T13:00:06Z
+  provenance_note: >-
+    Non-bot PR author; commit and PR metadata showed no declared AI use or AI
+    co-author marker; merged through the project's normal upstream process.
+  base_sha: 3a76e496e36783371a6d91a8f4834478964d36ca
+  gold_sha: dca33f5e6799f2aefee52729732a839a3b358740
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - crates/uv/tests/build/cache_clean.rs
+    - crates/uv/tests/build/cache_prune.rs
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Preview physical-space accounting makes `uv cache clean` and `uv cache
+  prune` fail on filesystems that cannot report per-file physical extents (for
+  example, when the required ioctl is unsupported). These filesystems were
+  already supported by logical cache accounting.
+
+  Make clean and prune fall back to logical byte accounting for the whole
+  removal whenever physical accounting is unsupported, so the command still
+  succeeds and reports the logical size. Distinguish an unsupported filesystem
+  from an individual file whose physical size cannot be measured: the latter
+  should retain the existing partial/incomplete physical-accounting behavior.
+  Handle the platform-specific unsupported errors consistently and preserve
+  saturating aggregation across combined removals.

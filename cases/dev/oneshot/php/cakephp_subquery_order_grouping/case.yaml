@@ -1,0 +1,43 @@
+id: php_cakephp_subquery_order_grouping
+name: Group subquery filters by ordered columns
+category: dev
+difficulty: expert
+timeout_minutes: 45
+meta:
+  repo: https://github.com/cakephp/cakephp
+  pr_url: https://github.com/cakephp/cakephp/pull/19580
+  pr: 19580
+  task_type: bug-fix
+  failure_modes: [rejected-valid-input]
+  prompt_source: pr-derived
+  prompt_style: reproduction-report
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [query-planning, sql, parser, cross-file]
+  target_branch: 5.x
+  merged_at: 2026-08-16T04:12:31Z
+  provenance_note: >-
+    Human-authored production regression report and patch, reviewed by two
+    CakePHP maintainers; the commit history contains no AI co-author or marker.
+  base_sha: 85c1fa67a982bccdd2b04475e3bfe8e3425a0911
+  gold_sha: 209e4458570c6f3777e02214ed4c6c15b6f9c79c
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - tests/TestCase/ORM/Query/QueryRegressionTest.php
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  A limited parent query using a `hasMany` association's `subquery` loading
+  strategy can generate invalid PostgreSQL when it orders by a column other
+  than the binding key. The filtering subquery keeps the `ORDER BY`, reduces
+  its select list to the binding key, and groups only by that key, so PostgreSQL
+  rejects the ordered column as neither grouped nor aggregated.
+
+  Make the filtering subquery group by the columns it actually orders on when
+  the limit causes that ordering to be retained. Cover keyed `orderBy()` parts,
+  `orderByAsc()`/`orderByDesc()` expression parts, and qualified columns from
+  joined tables. Do not add aggregate expressions, constant select values, or
+  opaque raw SQL fragments to `GROUP BY`, and do not add dead grouping columns
+  when the subquery drops ordering because there is no limit. Preserve the
+  existing HAVING aggregate handling and result-window semantics.

@@ -1,0 +1,39 @@
+id: cpp_fmt_exception_alignment
+name: Format exceptions with width and alignment
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/fmtlib/fmt
+  pr_url: https://github.com/fmtlib/fmt/pull/4860
+  pr: 4860
+  task_type: feature
+  failure_modes: []
+  prompt_source: pr-derived
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [api-design, formatting, compatibility]
+  target_branch: main
+  merged_at: 2026-08-13T18:00:47Z
+  provenance_note: >-
+    Non-bot PR author; commit and PR metadata showed no declared AI use or AI
+    co-author marker; merged through the project's normal upstream process.
+  base_sha: be39437ee71162931d3d06d523b4544029656955
+  gold_sha: cde18a38bbd960a2e803b76880fbbf4b4ffb3cd7
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - test/std-test.cc
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Extend fmt's `std::exception` and `std::exception_ptr` formatters to support
+  the standard fill, alignment, and width specifiers. Left, right, and center
+  alignment, custom fill, and dynamic width must work; a width smaller than the
+  rendered message leaves it unchanged.
+
+  Width and alignment must compose with the existing `t` presentation that
+  includes the exception type. Apply the same formatting to null
+  `exception_ptr` (`none`), non-null exception pointers, and the existing
+  unknown-exception fallback. Preserve current default formatting, nested
+  exception traversal, and compile-time format validation.

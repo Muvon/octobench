@@ -1,0 +1,40 @@
+id: cpp_json_mixed_integer_compare
+name: Compare signed and unsigned integers mathematically
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/nlohmann/json
+  pr_url: https://github.com/nlohmann/json/pull/5211
+  issue_url: https://github.com/nlohmann/json/issues/5210
+  pr: 5211
+  task_type: bug-fix
+  failure_modes: [wrong-result]
+  prompt_source: original-issue
+  prompt_style: reproduction-report
+  spec_level: behavioral
+  test_visibility: mixed
+  capability_tags: [numeric-boundary, type-dispatch, compatibility]
+  target_branch: develop
+  merged_at: 2026-08-12T07:21:20Z
+  provenance_note: >-
+    Non-bot PR author; commit and PR metadata showed no declared AI use or AI
+    co-author marker; merged through the project's normal upstream process.
+  base_sha: 21af527e756435701f23e01aa8ea8dab6e050c90
+  gold_sha: 6285225fd068df42d043721f3bef65fca48c59fb
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - tests/src/unit-comparison.cpp
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Mixed signed/unsigned JSON number comparisons become mathematically wrong
+  when the unsigned value is above `INT64_MAX`. For example, `json(-1) <
+  json(UINT64_MAX)` returns false and `json(UINT64_MAX) == json(-1)` can return
+  true because the unsigned operand is narrowed into the signed range.
+
+  Correct all equality and ordering operators in both operand directions.
+  Negative signed values must compare below every unsigned value; non-negative
+  signed values should compare in the unsigned domain without overflow. Keep
+  comparisons within the same numeric representation unchanged, and make the
+  C++20 three-way comparison agree with the relational operators.

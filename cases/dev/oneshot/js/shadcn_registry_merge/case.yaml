@@ -1,0 +1,48 @@
+id: js_shadcn_registry_merge
+name: Merge registry configuration sources
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/shadcn-ui/ui
+  pr_url: https://github.com/shadcn-ui/ui/pull/11501
+  pr: 11501
+  task_type: behavior-change
+  failure_modes: []
+  prompt_source: pr-derived
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [configuration, state-management, compatibility]
+  target_branch: main
+  merged_at: 2026-08-13T17:46:50Z
+  provenance_note: >-
+    Non-bot PR author; commit and PR metadata showed no declared AI use or AI
+    co-author marker; merged through the project's normal upstream process.
+  base_sha: 03c45b822e60195796dfd3d2fcf7c223ff4ece86
+  gold_sha: aef1cdca54e8da689351cdddf959342909e45e76
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - packages/shadcn/src/commands/registry/add.test.ts
+    - packages/shadcn/src/registry/api.test.ts
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Registry configuration can now live in both `package.json` and
+  `components.json`, but the current resolution and write paths still treat
+  them as mutually exclusive.
+
+  Update registry handling with these rules:
+
+  - When `components.json` exists, resolve the union of built-in registries,
+    `package.json` registries, and `components.json` registries. Precedence per
+    key is built-in, then package, then components (most specific wins).
+  - A present but registry-free `components.json` must not hide registries from
+    `package.json`. Invalid registry data in either present file must still
+    report that file as the configuration error.
+  - When no `components.json` exists, preserve the package-only behavior and do
+    not inject built-ins.
+  - `registry add` writes to `components.json` when it exists, otherwise to
+    `package.json`; it preserves unrelated fields and existing registries,
+    does not overwrite an already configured namespace, and errors clearly if
+    neither file exists.

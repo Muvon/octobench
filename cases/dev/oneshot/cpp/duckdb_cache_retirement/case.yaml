@@ -1,0 +1,44 @@
+id: cpp_duckdb_cache_retirement
+name: Make external cache block retirement race-safe
+category: dev
+difficulty: expert
+meta:
+  repo: https://github.com/duckdb/duckdb
+  pr_url: https://github.com/duckdb/duckdb/pull/24729
+  pr: 24729
+  task_type: bug-fix
+  failure_modes: [race, wrong-result]
+  prompt_source: pr-derived
+  prompt_style: failure-report
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [concurrency, caching, lifecycle, state-management]
+  target_branch: main
+  merged_at: 2026-08-12T14:59:47Z
+  provenance_note: >-
+    Non-bot PR author; commit and PR metadata showed no declared AI use or AI
+    co-author marker; merged through the project's normal upstream process.
+  base_sha: ca9bf23600423863cf23c2762dee0b4c54945e42
+  gold_sha: 5366dc3925ce0f981c2110cf4bf8e39fa1dd6fde
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - test/common/test_external_file_cache.cpp
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Concurrent external-file-cache reads can fail with:
+
+  `FileBufferHandleGroup::CopyTo: handles contain ... bytes but ... were requested`
+
+  A cache block can be reclaimed while an existing reader still owns a handle.
+  Retirement currently mutates that shared block's state and byte count, so the
+  reader loses the immutable metadata it needs to finish copying. There is a
+  second race where delayed retirement of an old range can erase replacement
+  blocks that a newer reader has already installed.
+
+  Make block retirement detach the selected old blocks from the cache index
+  without invalidating handles held by existing readers. Future readers must
+  obtain fresh blocks, and a stale or repeated retirement must remove only the
+  exact old block instances it was asked to retire, never their replacements.
+  Preserve synchronization and accounting invariants for normal cache reads.

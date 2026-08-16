@@ -1,0 +1,40 @@
+id: rust_tokio_file_join_error
+name: Keep files usable after blocking task cancellation
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/tokio-rs/tokio
+  pr_url: https://github.com/tokio-rs/tokio/pull/8291
+  pr: 8291
+  task_type: bug-fix
+  failure_modes: [crash]
+  prompt_source: pr-derived
+  prompt_style: failure-report
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [lifecycle, state-management, async, error-handling]
+  target_branch: master
+  merged_at: 2026-08-09T15:06:55Z
+  provenance_note: >-
+    Non-bot PR author; commit and PR metadata showed no declared AI use or AI
+    co-author marker; merged through the project's normal upstream process.
+  base_sha: ddc60948ab7823e344ca766afbc8c7f5db896e6d
+  gold_sha: 83e9c57cee80a93e6e3887077e354fe8a24f3ea8
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - tokio/tests/fs_file_join_error.rs
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  We are seeing a flaky `JoinHandle polled after completion` panic when a Tokio
+  runtime shuts down while `tokio::fs::File` I/O is in flight. If a backing
+  blocking task is cancelled or cannot be spawned, the operation returns an
+  error but leaves the file's internal state poisoned, so the next operation
+  panics.
+
+  Every affected file operation (`read`, `write`, `seek`, `flush`, and
+  `set_len`) must leave the `File` in a valid reusable state when its blocking
+  task fails. The operation should return an `io::Error`; subsequent operations
+  may also error when the pool is unavailable, but must never panic. Preserve
+  successful and pending-operation behavior.

@@ -1,0 +1,40 @@
+id: cpp_llvm_slp_root_phi_order
+name: Preserve root PHI order in SLP reductions
+category: dev
+difficulty: expert
+timeout_minutes: 90
+meta:
+  repo: https://github.com/llvm/llvm-project
+  pr_url: https://github.com/llvm/llvm-project/pull/216493
+  issue_url: https://github.com/llvm/llvm-project/issues/216453
+  pr: 216493
+  task_type: bug-fix
+  failure_modes: [crash]
+  prompt_source: original-issue
+  prompt_style: reproduction-report
+  spec_level: symptom-led
+  test_visibility: hidden
+  capability_tags: [compiler, optimization, dataflow, state-management]
+  target_branch: main
+  merged_at: 2026-08-15T14:29:13Z
+  provenance_note: >-
+    Human-reported compiler crash reduced to a deterministic reproducer and
+    fixed by a long-term LLVM SLP maintainer in a human-only commit.
+  base_sha: 227ec3e87fd013ad1963827144ff8f6e9d762510
+  gold_sha: 1cb114a48974f45767c2c4af4bb4647cff8eaf7d
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - llvm/test/Transforms/SLPVectorizer/X86/ordered-reduction-root-phi-reorder.ll
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  LLVM's SLP vectorizer crashes on valid x86_64 code at `-O2`, `-O3`, and
+  `-Os` with the assertion `PHI reordering is free.` The reduced IR contains
+  an ordered horizontal reduction whose vectorization tree is rooted at a PHI,
+  with operands coming from two control-flow paths.
+
+  Fix the bottom-to-top reordering logic so an ordered reduction does not move
+  an operand order onto a root PHI when that order must be preserved. The
+  reproducer must continue to vectorize correctly; do not solve the crash by
+  disabling SLP vectorization or ordered reductions.

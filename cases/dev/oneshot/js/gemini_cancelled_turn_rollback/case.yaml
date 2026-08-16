@@ -1,0 +1,39 @@
+id: js_gemini_cancelled_turn_rollback
+name: Roll back cancelled multi-turn requests
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/google-gemini/gemini-cli
+  pr_url: https://github.com/google-gemini/gemini-cli/pull/28801
+  pr: 28801
+  task_type: bug-fix
+  failure_modes: [wrong-result]
+  prompt_source: pr-derived
+  prompt_style: reproduction-report
+  spec_level: behavioral
+  test_visibility: mixed
+  capability_tags: [state-management, lifecycle, concurrency]
+  target_branch: main
+  merged_at: 2026-08-13T20:42:07Z
+  provenance_note: >-
+    Non-bot PR author; commit and PR metadata showed no declared AI use or AI
+    co-author marker; merged through the project's normal upstream process.
+  base_sha: fa2f27aee0464412e4ac455a4221b01a775ff9bc
+  gold_sha: 783f6cb494aedf3e7276d02e76f32f63a27551a0
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - packages/core/src/core/geminiChat.test.ts
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Cancelling a prompt after it has made tool calls leaves the completed first
+  turn and function responses in `GeminiChat` history. The next unrelated user
+  message then resumes the cancelled task instead of starting cleanly.
+
+  Treat every stream carrying the same prompt id as one request transaction.
+  When an abort or cancellation happens in any continuation stream, roll back
+  the entire request: restore chat history and token accounting to the state
+  from before the original user prompt, not merely to the state before the
+  latest function response. Completed requests and non-cancellation API error
+  handling must retain their existing behavior.

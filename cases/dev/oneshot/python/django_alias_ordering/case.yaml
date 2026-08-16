@@ -1,0 +1,42 @@
+id: python_django_alias_ordering
+name: Recognize field aliases in total ordering
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/django/django
+  pr_url: https://github.com/django/django/pull/21784
+  issue_url: https://code.djangoproject.com/ticket/37278
+  pr: 21784
+  task_type: bug-fix
+  failure_modes: [wrong-result]
+  prompt_source: composite
+  prompt_style: outcome-request
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [repository-navigation, query-planning, cross-file]
+  target_branch: main
+  merged_at: 2026-08-15T15:55:33Z
+  provenance_note: >-
+    Non-bot PR author; the PR explicitly declared no AI-tool use and was
+    approved through Django's normal upstream review process.
+  base_sha: 3436cf9bce84bb1f6877ad96819637366b27b719
+  gold_sha: 1a001208b0b9d79b15b27ca04d94f31f3d55d5ea
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - tests/ordering/models.py
+    - tests/ordering/tests.py
+    - tests/composite_pk/test_order_by.py
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  `QuerySet.totally_ordered` currently returns `False` whenever `order_by()`
+  uses an annotation alias, even when that alias is a direct `F()` alias of a
+  unique field or the primary key.
+
+  Make total-order detection understand direct field aliases. Ordering by an
+  alias of a unique field or primary key on the queryset's base model should
+  count exactly as ordering by that field, including composite primary keys.
+  An alias of a non-unique field must remain non-total, and traversing a
+  relation must not be treated as a unique ordering of the base model even if
+  the related field itself is unique.

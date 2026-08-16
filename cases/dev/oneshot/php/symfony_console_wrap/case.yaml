@@ -1,0 +1,47 @@
+id: php_symfony_console_wrap
+name: Wrap console descriptions to terminal width
+category: dev
+difficulty: complex
+meta:
+  repo: https://github.com/symfony/symfony
+  pr_url: https://github.com/symfony/symfony/pull/63784
+  issue_url: https://github.com/symfony/symfony/issues/43081
+  pr: 63784
+  task_type: feature
+  failure_modes: []
+  prompt_source: composite
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [formatting, terminal, unicode, compatibility]
+  target_branch: 8.2
+  merged_at: 2026-08-15T13:58:01Z
+  provenance_note: >-
+    Non-bot PR author; commit and PR metadata showed no declared AI use or AI
+    co-author marker; merged through the project's normal upstream process.
+  base_sha: e7f5b52df7bf719cbf379e7cdf7040e0cca32564
+  gold_sha: 8346f69cec0bb8f64855bae77c1187ad19619138
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - src/Symfony/Component/Console/Tests/Descriptor/AbstractDescriptorTestCase.php
+    - src/Symfony/Component/Console/Tests/Descriptor/TextDescriptorTest.php
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Make `TextDescriptor` wrap option, argument, help, and command-list
+  descriptions to the interactive terminal width instead of relying on hard
+  terminal wrapping.
+
+  Keep the name and description inline when at least 20 columns remain for the
+  description, aligning continuation lines to its starting column. On narrower
+  terminals, put the description on following lines with six spaces of indent.
+  Include rendered defaults in the wrapping calculation. Measure visible
+  display width rather than bytes, so multibyte text and formatter tags do not
+  shift or split wrapping.
+
+  Automatic wrapping applies only to terminal output. Piped or buffered output
+  remains unbounded for compatibility. Add a `terminal_width` describe option
+  that explicitly selects a width and therefore enables deterministic wrapping
+  on any output stream. Existing output should remain byte-for-byte unchanged
+  when it fits or wrapping is not enabled.

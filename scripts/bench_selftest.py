@@ -10,6 +10,7 @@ live bench run:
 from __future__ import annotations
 
 import sys
+import tomllib
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -18,6 +19,7 @@ sys.path.insert(0, str(REPO))
 from benchmarks import verify  # noqa: E402
 from benchmarks.base import RunContext, finalize_scoring  # noqa: E402
 from benchmarks.registry import build_adapter, list_benchmarks  # noqa: E402
+from cli.main import GUARDRAILS_TOML  # noqa: E402
 from scoring.aggregate import (  # noqa: E402
     TOKEN_SEMANTICS,
     compute_cost,
@@ -237,6 +239,25 @@ def test_provider_commands() -> None:
     )
 
 
+def test_guardrails() -> None:
+    try:
+        parsed = tomllib.loads(GUARDRAILS_TOML)
+    except tomllib.TOMLDecodeError as exc:
+        check("offline guardrails parse as TOML", False, str(exc))
+        return
+    check(
+        "offline guardrails deny websearch",
+        parsed.get("guard") == [
+            {
+                "match": "websearch",
+                "message": parsed["guard"][0]["message"],
+            }
+        ]
+        and "Web search is DISABLED" in parsed["guard"][0]["message"],
+        str(parsed),
+    )
+
+
 def main() -> None:
     print("octobench benchmark framework self-test\n")
     test_configs()
@@ -247,6 +268,7 @@ def main() -> None:
     test_scoring()
     test_token_accounting()
     test_provider_commands()
+    test_guardrails()
     print(f"\n{_passed} passed, {_failed} failed")
     sys.exit(1 if _failed else 0)
 

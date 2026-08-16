@@ -1,0 +1,39 @@
+id: python_scrapy_http2_frame_size
+name: Configure the HTTP/2 maximum frame size
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/scrapy/scrapy
+  pr_url: https://github.com/scrapy/scrapy/pull/7988
+  issue_url: https://github.com/scrapy/scrapy/issues/5050
+  pr: 7988
+  task_type: feature
+  failure_modes: []
+  prompt_source: composite
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [protocol, configuration, compatibility]
+  target_branch: master
+  merged_at: 2026-08-14T09:19:07Z
+  provenance_note: >-
+    Non-bot PR author; commit and PR metadata showed no declared AI use or AI
+    co-author marker; merged through the project's normal upstream process.
+  base_sha: f975e921591366502ea8e05a10559a300b5fce4e
+  gold_sha: a22523bfd3d4a9636ddf9d1834b925c19b579d71
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - tests/test_http2_client_protocol.py
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Add a `HTTP2_MAX_FRAME_SIZE` setting for Scrapy's Twisted HTTP/2 download
+  handler. It controls the maximum HTTP/2 frame size advertised by the client,
+  in bytes, and defaults to the RFC default of `16384`. Values use the HTTP/2
+  allowed range, `16384` through `16777215`.
+
+  Apply the configured value when each HTTP/2 connection is initiated, before
+  its initial settings are sent. Keep the default behavior unchanged, and
+  document the setting, including that the httpx handler cannot honor it and
+  that larger frames affect the granularity of download-size checks.

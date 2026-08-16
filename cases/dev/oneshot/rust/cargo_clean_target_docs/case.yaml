@@ -1,0 +1,40 @@
+id: rust_cargo_clean_target_docs
+name: Clean target-specific documentation
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/rust-lang/cargo
+  pr_url: https://github.com/rust-lang/cargo/pull/17322
+  issue_url: https://github.com/rust-lang/cargo/issues/17310
+  pr: 17322
+  task_type: bug-fix
+  failure_modes: [wrong-result]
+  prompt_source: original-issue
+  prompt_style: casual-chat
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [build-system, artifact-cleanup, compatibility]
+  target_branch: master
+  merged_at: 2026-08-11T11:20:35Z
+  provenance_note: >-
+    Non-bot PR author; commit and PR metadata showed no declared AI use or AI
+    co-author marker; merged through the project's normal upstream process.
+  base_sha: 97b3bcefc74ddf1203b21f158129e4b7df33254a
+  gold_sha: 593ae3e482ae226d1f4533b29106f76e43649b70
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - tests/testsuite/clean.rs
+    - tests/testsuite/clean_legacy_layout.rs
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  `cargo clean --doc` only removes `target/doc`. Documentation built for an
+  explicit `--target` or a target configured through `[build] target` lives
+  under `target/<triple>/doc` and is left behind.
+
+  Make `cargo clean --doc` resolve the same requested/default compilation
+  targets as `cargo doc` and remove the corresponding documentation
+  directories. Support both an explicit `--target` and configured targets in
+  the legacy and new build-directory layouts. Preserve the existing rejection
+  of incompatible options such as `--doc` with `-p`.

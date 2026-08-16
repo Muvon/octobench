@@ -1,0 +1,38 @@
+id: python_pydantic_bool_discriminator
+name: Serialize boolean discriminator mapping keys
+category: dev
+difficulty: medium
+meta:
+  repo: https://github.com/pydantic/pydantic
+  pr_url: https://github.com/pydantic/pydantic/pull/13632
+  issue_url: https://github.com/pydantic/pydantic/issues/13631
+  pr: 13632
+  task_type: bug-fix
+  failure_modes: [wrong-result]
+  prompt_source: original-issue
+  prompt_style: symptom-report
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [serialization, schema, compatibility]
+  target_branch: main
+  merged_at: 2026-08-11T13:56:15Z
+  provenance_note: >-
+    Non-bot PR author; commit and PR metadata showed no declared AI use or AI
+    co-author marker; merged through the project's normal upstream process.
+  base_sha: 52fbbfa1dc14a9b1fc40a1e246a3cbf2ce4987d1
+  gold_sha: cc13d1b8c978eaf78ed5308329cd41f03ecc3144
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - tests/test_json_schema.py
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Boolean discriminators produce invalid OpenAPI mapping keys. For a
+  discriminated union using `Literal[True]` and `Literal[False]`, generated
+  JSON Schema currently emits Python spellings (`"True"` and `"False"`) even
+  though payloads and JSON Schema use lowercase JSON booleans.
+
+  Make discriminator mapping keys use their serialized JSON representation,
+  so boolean variants map under `"true"` and `"false"`. Preserve the existing
+  behavior for string, integer, enum, and other discriminator values.

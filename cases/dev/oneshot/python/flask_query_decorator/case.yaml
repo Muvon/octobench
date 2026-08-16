@@ -1,0 +1,33 @@
+id: python_flask_query_decorator
+name: Add a QUERY route decorator
+category: dev
+difficulty: simple
+meta:
+  repo: https://github.com/pallets/flask
+  pr_url: https://github.com/pallets/flask/pull/6133
+  issue_url: https://github.com/pallets/flask/issues/3193
+  pr: 6133
+  task_type: feature
+  failure_modes: []
+  prompt_source: original-issue
+  prompt_style: casual-chat
+  spec_level: minimal
+  test_visibility: hidden
+  capability_tags: [api-design, protocol]
+  target_branch: main
+  merged_at: 2026-08-11T20:19:14Z
+  provenance_note: >-
+    Non-bot PR author; commit and PR metadata showed no declared AI use or AI
+    co-author marker; merged through the project's normal upstream process.
+  base_sha: 3596b1ab61cea85edb8970e83ff61daa073facf8
+  gold_sha: d8eaaba824655046958d1a97f11780de460c3271
+  verified: true # fail-to-pass proven 2026-08-16 with scripts/verify_case.sh
+  test_paths:
+    - tests/test_basic.py
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Add an `app.query()` route decorator alongside `get()`, `post()`, `put()`,
+  `delete()`, and `patch()`. It should register a route for the HTTP `QUERY`
+  method and otherwise behave like the existing method-specific helpers.
