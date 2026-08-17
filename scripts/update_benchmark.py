@@ -16,6 +16,7 @@ import datetime
 import glob
 import json
 import re
+import statistics
 import sys
 from pathlib import Path
 
@@ -152,15 +153,30 @@ def totals(records: dict, order: list) -> str:
         parts.append(f"{leak} LEAK")
     if infra:
         parts.append(f"{infra} INFRA")
+    # Per-case central tendency is reported as a MEDIAN, not a mean: one pathological
+    # case (a client burning hours on a task it never solves) moves the mean of 50 by
+    # minutes per case and says nothing about the other 49. Max is kept beside it so
+    # that tail stays visible instead of being smoothed away.
+    case_mins = sorted(r.get("result", {}).get("elapsed_ms", 0) / 60000 for r in done)
+    case_costs = [r.get("_report_cost_usd", r.get("cost_usd")) or 0 for r in done]
     parts.append(f"jAvg {j / count:.2f}")
-    parts.append(f"${cost:.2f} total (${cost / count:.3f}/case)")
-    parts.append(f"{hours:.1f}h agent ({hours * 60 / count:.1f}m/case)")
     parts.append(
-        f"{_fmt_tok(fresh_total)} tok ({_fmt_tok(round(fresh_total / count))}/case; "
+        f"${cost:.2f} total (${statistics.median(case_costs):.3f}/case median)"
+    )
+    parts.append(
+        f"{hours:.1f}h agent ({statistics.median(case_mins):.1f}m/case median, "
+        f"max {case_mins[-1]:.0f}m)"
+    )
+    med_fresh = statistics.median(t[0] + t[2] + t[3] for t in normalized)
+    parts.append(
+        f"{_fmt_tok(fresh_total)} tok ({_fmt_tok(round(med_fresh))}/case median; "
         f"{_fmt_tok(tok_in)} in / {_fmt_tok(tok_out)} out / {_fmt_tok(tok_reas)} reas"
         f")"
     )
-    parts.append(f"{_fmt_tok(cache)} cache read ({_fmt_tok(round(cache / count))}/case)")
+    parts.append(
+        f"{_fmt_tok(cache)} cache read "
+        f"({_fmt_tok(round(statistics.median(t[1] for t in normalized)))}/case median)"
+    )
     return " · ".join(parts)
 
 
@@ -342,6 +358,7 @@ def main() -> None:
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines.append(f"_Updated {stamp}. val = hidden gold tests; j = judge 0-100; "
                  f"cost; agent runtime (excludes setup, validation, and judging). "
+                 f"Roll-ups below the table report per-case MEDIANS, not means. "
                  f"LEAK = upstream solution access, excluded from passes._\n")
     header = "| case path | " + " | ".join(label for label, _ in providers) + " |"
     lines.append(header)
@@ -365,7 +382,9 @@ def main() -> None:
 
     summary_lines = [
         "_Cross-model × harness matrix. Each cell = pass-rate · judge average · "
-        "total/average cost · agent runtime · non-cache tokens._\n",
+        "total cost and median per case · agent runtime (median per case, plus the "
+        "slowest single case) · non-cache tokens. Per-case figures are medians: one "
+        "runaway case distorts a 50-case mean and tells you nothing about the other 49._\n",
         "| model | " + " | ".join(all_harnesses) + " |",
         "|---" * (len(all_harnesses) + 1) + "|",
     ]

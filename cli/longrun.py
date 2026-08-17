@@ -139,7 +139,12 @@ def _run_sequence(
         turns = turns[:max_turns]
     repo_url = sequence.get("meta", {}).get("repo", "")
     repo_root = Path.cwd().resolve()
-    repo_config = repo_root / "configs" / "octomind" / "octomind.toml"
+    repo_config = Path(
+        os.environ.get(
+            "OCTOBENCH_OCTOMIND_CONFIG",
+            str(repo_root / "configs" / "octomind" / "octomind.toml"),
+        )
+    )
 
     provider_impl = get_provider(provider_name)
     workdir = ensure_workspace(sequence_dir, run_dir)
