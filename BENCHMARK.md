@@ -256,13 +256,6 @@ branch, interleaved-commit checks) are in `docs/LONGRUN.md`.
 > ran its own stock prompt, tool surface and web access. The glm-5.2-opencode
 > column uses the shared prompt and sealed network, so it must not be compared
 > directly with those legacy columns.
->
-> **OpenCode run status.** The sealed Alibaba GLM-5.2 campaign paused after 10
-> completed sequences when its weekly token quota was exhausted during
-> php/phpspreadsheet turn 6/6 (quota reset: 2026-08-22 05:16 UTC). The first
-> five turns of that interrupted sequence passed but are intentionally omitted
-> until the sequence is rerun and finalized; config-corrupted attempts from the
-> superseded launcher are also excluded.
 
 <!-- LONGRUN-RESULTS:BEGIN -->
 _Updated 2026-08-16 04:49 UTC. Cell = passed/turns · Σ sum of turn final scores · cost · total tokens (incl. cache reads) · agent wall time (sum of agent invocations; excludes setup/validation/judging)._
