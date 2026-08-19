@@ -132,8 +132,11 @@ def totals(records: dict, order: list) -> str:
     ok = sum(1 for r in done if not (r["scoring"].get("validation_failed")
                                      or r.get("infra_failed")
                                      or r.get("_integrity_violations")))
+    # An infra-failed record also carries validation_failed in some providers;
+    # counting it in both columns rendered six failures as "7 FAIL · 1 INFRA".
     fail = sum(1 for r in done if r["scoring"].get("validation_failed")
-              and not r.get("_integrity_violations"))
+              and not r.get("_integrity_violations")
+              and not r.get("infra_failed"))
     leak = sum(1 for r in done if r.get("_integrity_violations"))
     infra = sum(1 for r in done if r.get("infra_failed"))
     count = len(done)

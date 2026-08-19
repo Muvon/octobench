@@ -604,6 +604,12 @@ sequential_threshold = 3
 # tail of identical advisories that cost context and stop being informative.
 # octobench: 2 — enough to correct over-sequencing, not enough to nag.
 sequential_max_steers_per_turn = 2
+# Re-read advisory: successful reads of the same unmutated path this many times
+# -> nudge to use the copy already in context. Mutating a path resets its counter
+# (edit-verify loops never trip it); shares the sequential advisory budget.
+# octobench: measured 350/374 views were re-reads (~269k re-fetched tokens) on
+# rustls — glm-5.2 re-fetches instead of retaining; the advisory directly cuts it.
+reread_threshold = 4
 
 # Verify-gate: on self-reported `done`, run a checklist before accepting.
 [supervisor.gate]

@@ -574,6 +574,43 @@ def default_judge_cfg(repo_root: Path) -> Dict:
     }
 
 
+# Clean-bench invariants. Every campaign that silently violated one of these
+# produced numbers that looked fine and were not comparable: an unsealed agent
+# phase reached the upstream fix, a missing OCTOBENCH_SYSTEM_PROMPT left codex and
+# claude on their stock prompts, and a missing OCTOMIND_AGENT fell back to the tap
+# agent developer:general, whose capabilities include websearch and knowledge.
+# Refuse to start rather than discover it in the traces a day later.
+CLEAN_BENCH_OPT_OUT = "OCTOBENCH_UNSAFE"
+
+
+def enforce_clean_bench(providers: list, verbosity: str) -> None:
+    if os.environ.get(CLEAN_BENCH_OPT_OUT) == "1":
+        log(f"[octobench] WARNING: {CLEAN_BENCH_OPT_OUT}=1 — clean-bench invariants "
+            "NOT enforced; results are not comparable to sealed runs", verbosity)
+        return
+    missing = []
+    if os.environ.get("OCTOBENCH_SEAL_NETWORK") != "1":
+        missing.append(
+            "OCTOBENCH_SEAL_NETWORK=1 (agent phase must not reach upstream)")
+    prompt = os.environ.get("OCTOBENCH_SYSTEM_PROMPT")
+    if not prompt:
+        missing.append(
+            "OCTOBENCH_SYSTEM_PROMPT=configs/common/system_prompt.md "
+            "(shared prompt; also gates claude's web-tool denial)")
+    elif not Path(prompt).exists():
+        missing.append(f"OCTOBENCH_SYSTEM_PROMPT points at a missing file: {prompt}")
+    if "octomind" in providers and os.environ.get("OCTOMIND_AGENT") != "developer":
+        missing.append(
+            "OCTOMIND_AGENT=developer (without it providers/octomind.py falls back "
+            "to the tap agent developer:general, which has websearch + knowledge)")
+    if missing:
+        raise SystemExit(
+            "octobench: refusing to run — clean-bench invariants unset:\n  - "
+            + "\n  - ".join(missing)
+            + f"\nUse scripts/bench.sh, or set {CLEAN_BENCH_OPT_OUT}=1 to override."
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="python3 -m cli.main")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -663,6 +700,7 @@ def main() -> None:
                 )
 
     selected_providers = sorted({t["provider"] for t in run_targets})
+    enforce_clean_bench(selected_providers, verbosity)
 
     scoring_cfg = (
         load_yaml(Path(args.scoring))

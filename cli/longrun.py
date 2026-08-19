@@ -27,6 +27,7 @@ from cli.main import (
     clean_workspace,
     default_judge_cfg,
     diff_snapshots,
+    enforce_clean_bench,
     ensure_workspace,
     install_guardrails,
     seal_network,
@@ -423,6 +424,8 @@ _REQUIRED_META = ["repo", "base_sha"]
 
 def _cmd_validate(args: argparse.Namespace) -> None:
     """Dry-run validation: parse every sequence.yaml and check required fields."""
+    enforce_clean_bench(sorted({t["provider"] for t in run_targets}), args.verbosity)
+
     sequence_files = _find_sequence_files(args)
     errors: List[str] = []
     ok = 0
