@@ -15,6 +15,7 @@ meta:
   capability_tags: [security, text-processing, trust-boundary, cross-file]
   base_sha: a93ed108418d64c089ba9474cc96685dc2e417f2
   gold_sha: 87ed39f620160e0e1ccb6edf36c2901f8d5de741
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - lib/utils/prettify-error-log.test.js
     - lib/utils/prettify-error.test.js

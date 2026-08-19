@@ -15,6 +15,7 @@ meta:
   capability_tags: [debugging, parser, memory-safety]
   base_sha: e60274b29c0a748df2c6280d0a374e6eef3b6c73
   gold_sha: 128ba144ab85ddd0ad9ea39f2febdfb51802cb1b
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - test/printf-test.cc
 system_prompt: |

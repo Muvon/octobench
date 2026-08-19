@@ -19,6 +19,7 @@ meta:
     - compatibility
   base_sha: b551fe85714c906565303fae98136d7c72b252ea
   gold_sha: 7df2f82305f20f1611a9668b38d26933b648d807
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/test_shell_completion.py
 system_prompt: |

@@ -16,6 +16,7 @@ meta:
   capability_tags: [api-design, protocol, cross-file]
   base_sha: de3752df84bb8dd35a8226bb467f05862f4da57c
   gold_sha: 6e680c3e8150071be96cba6b30e1d74487559b54
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - test/rfc-10008.test.js
     - test/route-shorthand.test.js

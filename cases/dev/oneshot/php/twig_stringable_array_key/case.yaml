@@ -20,6 +20,7 @@ meta:
     - debugging
   base_sha: 2fb736d03319099b4847f73b0bddb8b883408854
   gold_sha: 8ada671fc39a235b48ef7d18020ab43658e98917
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/TemplateTest.php
 system_prompt: |

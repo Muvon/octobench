@@ -18,6 +18,7 @@ meta:
     - serialization
   base_sha: b321dd6749f0bf7189444158a3ce785cc16d69b0
   gold_sha: 108867b3552775777dea2c71e014e233147f440f
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/Monolog/Formatter/NormalizerFormatterTest.php
 system_prompt: |

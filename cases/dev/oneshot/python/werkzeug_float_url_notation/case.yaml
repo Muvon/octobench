@@ -20,6 +20,7 @@ meta:
     - boundary-analysis
   base_sha: b97e13cc74d8a45dca260d4037edd7d1f5094042
   gold_sha: a7e3ab2b42ab509148d2864e64a8f8378a638e7e
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/test_routing.py
 system_prompt: |

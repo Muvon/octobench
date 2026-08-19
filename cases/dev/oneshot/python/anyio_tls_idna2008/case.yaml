@@ -21,6 +21,7 @@ meta:
     - cross-file
   base_sha: eb562e6462ee46b1904e50b02ce00a858cdeb200
   gold_sha: 68f58915f82d9be8109ebbbd8f5d70577d43f2ce
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/streams/test_tls.py
 system_prompt: |

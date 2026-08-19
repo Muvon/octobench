@@ -20,6 +20,7 @@ meta:
     - cross-file
   base_sha: 64418e15e4e806178c39cded5362a6c06ea43331
   gold_sha: b785a298870b3e421b24972a6eb7cc39c162b57a
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - src/Symfony/Component/JsonPath/Tests/JsonCrawlerTest.php
 system_prompt: |

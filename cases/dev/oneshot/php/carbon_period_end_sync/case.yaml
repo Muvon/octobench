@@ -20,6 +20,7 @@ meta:
     - compatibility
   base_sha: 3db26e52db996da1d720d74bbbc99c1300fc0160
   gold_sha: 2c330722d22555ad20f3bcfdb2c1ba5a56a0b5f5
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/CarbonPeriod/GettersTest.php
 system_prompt: |

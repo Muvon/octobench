@@ -21,6 +21,7 @@ meta:
     - compatibility
   base_sha: 31ce3cb8d73a6e20221315a90dd98a117f0101a0
   gold_sha: 0f3e7bd682a81488919227f2b5f1f7de1718ecdd
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/test_sse.py
 system_prompt: |

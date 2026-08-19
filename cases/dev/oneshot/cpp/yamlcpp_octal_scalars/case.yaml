@@ -17,6 +17,7 @@ meta:
   issue: 1251
   base_sha: eadeac64e1a0619b5efa5a5674b5edb1a71a8885
   gold_sha: 847020a9cd706412eae6d73a0ba12ec02428bc5b
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - test/node/node_test.cpp
 system_prompt: |

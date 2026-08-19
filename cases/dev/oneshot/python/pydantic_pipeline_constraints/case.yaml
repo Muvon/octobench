@@ -21,6 +21,7 @@ meta:
   issue: 13507
   base_sha: d0ffa0951e47fd7349032e4b2ea9a54dc28fd435
   gold_sha: 60d4c4873e44d587c8d70d7a1c731f7361fe55eb
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/test_pipeline.py
 system_prompt: |

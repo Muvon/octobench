@@ -21,6 +21,7 @@ meta:
     - error-handling
   base_sha: dd7c23862eb08a2cfde7da6926f28410b699c077
   gold_sha: f85031f61247dae1dcf19ca88cc057edba1534ee
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - t/unit/events/test_events.py
 system_prompt: |

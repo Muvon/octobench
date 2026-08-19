@@ -15,6 +15,7 @@ meta:
   capability_tags: [api-design, serialization, cross-file]
   base_sha: 29a6f43950ce22be9f90ea1071e94bcb675c8c51
   gold_sha: ee52744a3196c32f29536b4671c703146cac9cb6
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - test/integration/emitter_test.cpp
 system_prompt: |

@@ -20,6 +20,7 @@ meta:
     - api-design
   base_sha: 48ea21da9107519a161fc1cc03e19d1905d92cea
   gold_sha: af41ef031c70b94664addbda174c5e9d4529ac21
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - src/FilesystemTest.php
 system_prompt: |

@@ -22,6 +22,7 @@ meta:
     - state-management
   base_sha: a46338401b9e0ffc9bd68c31100ee99cee717481
   gold_sha: 91d3b4c0bccf2234fc3ed19e605e2cd402f19437
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tokio/src/runtime/time_alt/tests.rs
 system_prompt: |

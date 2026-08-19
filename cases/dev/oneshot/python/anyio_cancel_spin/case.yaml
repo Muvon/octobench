@@ -19,6 +19,7 @@ meta:
     - state-management
   base_sha: 6bbc6c33caabc13af5bc4256f745027cf8d5d7b8
   gold_sha: dbba29d1ade7936f18fb71ba24aa92978673482a
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/test_taskgroups.py
 system_prompt: |

@@ -22,6 +22,7 @@ meta:
     - trust-boundary
   base_sha: ecfbeb7a08fbbc5cfc0ab49ae56fcc71447160b5
   gold_sha: 7f8b93d1a9bed5bdd4ecb4e40c4a26898c8826e4
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/Cookie/CookieJarTest.php
 system_prompt: |

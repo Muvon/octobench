@@ -19,6 +19,7 @@ meta:
     - cross-file
   base_sha: 138899a081757ceb770bd53b1ca575244d8aed06
   gold_sha: bb38c69cac82c5c6caeda8721715b0f9f9e7b6c2
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/Composer/Test/Advisory/AuditorTest.php
     - tests/Composer/Test/DependencyResolver/ProblemTest.php

@@ -15,6 +15,7 @@ meta:
   capability_tags: [api-design, async, error-handling]
   base_sha: 3c662a598cae8ea6dc5b605a2a0de0de11647437
   gold_sha: 6de5935f8add8d1fe3734281a8db1eb28f7fe729
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - test/mock-interceptor.js
 system_prompt: |

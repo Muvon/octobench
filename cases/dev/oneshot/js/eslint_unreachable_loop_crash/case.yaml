@@ -15,6 +15,7 @@ meta:
   capability_tags: [debugging, static-analysis, boundary-analysis]
   base_sha: 044a627fa3e28ee1410d515acc5378eb4b49f8ba
   gold_sha: 90910715011211a20d011d807d398a7005127f35
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/lib/rules/no-unreachable-loop.js
 system_prompt: |

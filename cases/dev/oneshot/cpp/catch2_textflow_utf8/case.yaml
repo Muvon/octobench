@@ -15,6 +15,7 @@ meta:
   capability_tags: [debugging, unicode, cross-file]
   base_sha: 8492fd444e42f331f48611d2b5ef11c8ce338423
   gold_sha: 572f96b8febec9dd14ac5284e6a959a7246325c8
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/SelfTest/IntrospectiveTests/TextFlow.tests.cpp
 system_prompt: |

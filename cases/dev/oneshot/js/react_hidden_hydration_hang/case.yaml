@@ -17,6 +17,7 @@ meta:
   capability_tags: [concurrency, state-management, hydration, cross-file]
   base_sha: 96fcba90138e9f1a73ee1cc4f79a653ec12fc3a9
   gold_sha: 9a81195bed0ded96e10a13f753dce05bee8cc97b
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - packages/react-dom/src/__tests__/ReactDOMServerPartialHydration-test.internal.js
     - packages/react-dom/src/__tests__/ReactDOMServerPartialHydrationActivity-test.internal.js

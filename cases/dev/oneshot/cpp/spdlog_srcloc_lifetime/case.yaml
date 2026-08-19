@@ -15,6 +15,7 @@ meta:
   capability_tags: [debugging, lifecycle, memory-safety, cross-file]
   base_sha: 8671ca4d492c8ee1cdfd3dd88afb9f88dd268178
   gold_sha: 03bec982c294c54cb16452d2be083d73843849b9
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/test_ringbuffer.cpp
 system_prompt: |

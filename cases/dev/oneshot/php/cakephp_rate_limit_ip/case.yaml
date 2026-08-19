@@ -20,6 +20,7 @@ meta:
     - protocol
   base_sha: 3971a307e0acc5aed8289daa14afb5b72ae0d634
   gold_sha: 950cbd2c4f15fd2a74049f67051b086347ae113f
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/TestCase/Http/Middleware/RateLimitMiddlewareTest.php
 system_prompt: |

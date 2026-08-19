@@ -18,6 +18,7 @@ meta:
   capability_tags: [debugging, error-handling, compatibility]
   base_sha: 712e02373f1c5ac72fdf5da16f04838338ba817e
   gold_sha: a75bf44647e5132e39b778730394b0a2b983265c
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/unit/core/Axios.test.js
 system_prompt: |

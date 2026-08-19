@@ -16,6 +16,7 @@ meta:
   capability_tags: [debugging, parser, boundary-analysis]
   base_sha: 8e6bac94877f2d3d026000d36ce81e0aaf38d26f
   gold_sha: e3720ba824500473a20d095779afc129511c832f
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/dom/big_integer_tests.cpp
     - tests/ondemand/ondemand_number_tests.cpp

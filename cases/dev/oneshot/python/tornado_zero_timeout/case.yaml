@@ -21,6 +21,7 @@ meta:
     - lifecycle
   base_sha: affd7939a7985d3eef5b7bec39697287007a5328
   gold_sha: 18e15a5e0093b398a216fb9f85af69a3279b6e64
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tornado/test/queues_test.py
 system_prompt: |

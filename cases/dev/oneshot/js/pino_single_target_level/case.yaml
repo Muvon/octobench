@@ -17,6 +17,7 @@ meta:
   issue: 1996
   base_sha: 7b2fee8700cb4ecab0d55dbe831d60b60fc16929
   gold_sha: ea99eee063c783964f51bf3ac2c2c2815263056e
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - test/transport/core.test.js
 system_prompt: |

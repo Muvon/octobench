@@ -16,6 +16,7 @@ meta:
   capability_tags: [debugging, type-dispatch, compatibility]
   base_sha: eccd1c43c4d07816c434548d6ce1cf37126c1945
   gold_sha: 4bace2fc28191d28dc2d1b54573923853768b86c
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - modules/geometry/test/test_boundingrect.cpp
 system_prompt: |

@@ -21,6 +21,7 @@ meta:
   issue: 979
   base_sha: 5d30df60e916e9b8fc46c74794007ff271fdfbbf
   gold_sha: 1a360b0a6c003912afc3503c834b0edd798bca28
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/regression/issue979.rs
 system_prompt: |

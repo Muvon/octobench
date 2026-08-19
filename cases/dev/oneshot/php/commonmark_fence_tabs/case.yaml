@@ -23,6 +23,7 @@ meta:
   issue: 981
   base_sha: cfb11eca1dce491891141055b945724b25434c74
   gold_sha: 51b529fd295ade2e641e8a6152e72c16ce9735ac
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/functional/data/fenced_code_tabs.md
     - tests/functional/data/fenced_code_tabs.html

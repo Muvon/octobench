@@ -21,6 +21,7 @@ meta:
     - error-handling
   base_sha: d11965705f88ae2546e0d277dac8f52f47e5694f
   gold_sha: 2320c6a0335cfddaec4df58d1a7fe410070ab9e9
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - src/parser.rs
 system_prompt: |

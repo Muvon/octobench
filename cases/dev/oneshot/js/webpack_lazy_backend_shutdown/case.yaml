@@ -15,6 +15,7 @@ meta:
   capability_tags: [lifecycle, concurrency, state-management]
   base_sha: 508e10f54e0c581f6baf4189ee50b6f4ea2e57f5
   gold_sha: a24f33283f5b073f2e0e845badd1ec469272702b
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - test/LazyCompilationBackend.unittest.js
 system_prompt: |

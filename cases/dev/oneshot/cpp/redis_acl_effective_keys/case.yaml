@@ -16,6 +16,7 @@ meta:
   capability_tags: [security, parser, cross-file, repository-navigation]
   base_sha: ba99faa230643931f91d2d5d68a0393e25fa07f5
   gold_sha: d3315247fa1cf9ce079eb7b6e77a7d06ac643b2a
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/unit/acl-v2.tcl
 system_prompt: |

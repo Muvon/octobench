@@ -19,6 +19,7 @@ meta:
     - state-management
   base_sha: 002df10b8c610788b2730ec1234934e81aaa2880
   gold_sha: d5c8ad3227afe459c09f1d0d85455abf00f0381a
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - tests/test_bytes.rs
 system_prompt: |

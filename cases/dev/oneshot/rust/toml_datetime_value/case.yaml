@@ -21,6 +21,7 @@ meta:
     - compatibility
   base_sha: 4ec099fed591a172f82007cb2f9d605985bbecee
   gold_sha: 89f55411d47ee9fb349ab0704f287aa82aa12258
+  verified: true # fail-to-pass proven 2026-08-19 with scripts/verify_case.sh
   test_paths:
     - crates/toml/tests/serde/general.rs
     - crates/toml_edit/tests/serde/general.rs
