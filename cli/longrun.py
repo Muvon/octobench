@@ -424,8 +424,6 @@ _REQUIRED_META = ["repo", "base_sha"]
 
 def _cmd_validate(args: argparse.Namespace) -> None:
     """Dry-run validation: parse every sequence.yaml and check required fields."""
-    enforce_clean_bench(sorted({t["provider"] for t in run_targets}), args.verbosity)
-
     sequence_files = _find_sequence_files(args)
     errors: List[str] = []
     ok = 0
@@ -573,6 +571,8 @@ def main() -> None:
         run_targets = parse_run_matrix_config(run_matrix_path, models_cfg)
     else:
         raise RuntimeError("Provide --providers/--models or a --config run matrix")
+
+    enforce_clean_bench(sorted({t["provider"] for t in run_targets}), verbosity)
 
     sequence_files = _find_sequence_files(args)
 
