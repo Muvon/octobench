@@ -1,0 +1,52 @@
+id: python_attrs_classvar_forward_ref
+name: ClassVar written as a forward reference is treated as an instance attribute
+category: dev
+difficulty: medium
+timeout_minutes: 30
+meta:
+  repo: https://github.com/python-attrs/attrs
+  pr_url: https://github.com/python-attrs/attrs/pull/1593
+  pr: 1593
+  task_type: bug-fix
+  failure_modes: [wrong-result]
+  prompt_source: human-reconstructed
+  prompt_style: symptom-report
+  spec_level: symptom-led
+  test_visibility: hidden
+  capability_tags: [debugging, type-dispatch, compatibility]
+  target_branch: main
+  merged_at: 2026-07-31T00:00:00Z
+  provenance_note: >-
+    Human contributor (account since 2016, 150 public repos); approved and merged
+    by hynek, the project lead. No AI co-author markers.
+  base_sha: 6851ab593cd25f3c14393e9355d57d22bec2a074
+  gold_sha: 97f8d175656bc03c373a1c9038048a4d312c307c
+  verified: true # fail-to-pass proven 2026-08-20 with scripts/verify_case.sh
+  client_runs:
+    - claude-opus-5 PASS j=93.67 (3m) 2026-08-20
+  test_paths:
+    - tests/test_annotations.py
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  A class of ours started behaving differently after we moved to a newer Python, and I have
+  narrowed it down to how attrs decides whether an annotation is a class variable.
+
+  If the annotation reaches attrs as a forward reference — an unevaluated string-like annotation
+  object rather than the real `typing.ClassVar[...]` object, which is what you get when the name
+  is not imported at all, or when annotations are not eagerly evaluated — attrs no longer
+  recognises it as a class variable. The field is collected as a normal attribute, so it shows up
+  in `fields_dict()`, becomes an `__init__` parameter, and the class no longer matches what the
+  annotation says.
+
+  With the same annotation written so that it evaluates to the real object, or quoted as a plain
+  string, it is correctly skipped. So the detection only misses the forward-reference form.
+
+  Please make class-variable detection recognise the forward-reference form as well, so that:
+
+  - an annotation that names `ClassVar` through a forward reference is treated as a class variable
+    and excluded from the generated fields and `__init__`;
+  - the qualified, aliased and quoted spellings that already work keep working;
+  - annotations that merely mention the name as part of some other type are not misclassified;
+  - this behaves the same with and without `slots`.

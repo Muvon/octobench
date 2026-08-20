@@ -1,0 +1,62 @@
+id: js_prettier_setext_blockquote_marker
+name: Setext heading inside a blockquote keeps its continuation markers as text
+category: dev
+difficulty: medium
+timeout_minutes: 45
+meta:
+  repo: https://github.com/prettier/prettier
+  pr_url: https://github.com/prettier/prettier/pull/19878
+  pr: 19878
+  task_type: bug-fix
+  failure_modes: [wrong-result]
+  prompt_source: human-reconstructed
+  prompt_style: reproduction-report
+  spec_level: symptom-led
+  test_visibility: hidden
+  capability_tags: [parser, text-processing, debugging]
+  target_branch: main
+  merged_at: 2026-08-18T00:00:00Z
+  provenance_note: >-
+    Human contributor; two independent approvals, merged by core maintainer
+    fisker. No AI co-author markers.
+  base_sha: 45a4a75ea639e69d35f885224818e6698561fc11
+  gold_sha: 07184252aa4a84fcc542f34e5e70291a08b5de3a
+  verified: true # fail-to-pass proven 2026-08-20 with scripts/verify_case.sh
+  client_runs:
+    - claude-opus-5 PASS j=92.67 (17m) 2026-08-20
+  test_paths:
+    - tests/format/markdown/heading/setext/blockquote.md
+    - tests/format/markdown/heading/setext/__snapshots__/format.test.js.snap
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Formatting a Markdown file mangles a setext heading when the heading text spans more than one
+  line inside a blockquote.
+
+  Input:
+
+  ```md
+  > Multi
+  > Line
+  > ===
+  ```
+
+  Formatted output:
+
+  ```md
+  > Multi > Line
+  > ===
+  ```
+
+  The `>` that introduces the second line of the heading is being kept as literal heading text and
+  the two lines are joined, so the rendered heading reads `Multi > Line`. Reformatting is therefore
+  not idempotent and the document changes meaning.
+
+  A multi-line *paragraph* in a blockquote is handled correctly, so the blockquote markers are
+  clearly being stripped for paragraphs but not for headings.
+
+  Expected: the heading above formats back to itself. This should hold for both setext underlines
+  (`===` and `---`), for headings spanning more than two lines, and inside nested blockquotes such
+  as `> > Multi`. Formatting of blockquoted paragraphs, ATX headings and single-line setext
+  headings must be unchanged.

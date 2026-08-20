@@ -1,0 +1,62 @@
+id: js_node_webcrypto_supports_constraints
+name: Align WebCrypto supports with operation constraints
+category: dev
+difficulty: expert
+timeout_minutes: 60
+meta:
+  repo: https://github.com/nodejs/node
+  pr_url: https://github.com/nodejs/node/pull/65222
+  pr: 65222
+  task_type: bug-fix
+  failure_modes: [wrong-result, accepted-invalid-input]
+  prompt_source: pr-derived
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [cryptography, protocol, validation, cross-file]
+  target_branch: main
+  merged_at: 2026-08-13T21:39:13Z
+  provenance_note: >-
+    Human-authored by a long-term Node.js crypto maintainer and approved by
+    three independent project reviewers; no AI co-author or disclosure.
+  base_sha: f914e45b2d3b871d0da03f238415642a308386f2
+  gold_sha: e1cdcec71899c3ae03df055aac02fb520d16e762
+  client_runs:
+    - claude-opus-5 FAIL on assertion (20m) 2026-08-20 — legitimate model failure
+  verified: true # corrected fail-to-pass proof completed 2026-08-16
+  test_paths:
+    - test/fixtures/webcrypto/supports-level-2.mjs
+    - test/fixtures/webcrypto/supports-modern-algorithms.mjs
+    - test/fixtures/webcrypto/supports-secure-curves.mjs
+    - test/parallel/test-webcrypto-derivebits-hkdf.js
+    - test/parallel/test-webcrypto-keygen.js
+    - test/parallel/test-webcrypto-promise-prototype-pollution.mjs
+    - test/parallel/test-webcrypto-sign-verify-eddsa.js
+    - test/parallel/test-webcrypto-sign-verify-ml-dsa.js
+    - test/parallel/test-webcrypto-sign-verify-rsa.js
+    - test/parallel/test-webcrypto-supports.mjs
+    - test/parallel/test-webcrypto-util.js
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  `SubtleCrypto.supports()` reports `true` for parameter combinations that the
+  corresponding WebCrypto operations cannot accept. Align its answers and the
+  shared validation paths with the current WebCrypto specifications:
+
+  - Context parameters are at most 255 bytes. Backends that do not support a
+    non-empty context must still reject it, while a 256-byte context is always
+    unsupported.
+  - HKDF output is limited to 255 digest blocks, based on the selected digest.
+  - RSA key generation requires a modulus of at least 512 bits (2048 in FIPS
+    mode) and an unsigned 32-bit public exponent that is odd and at least 3.
+  - ML-KEM variants produce a 256-bit shared secret. `encapsulateKey` and
+    `decapsulateKey` support only raw-secret target algorithms that can import
+    that length: AES accepts its standard key sizes, ChaCha20-Poly1305 requires
+    256 bits, and an explicit HMAC/KMAC bit length is compatible when its
+    whole-byte storage length is 256 bits (so 249 through 256 bits are accepted,
+    while 248 and 257 are not). Raw-secret KDF targets remain valid. Unrelated
+    key algorithms must return `false`.
+
+  Keep `supports()` non-throwing for unsupported combinations and preserve its
+  existing prototype-safety behavior.

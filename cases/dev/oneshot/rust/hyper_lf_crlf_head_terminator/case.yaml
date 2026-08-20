@@ -1,0 +1,57 @@
+id: rust_hyper_lf_crlf_head_terminator
+name: HTTP/1 partial-read fast path misses a bare-LF line before the blank line
+category: dev
+difficulty: complex
+timeout_minutes: 45
+meta:
+  repo: https://github.com/hyperium/hyper
+  pr_url: https://github.com/hyperium/hyper/pull/4147
+  pr: 4147
+  task_type: bug-fix
+  failure_modes: [hang, compatibility]
+  prompt_source: human-reconstructed
+  prompt_style: symptom-report
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [protocol, parser, boundary-analysis, debugging]
+  target_branch: master
+  merged_at: 2026-08-10T00:00:00Z
+  provenance_note: >-
+    Human contributor (account since 2021); approved and merged by seanmonstar,
+    the project lead, after review discussion. No AI co-author markers.
+  base_sha: fa3a4b2c04c12fd849dc50abaceba32c4d436069
+  gold_sha: 3534d75c898da17b023e6bff9b4cf71afed123ad
+  verified: true # fail-to-pass proven 2026-08-20 with scripts/verify_case.sh
+  client_runs:
+    - claude-opus-5 PASS j=95.67 (2m) 2026-08-20
+  # The held-out tests live INSIDE src/proto/h1/role.rs (#[cfg(test)] mod), which
+  # is also the only file the gold change touches. test_paths stays EMPTY so
+  # verify_case.sh applies the whole gold file: excluding it would strip the fix
+  # along with the tests and leave an empty patch. validate.sh does the real
+  # holding-out, grafting gold's test module onto the agent's file.
+  test_paths: []
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  We have a client on our network that terminates its last header line with a bare LF and then
+  sends the blank line normally, so the end of the request head arrives as `...a: b\n\r\n`.
+
+  Our server accepts that request when the whole head lands in one read. When the same bytes
+  arrive split across reads it stalls instead: the connection sits waiting for more data even
+  though a complete head is already buffered. Feeding the identical bytes to the full header
+  parser shows it is perfectly happy with them, so the two disagree about when the head is over.
+
+  It looks like the cheap check that runs on a partial read — the one deciding whether the buffer
+  is worth handing to the parser yet — only understands the CRLF-CRLF and LF-LF endings, and does
+  not accept an LF followed by CRLF.
+
+  Please make that check agree with what the parser actually accepts:
+
+  - a head whose final line ends with a bare LF and is followed by a CRLF blank line must be
+    recognised as complete, at every split point the bytes could arrive in;
+  - the endings that are already recognised must stay recognised;
+  - genuinely incomplete input must still be reported incomplete — in particular a buffer ending
+    in LF followed only by CR, with the terminating LF not yet received, must not be treated as a
+    finished head;
+  - the check must remain a scan of the buffered bytes, not become a second full parse.

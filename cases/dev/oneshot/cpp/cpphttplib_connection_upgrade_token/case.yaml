@@ -1,0 +1,68 @@
+id: cpp_cpphttplib_connection_upgrade_token
+name: WebSocket handshake matches Connection by substring instead of token
+category: dev
+difficulty: complex
+timeout_minutes: 45
+meta:
+  repo: https://github.com/yhirose/cpp-httplib
+  pr_url: https://github.com/yhirose/cpp-httplib/pull/2542
+  pr: 2542
+  task_type: bug-fix
+  failure_modes: [accepted-invalid-input, security]
+  prompt_source: human-reconstructed
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [protocol, parser, security, compatibility]
+  target_branch: master
+  merged_at: 2026-08-18T00:00:00Z
+  provenance_note: >-
+    Authored and merged by yhirose, the project owner and sole maintainer
+    (account since 2010). Self-merge is this project's normal process; the change
+    carries its own regression tests. No AI co-author markers.
+  base_sha: 2004668509e983a1b5a8bed6f4b9c87840330df4
+  gold_sha: ffe2a1c1e9e0c87b44c1b25ddb5b6a34b30fa6c9
+  verified: true # fail-to-pass proven 2026-08-20 with scripts/verify_case.sh
+  client_runs:
+    - claude-opus-5 PASS j=90.33 (12m) 2026-08-20
+    - claude-opus-5 FAIL 2026-08-20 under -DHTTPLIB_COMPILE=ON — compile error,
+      not a model failure; superseded by the header-only build (see build_note)
+  build_note: >-
+    Built header-only. Under -DHTTPLIB_COMPILE=ON the held-out tests do not
+    compile against base source, because the gold change also adds forward
+    declarations for the handshake predicates; that would test internal API
+    shape rather than behaviour. Header-only: 22 existing WebSocket tests pass
+    at base and exactly the 3 new ones fail.
+  test_paths:
+    - test/test.cc
+  docker_requires:
+    - libcurl4-openssl-dev   # test/CMakeLists.txt does find_package(CURL REQUIRED)
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  **Goal.** The WebSocket upgrade path must decide whether `Connection` carries the `upgrade`
+  token by parsing the field as the comma-separated token list it is, rather than by searching
+  the raw value for a substring.
+
+  Today a request whose `Connection` value merely *contains* those letters is accepted as an
+  upgrade request, and a legitimate request whose token list is spread over repeated `Connection`
+  header lines can be rejected. Per RFC 9110 a comma-separated list field may carry several
+  tokens and may be split across multiple lines of the same field.
+
+  **Acceptance criteria**
+
+  - **Given** a handshake whose `Connection` value contains `upgrade` only as part of a longer
+    word — for example `notupgrade` or `upgraded` — **then** it must not be treated as carrying
+    the `upgrade` token, and the handshake must be rejected.
+  - **Given** a handshake whose `Connection` value is a token list such as `keep-alive, Upgrade`,
+    with any casing and with optional whitespace around the commas, **then** the `upgrade` token
+    must be recognised.
+  - **Given** a handshake that sends `Connection` as several separate header lines, one of which
+    carries the `upgrade` token, **then** the token must be recognised.
+  - **Given** a handshake with no `Connection` header at all, or one whose token list does not
+    contain `upgrade`, **then** it must be rejected.
+  - The same token rules must apply on both sides: the server deciding whether an incoming request
+    is a WebSocket upgrade, and the client verifying the server's upgrade response.
+  - All other handshake requirements — the `Upgrade` field value, the `Sec-WebSocket-Key`
+    validation, and existing non-WebSocket request handling — must be unchanged.

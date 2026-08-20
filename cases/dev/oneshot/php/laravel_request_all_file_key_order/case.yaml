@@ -1,0 +1,58 @@
+id: php_laravel_request_all_file_key_order
+name: Request::all() reorders input keys when uploaded files are merged
+category: dev
+difficulty: medium
+timeout_minutes: 45
+meta:
+  repo: https://github.com/laravel/framework
+  pr_url: https://github.com/laravel/framework/pull/61221
+  pr: 61221
+  task_type: bug-fix
+  failure_modes: [wrong-result]
+  prompt_source: human-reconstructed
+  prompt_style: reproduction-report
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [debugging, data-correctness, api-design]
+  target_branch: 13.x
+  merged_at: 2026-08-18T00:00:00Z
+  provenance_note: >-
+    Human contributor (account since 2019); merged by taylorotwell, the project
+    lead. Laravel merges through the lead rather than recorded GitHub reviews, so
+    the merge itself is the maintainer acceptance signal. No AI co-author markers.
+  base_sha: faf45dd2b1549ff451993e9b20047ff0bf093033
+  gold_sha: d36158ef41b8b2206ffa75cc09abb4e0864476e6
+  verified: true # fail-to-pass proven 2026-08-20 with scripts/verify_case.sh
+  client_runs:
+    - claude-opus-5 PASS j=95.0 (2m) 2026-08-20
+  runtime_note: >-
+    laravel 13.x requires php ^8.3, so this case invokes php8.4 explicitly rather
+    than the image default of 8.2 — the opt-in the agent image documents.
+  test_paths:
+    - tests/Http/HttpRequestTest.php
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  We hit a confusing bug submitting a repeatable form that mixes plain fields with file uploads.
+
+  The form posts an `items` array where each row has a `name`, and only *some* rows carry a
+  `photo` upload. So the request has input `items = [0 => ['name' => 'first'], 1 => ['name' => 'second']]`
+  and files `items = [1 => ['photo' => <upload>]]`.
+
+  When we read `$request->all()`, the `items` array comes back with its keys in the wrong order —
+  the row that carried the upload is moved to the front, so `array_keys($request->all()['items'])`
+  is no longer `[0, 1]`. Our downstream code iterates that array positionally and silently pairs
+  row data with the wrong record.
+
+  Reading the plain input on its own is fine, so it looks like the merge of uploaded files into the
+  input is what disturbs the ordering.
+
+  What we need from `all()`:
+
+  - the resulting array must keep the ordering established by the request input, with file entries
+    merged into their existing positions rather than promoted ahead of input keys;
+  - nested file entries must still be merged in, so a row that carries an upload exposes both its
+    input values and its uploaded file;
+  - where an input key and a file key collide, the existing precedence must not change;
+  - passing an explicit list of keys to `all()` must keep working as before.
