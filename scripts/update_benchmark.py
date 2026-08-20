@@ -335,6 +335,30 @@ def audit_integrity(record: dict, case: dict | None) -> list[str]:
 def main() -> None:
     repo_root = Path(__file__).resolve().parent.parent
     cases = discover_cases(repo_root)
+    # Rows come from the published suite, not from every case on disk: the corpus
+    # grows ahead of the campaigns, and a table padded with rows no client has run
+    # reads as missing data rather than as future work. Pass --suite <name> (a list
+    # in configs/suites/) to scope it; without one, every discovered case is shown.
+    suite = None
+    for arg in list(sys.argv[1:]):
+        if arg.startswith("--suite="):
+            suite = arg.split("=", 1)[1]
+            sys.argv.remove(arg)
+    if suite:
+        listing = repo_root / "configs" / "suites" / f"{suite}.txt"
+        if not listing.exists():
+            raise SystemExit(f"no suite list at {listing}")
+        wanted = {ln.strip() for ln in listing.read_text().splitlines() if ln.strip()}
+        by_path = {}
+        for cid, c in cases.items():
+            rel = str(c.get("path", "")).replace("dev/oneshot/", "")
+            if rel in wanted:
+                by_path[cid] = c
+        missing = wanted - {str(c.get("path", "")).replace("dev/oneshot/", "")
+                            for c in by_path.values()}
+        if missing:
+            raise SystemExit(f"suite {suite} lists unknown cases: {sorted(missing)}")
+        cases = by_path
     model_specs = yaml.safe_load((repo_root / "configs/models.yaml").read_text())["models"]
     pricing_by_model = {
         name: spec.get("pricing") or {} for name, spec in model_specs.items()
@@ -350,8 +374,6 @@ def main() -> None:
             )
         providers.append((label, records))
 
-    # Include ALL discovered oneshot cases (not just those with results) so
-    # empty rows appear for cases that haven't been run yet.
     order = sorted(
         cases.keys(),
         key=lambda c: cases.get(c, {}).get("path", c),

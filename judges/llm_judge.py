@@ -127,12 +127,35 @@ def _run_single_judge(prompt: str, judge_cfg: Dict, workdir: str) -> Dict:
     return data
 
 
+# Judge payload budget. The panel runs on models with a hard context ceiling, and
+# nothing bounded these logs: a case with a wide diff or a chatty test suite built
+# a 212K-token prompt, every panel model returned "context remains above the usable
+# ceiling", and the case scored 0 with a passing validation exit code — a scoring
+# failure that reads exactly like a bad answer. Clamp per field, keeping the head
+# (what was attempted) and the tail (where suites report failures).
+JUDGE_BUDGET = {
+    # field: (head_chars, tail_chars)
+    "prep_log": (0, 8_000),
+    "quality_log": (0, 8_000),
+    "validation_log": (4_000, 24_000),
+    "evidence_log": (60_000, 20_000),
+}
+
+
+def _clamp(text: str, head: int, tail: int) -> str:
+    if not text or len(text) <= head + tail:
+        return text
+    dropped = len(text) - head - tail
+    marker = f"\n\n[... {dropped} characters elided by the judge payload budget ...]\n\n"
+    return text[:head] + marker + (text[-tail:] if tail else "")
+
+
 def run_judge(prompt_payload: Dict, judge_cfg: Dict, workdir: str) -> Dict:
     task = prompt_payload["task"]
-    prep_log = prompt_payload.get("prep_log", "")
-    quality_log = prompt_payload.get("quality_log", "")
-    validation_log = prompt_payload.get("validation_log", "")
-    evidence_log = prompt_payload.get("evidence_log", "")
+    prep_log = _clamp(prompt_payload.get("prep_log", ""), *JUDGE_BUDGET["prep_log"])
+    quality_log = _clamp(prompt_payload.get("quality_log", ""), *JUDGE_BUDGET["quality_log"])
+    validation_log = _clamp(prompt_payload.get("validation_log", ""), *JUDGE_BUDGET["validation_log"])
+    evidence_log = _clamp(prompt_payload.get("evidence_log", ""), *JUDGE_BUDGET["evidence_log"])
 
     # The verdict comes from the test command's exit code. Without it the judge
     # has to infer pass/fail from log prose, which misreads every suite that
