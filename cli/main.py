@@ -245,8 +245,13 @@ def make_executor(
 ) -> Executor:
     """Build the per-run executor: local subprocesses (host) or a fresh container (docker)."""
     if getattr(args, "executor", "host") == "docker":
+        # The pid is what makes this unique: the millisecond clock is not enough
+        # when two campaigns of the SAME client run concurrently and reach the
+        # same case together, and the name carries no model, so both would ask
+        # docker for one name and the loser dies on a name conflict.
         container_name = (
-            f"ob-{safe_id(case_id)[:24]}-{provider_name[:8]}-{int(time.time() * 1000)}"
+            f"ob-{safe_id(case_id)[:24]}-{provider_name[:8]}"
+            f"-{int(time.time() * 1000)}-{os.getpid()}"
         )
         return DockerExecutor(
             args.image, workdir_abs, case_dir, octomind_config, container_name

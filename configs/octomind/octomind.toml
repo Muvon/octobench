@@ -7,7 +7,7 @@
 #   • Validate config: octomind config --validate
 
 # Configuration version (DO NOT MODIFY - used for automatic upgrades)
-version = 5
+version = 7
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SYSTEM-WIDE SETTINGS
@@ -331,8 +331,19 @@ welcome = ""
 #   codesearch-structural → octocode:structural_search, view_signatures
 # `runtime` is deliberately ABSENT: it grants MCP server management and
 # capability activation, i.e. the agent could switch websearch back on.
+# `orchestration` is referenced for ONE tool. `monitor` runs a long command and
+# streams its output into the session inbox, which is how a build or test suite
+# reports completion without being asked. Without it the only way to run
+# something slow is `shell background:true`, which discards output and gives no
+# completion signal — so the agent sleeps and tails a log, and each check is a
+# full model round-trip that re-sends the whole conversation. Measured on the
+# glm-5.3 campaign that pattern was 20-25% of all tool calls (62 of 250 on
+# cpp/ada, 102 of 504 on cpp/cli11) while opencode, whose shell simply blocks,
+# spent zero. The server's other tools stay out: `tap` delegates to registry
+# specialists and would reach outside the seal, and `schedule` injects deferred
+# messages. Neither is listed, so neither is reachable.
 [roles.mcp]
-server_refs = ["core", "octofs", "octocode"]
+server_refs = ["core", "octofs", "octocode", "orchestration"]
 allowed_tools = [
   "core:*",
   "octofs:shell",
@@ -343,6 +354,7 @@ allowed_tools = [
   "octofs:extract_lines",
   "octocode:structural_search",
   "octocode:view_signatures",
+  "orchestration:monitor",
 ]
 
 # Example: override the developer role with your own system prompt
@@ -466,13 +478,6 @@ max_retries = 3
 # ═══════════════════════════════════════════════════════════════════════
 
 [compression]
-# Enable compression system (task → phase → project, all automatic)
-hints_enabled = true
-# Context pressure threshold (0.0-1.0) at which to start showing hints
-hints_pressure_threshold = 0.7
-# Minimum tool executions between hints to avoid spamming
-hints_min_interval = 5
-
 # Maximum number of critical knowledge entries retained across compressions.
 # Each compression may extract a short snippet of critical knowledge (decisions,
 # constraints, user preferences). Only the last N entries are kept and injected
@@ -482,9 +487,9 @@ knowledge_retention = 25
 # Hard token budget for analysis findings retained across compression cycles.
 # Findings are ranked for current-task relevance, recency, and diversity when
 # they do not all fit. 0 disables analysis-finding retention.
-analysis_findings_max_tokens = 4000
+analysis_findings_max_tokens = 6000
 
-threshold = 80000
+threshold = 70000
 
 # NOTE: these belong to [compression]. A key placed AFTER the
 # [[compression.pressure_levels]] blocks below is parsed as a field of the last
@@ -513,7 +518,7 @@ verify_hash = true
 # in-env): an unauthenticated model here makes octomind log "compression failed,
 # continuing session" and skip compaction, so context overgrows past the model's
 # window and the provider rejects with 400 "prompt too long".
-model = "ollama:qwen3.5:397b"
+model = "openrouter:qwen/qwen3.5-397b-a17b"
 max_tokens = 16000  # Enough for decision + summary
 temperature = 0.3  # Lower temperature for consistent decisions
 top_p = 1.0
@@ -534,92 +539,22 @@ ignore_cost = false  # When true, compression decision API cost is not tracked (
 # Master switch for the whole control plane
 enabled = true
 # Shared cheap model for supervisor mechanics (a mechanic may override)
-model = "ollama:deepseek-v4-flash"
-# Evidence-bound claims: have the agent back load-bearing repo facts with a
-# verbatim «quote», then deterministically verify each quote occurs in a tool
-# result; fabricated citations are re-grounded via the verify-gate (needs gate.enabled).
-claim_check = true
-# Circuit-breaker: hard-stop a turn after this many consecutive tool rounds that emitted
-# a steer without the model breaking out (a steer is advisory, so a loop can otherwise
-# ignore it forever and burn tokens). 0 = unlimited (off).
-max_consecutive_steers = 0
-
+model = "openrouter:deepseek/deepseek-v4-flash-0731"
 [supervisor.learning]
-# Enable the learning system
+# Enable the learning system (lessons + orientation memory, distill + recall)
 enabled = true 
 # Model for extraction and retrieval LLM calls (cheap model recommended)
-model = "ollama:qwen3.5:397b"
+model = "openrouter:qwen/qwen3.7-flash"
 # Backend: "file" (default, zero deps) or "mcp" (external tool with field mapping)
 backend = "file"
-# Minimum user messages before intermediate learning triggers during auto-compaction
-min_messages_for_intermediate = 3
-# Maximum lessons to inject into the system prompt per session
-max_inject = 5
-
-# Orientation memory: durable understanding of the subject (decisions,
-# structure, constraints). Injected as working assumptions to verify.
-[supervisor.orientation]
-enabled = true
-max_inject = 5
-# Soft time-decay: entries unused this many days lose confidence (no git needed)
-decay_days = 90
-
-# Detectors: deterministic, free, every turn -- the cheap trigger that decides
-# when (rarely) to wake the model.
-[supervisor.detectors]
-# Identical tool+args this many times in a row -> loop fired
-loop_threshold = 3
-# Turns without new information -> drift candidate
-no_progress_window = 5
-# Consecutive truncated tool results in a row -> model is ignoring the truncation
-# notice and re-querying without narrowing (tool-agnostic, keyed on the sentinel)
-truncation_threshold = 2
-# Consecutive deduplicated tool results in a row -> model is re-issuing calls whose
-# output it already received (tool-agnostic, keyed on the dedup sentinel)
-dedup_threshold = 2
-# Consecutive off-task RESULTS in a row -> model has drifted from the line of work it
-# was pursuing. Scores each result against a centroid of recent on-task results
-# (self-referential -> no task anchor, robust to abstract requests). 0 = OFF (default;
-# costs one embedding per sizable tool result when enabled). Set e.g. 3 to enable;
-# drift decisions are logged at debug so you can tune drift_floor before relying on it.
-distraction_threshold = 3
-# FLOOR (not a relevance boundary): a result is drift only if its cosine to the working
-# set falls BELOW this. Embeddings are reliable at "clearly unrelated", not at "is this
-# relevant" -> keep it in the tail. Lower = stricter. Model-dependent; tune from logs.
-# (Diagnostic on the default model: on-task ~0.79, off-task ~0.63-0.73 -> ~0.70 floor.)
-drift_floor = 0.7
-# Inject the self-report status-token instruction and parse it back
-self_report = true
-# Consecutive single-tool-call ROUNDS in a row -> the model is issuing one tool call
-# per turn where independent calls could be batched into one parallel round. Scores
-# round arity (calls per turn), not call content. 0 = OFF (default): single calls are
-# often legitimate (dependent calls, or one real action), so this stays advisory and
-# off unless over-sequencing is hurting you. Set e.g. 3 to enable.
-# octobench: enabled — glm-5.2 issues one `view` per round (~48 sequential reads
-# on tox), and with no provider-side prompt caching every extra round re-bills
-# the whole context; the batching steer directly cuts rounds.
-sequential_threshold = 3
-# Cap how many batching steers one turn may receive. Without it the steer
-# re-fires on every qualifying round, so a read-heavy stretch collects a long
-# tail of identical advisories that cost context and stop being informative.
-# octobench: 2 — enough to correct over-sequencing, not enough to nag.
-sequential_max_steers_per_turn = 2
-# Re-read advisory: successful reads of the same unmutated path this many times
-# -> nudge to use the copy already in context. Mutating a path resets its counter
-# (edit-verify loops never trip it); shares the sequential advisory budget.
-# octobench: measured 350/374 views were re-reads (~269k re-fetched tokens) on
-# rustls — glm-5.2 re-fetches instead of retaining; the advisory directly cuts it.
-reread_threshold = 4
-
 # Verify-gate: on self-reported `done`, run a checklist before accepting.
+# The free deterministic pre-gate and goal recitation are always on; detector
+# thresholds are fixed constants in v7 rather than user configuration.
 [supervisor.gate]
 enabled = true
 
 max_tokens = 24000
 
-# Max gate re-entry iterations (bounds over-verification). Shared budget across
-# the free pre-gate and the LLM verify-gate.
-max_iterations = 2
 # Model the gate verifies WITH (also runs the task classifier / conditions
 # compiler). Cross-family is the default guidance, but instrumented traces
 # (2026-08-12) showed minimax-m3 dropping mandated rules on both seats —
@@ -629,34 +564,20 @@ max_iterations = 2
 # Transport matters: the ollama-served variant answers without its reasoning
 # pass (measured: bare 9s PASS verdicts, 2-line checklists) while the
 # openrouter-served one reasons deeply on identical input (A/B 2026-08-12).
-verifier_model = "ollama:deepseek-v4-flash"
+# Measured 2026-08-23 by replaying the real GATE_PROMPT on a turn the gate
+# wrongly passed: ollama:deepseek-v4-flash emitted ZERO protocol lines on both
+# attempts - no evidence shapes, no condition checklist - so every verdict
+# parsed as Indeterminate. openrouter:qwen/qwen3.7-flash returned the full
+# protocol 2/2 and flagged the missed condition as a gap. Schema enforcement is
+# unavailable on ollama cloud: it accepts the schema parameter and ignores it,
+# so the verifier must sit on a route that can be held to the contract.
+verifier_model = "openrouter:qwen/qwen3.7-flash"
 
-# Free deterministic pre-gate (no model call): refuse a `done` claim when code
-# was changed but no successful check (build/test/lint/etc.) ran since the change.
-require_check_after_mutation = true
-require_plan_complete = true
-# octobench: observe-before-changing invariant (new pre-gate; see octomind gate docs)
-require_repro_before_mutation = true
-
-# Adaptive external plan manager required by current Octomind HEAD. Keep its
-# helper model aligned with the existing supervisor, gate, and condense path.
+# Adaptive external plan manager. Keep its helper model aligned with the
+# existing supervisor and condense path.
 [supervisor.plan]
 enabled = true
-model = "ollama:deepseek-v4-flash"
-# Output budget for the planner's structured JSON decision.
-max_tokens = 2048
-# Input budget for the newest assistant/tool trajectory slice.
-trajectory_max_tokens = 4096
-# Conservative automatic-adoption thresholds; explicit signals still work.
-adoption_min_actions = 8
-adoption_min_distinct_actions = 4
-
-# Goal recitation: re-inject the live goal (anchor intent + next_steps) at the
-# context tail each turn on long (already-compacted) sessions, so it stays in the
-# high-attention recency window instead of buried in the mid-transcript summary.
-# Short sessions (no compaction yet -> empty anchor) pay nothing.
-[supervisor.recite]
-enabled = true
+model = "openrouter:deepseek/deepseek-v4-flash-0731"
 
 # Condense: task-aware narrowing of oversized tool outputs. When a tool result
 # exceeds tokens_threshold, ONE cheap-model call per round decides what the
@@ -673,19 +594,20 @@ enabled = true
 # path that fires earlier.
 tokens_threshold = 5000
 # Model that does the narrowing (cheap + fast recommended).
-model = "ollama:deepseek-v4-flash"
-
-# Delegate gate: handoff quality check before a subagent is spawned.
-[supervisor.delegate]
-enabled = true
-model = "ollama:qwen3.5:397b"
-max_revisions = 2
+model = "openrouter:deepseek/deepseek-v4-flash-0731"
 
 [[roles]]
 name = "judge"
 temperature = 0.0
 top_p = 1.0
 top_k = 1
+# A verdict is a small JSON object: measured over 318 real panel verdicts the
+# largest was 1,605 chars (~401 tokens). Inheriting the global 32000 made every
+# judge call reserve ~80x what it can use, and OpenRouter reserves against
+# max_tokens, so the panel started returning 402 "requires more credits, or
+# fewer max_tokens" long before the balance was actually spent. 8192 leaves
+# 20x headroom, including for a panel model that emits reasoning.
+max_tokens = 8192
 system = """
 You are a strict benchmark judge for octobench.
 Return ONLY valid JSON matching the requested schema.

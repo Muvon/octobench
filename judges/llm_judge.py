@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import re
+import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict
 
@@ -142,6 +144,27 @@ JUDGE_BUDGET = {
 }
 
 
+# A score is the mean of the FULL panel or it is not a score. Averaging only the
+# judges that happened to answer silently changes the rubric per record: a turn
+# judged by one model is not comparable to one judged by three, and the case that
+# scored 0 next to a passing exit code looked exactly like a bad answer. Missing
+# judges are retried; a panel still short after this many rounds is recorded as
+# unjudged for scripts/audit_judges.py to find, never as a low score.
+JUDGE_PANEL_ATTEMPTS = 3
+JUDGE_RETRY_BACKOFF_S = 10
+
+
+def _is_valid_verdict(v: Dict) -> bool:
+    """A verdict that may enter the panel mean.
+
+    Empty-zero verdicts (score 0 with no reasoning) are failed judgments that
+    happened to parse — a genuine 0 has to say why.
+    """
+    if v.get("_judge_parse_error") or not isinstance(v.get("score"), (int, float)):
+        return False
+    return not (float(v["score"]) == 0 and not str(v.get("reasoning") or "").strip())
+
+
 def _clamp(text: str, head: int, tail: int) -> str:
     if not text or len(text) <= head + tail:
         return text
@@ -186,30 +209,40 @@ def run_judge(prompt_payload: Dict, judge_cfg: Dict, workdir: str) -> Dict:
 
     # Panel: every model judges the SAME payload independently (in parallel —
     # wall time stays that of the slowest judge); the record's score/confidence
-    # are the mean over judges that produced a valid verdict.
+    # are the mean over the whole panel, retried until every judge answers.
     def _judge_one(model: str) -> Dict:
         v = _run_single_judge(prompt, _cfg_for_model(judge_cfg, model), workdir)
         v["_judge_model"] = model
         return v
 
-    with ThreadPoolExecutor(max_workers=len(models)) as pool:
-        verdicts = list(pool.map(_judge_one, models))
+    by_model: Dict[str, Dict] = {}
+    pending = list(models)
+    for attempt in range(JUDGE_PANEL_ATTEMPTS):
+        if attempt:
+            print(f"[judge] panel short — retry {attempt}/{JUDGE_PANEL_ATTEMPTS - 1}"
+                  f" for {pending}", file=sys.stderr, flush=True)
+            time.sleep(JUDGE_RETRY_BACKOFF_S * attempt)
+        with ThreadPoolExecutor(max_workers=len(pending)) as pool:
+            for v in pool.map(_judge_one, pending):
+                by_model[v["_judge_model"]] = v
+        pending = [m for m in models if not _is_valid_verdict(by_model[m])]
+        if not pending:
+            break
 
-    valid = [
-        v for v in verdicts
-        if not v.get("_judge_parse_error")
-        and isinstance(v.get("score"), (int, float))
-        # Empty-zero verdicts (score 0, no reasoning) are failed judgments that
-        # happened to parse — a genuine 0 must say why. Exclude from the mean.
-        and not (float(v["score"]) == 0 and not str(v.get("reasoning") or "").strip())
-    ]
-    if not valid:
+    verdicts = [by_model[m] for m in models]
+    valid = [v for v in verdicts if _is_valid_verdict(v)]
+    if pending:
+        print(f"[judge] INCOMPLETE PANEL — {len(valid)}/{len(models)} verdicts after "
+              f"{JUDGE_PANEL_ATTEMPTS} attempts; missing {pending}",
+              file=sys.stderr, flush=True)
         data = {
             "score": 0,
-            "reasoning": "All panel judges failed to produce a verdict",
-            "issues": [f"{v['_judge_model']}: {v.get('issues')}" for v in verdicts],
+            "reasoning": f"Incomplete panel: {len(valid)}/{len(models)} judges "
+                         f"produced a verdict after {JUDGE_PANEL_ATTEMPTS} attempts",
+            "issues": [f"{m}: no verdict" for m in pending],
             "confidence": 0.0,
             "_judge_parse_error": True,
+            "_judge_incomplete": True,
         }
     else:
         data = {
@@ -248,4 +281,30 @@ if __name__ == "__main__":
     # parser self-check: a `}` inside a string value must not truncate the payload
     out = _extract_json('log noise <results>{"score": 7, "reasoning": "used dict {k: v}"}</results> tail')
     assert out["score"] == 7 and out["reasoning"].endswith("}"), out
+
+    # panel self-check: a judge that fails once is retried and its verdict counts;
+    # a judge that never answers leaves the record unjudged, not low-scored.
+    assert _is_valid_verdict({"score": 90, "reasoning": "ok"})
+    assert not _is_valid_verdict({"score": 0, "reasoning": ""})
+    assert not _is_valid_verdict({"score": 90, "_judge_parse_error": True})
+
+    JUDGE_RETRY_BACKOFF_S = 0
+    calls: Dict[str, int] = {}
+
+    def _fake(prompt, cfg, workdir, _flaky=("b",), _dead=("c",)):
+        m = cfg["model"]
+        calls[m] = calls.get(m, 0) + 1
+        if m in _dead or (m in _flaky and calls[m] == 1):
+            return {"score": 0, "reasoning": "", "_judge_parse_error": True}
+        return {"score": 90, "reasoning": "fine", "confidence": 0.9}
+
+    _real, _run_single_judge = _run_single_judge, _fake
+    cfg = {"models": ["a", "b", "c"], "command": []}
+    payload = {"task": "t", "validation_exit_code": 0}
+    assert run_judge(payload, {**cfg, "models": ["a", "b"]}, ".")["score"] == 90
+    assert calls["b"] == 2, calls          # the flaky judge was retried, not dropped
+    incomplete = run_judge(payload, cfg, ".")
+    assert incomplete["_judge_incomplete"] and incomplete["confidence"] == 0.0
+    assert calls["c"] == JUDGE_PANEL_ATTEMPTS, calls
+    _run_single_judge = _real
     print("ok")

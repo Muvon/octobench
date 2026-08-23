@@ -220,50 +220,44 @@ longer sequences can earn more; every sequence has ≥5 turns, making turns 1–
 uniform 20×5 cross-language grid for depth analysis.
 
 Session-resume mechanics per client: claude `--resume <session-id>`, octomind
-`-r <session-name>`, codex `exec resume <id>`; opencode has no resume — it runs
-each turn with fresh context and serves as the no-memory control. Sequences
+`-r <session-name>`, codex `exec resume <id>`, opencode `run --session <id>`.
+Every client carries one session across a sequence's turns. Sequences
 live in `cases/dev/longrun/<language>/<repo>/` (20 sequences, 112 turns, 4 per
 language), each proven fail-to-pass per turn cumulatively
 (`scripts/verify_longrun.sh`). Provenance rules (merge-commit golds, same base
 branch, interleaved-commit checks) are in `docs/LONGRUN.md`.
 
-> **Methodology split.** The opus, gpt56-sol, gpt56-luna and luna-octomind
-> columns were produced before the harmonized-prompt rules above: each client
-> ran its own stock prompt, tool surface and web access. The glm-5.2-opencode
-> column uses the shared prompt and sealed network, so it must not be compared
-> directly with those legacy columns.
-
 <!-- LONGRUN-RESULTS:BEGIN -->
-_Updated 2026-08-16 04:49 UTC. Cell = passed/turns · Σ sum of turn final scores · cost · total tokens (incl. cache reads) · agent wall time (sum of agent invocations; excludes setup/validation/judging)._
+_Updated 2026-08-22 16:39 UTC. Cell = passed/turns · Σ sum of turn final scores · cost · total tokens (incl. cache reads) · agent wall time (sum of agent invocations; excludes setup/validation/judging)._
 
-| sequence (turns) | opus | gpt56-sol | gpt56-luna | luna-octomind | glm-5.2-opencode |
+| sequence (turns) | glm-5.3-octomind | glm-5.3-opencode | gpt-5.6-luna-octomind | gpt-5.6-sol-codex | gpt-5.6-luna-codex |
 |---|---|---|---|---|---|
-| cpp/ada (7) | 7/7 Σ596.2 $8.70 10.7M 20m | 7/7 Σ555.5 $3.62 4.2M 8m | 7/7 Σ582.9 $0.14 4.3M 8m | 7/7 Σ600.4 $0.27 9.1M 31m | 7/7 Σ568.0 $4.05 12.2M 41m |
-| cpp/cli11 (8) | 8/8 Σ678.5 $23.76 32.7M 64m | 8/8 Σ616.1 $8.24 12.0M 19m | 7/8 Σ567.7 $0.63 24.8M 26m | 8/8 Σ659.5 $0.63 21.1M 52m | 6/8 Σ511.7 $6.55 19.9M 68m |
-| cpp/fmt (7) | 7/7 Σ582.1 $10.69 12.9M 24m | 6/7 Σ483.5 $2.06 2.4M 7m | 7/7 Σ572.1 $0.12 3.7M 7m | 7/7 Σ583.0 $0.47 16.2M 43m | 6/7 Σ485.5 $2.73 7.5M 41m |
-| cpp/simdjson (5) | 5/5 Σ409.1 $77.34 118.5M 101m | 5/5 Σ380.6 $8.49 12.3M 18m | 5/5 Σ399.4 $0.53 20.0M 18m | 4/5 Σ320.6 $0.75 27.6M 53m | 4/5 Σ329.0 $15.39 51.3M 117m |
-| js/axios (5) | 3/5 Σ257.7 $10.85 13.0M 33m | 3/5 Σ260.5 $1.66 1.5M 6m | 2/5 Σ206.0 $0.06 1.5M 5m | 2/5 Σ201.9 $0.26 8.8M 24m | 2/5 Σ197.4 $1.50 4.0M 33m |
-| js/fastify (5) | 5/5 Σ422.1 $11.61 14.8M 30m | 4/5 Σ322.3 $2.54 3.0M 6m | 4/5 Σ335.8 $0.14 4.0M 6m | 5/5 Σ415.6 $0.40 13.7M 35m | 5/5 Σ400.0 $4.04 12.4M 46m |
-| js/nest (5) | 5/5 Σ421.8 $5.18 5.3M 12m | 5/5 Σ404.8 $1.56 1.5M 5m | 5/5 Σ417.3 $0.15 4.9M 10m | 3/5 Σ289.0 $0.28 9.5M 27m | 5/5 Σ405.7 $1.78 4.6M 32m |
-| js/vue (5) | 5/5 Σ421.8 $6.45 6.8M 14m | 5/5 Σ323.3 $1.53 1.5M 5m | 5/5 Σ414.7 $0.08 2.2M 6m | 5/5 Σ349.8 $0.33 11.7M 12m | 5/5 Σ412.7 $2.84 8.4M 30m |
-| php/doctrine_orm (6) | 6/6 Σ498.6 $14.17 17.9M 21m | 4/6 Σ325.8 $2.89 3.6M 8m | 4/6 Σ341.7 $0.13 3.5M 8m | 4/6 Σ341.4 $0.67 24.5M 31m | 6/6 Σ483.2 $6.63 20.3M 59m |
-| php/guzzle (5) | 4/5 Σ353.6 $24.42 34.3M 40m | 4/5 Σ325.8 $4.47 5.1M 13m | 4/5 Σ316.9 $0.29 8.6M 15m | 4/5 Σ334.0 $0.91 28.5M 50m | 4/5 Σ326.3 $9.80 31.4M 74m |
-| php/phpspreadsheet (6) | 6/6 Σ501.8 $15.13 17.9M 67m | 5/6 Σ401.7 $3.84 4.0M 10m | 4/6 Σ338.4 $0.18 5.8M 10m | 5/6 Σ411.7 $0.56 19.5M 26m | — |
-| php/symfony (5) | 5/5 Σ425.5 $6.53 7.4M 12m | 5/5 Σ385.2 $1.50 1.2M 5m | 5/5 Σ415.0 $0.14 4.1M 7m | 5/5 Σ417.6 $0.24 7.7M 16m | — |
-| python/aiohttp (6) | 6/6 Σ500.3 $6.74 7.6M 12m | 6/6 Σ472.0 $1.18 1.0M 4m | 6/6 Σ482.6 $0.05 1.2M 4m | 6/6 Σ485.8 $0.17 5.2M 18m | — |
-| python/mypy (5) | 5/5 Σ408.8 $18.15 22.1M 73m | 5/5 Σ374.0 $2.32 2.3M 8m | 4/5 Σ327.0 $0.19 5.7M 10m | 4/5 Σ326.1 $0.38 12.1M 24m | — |
-| python/pydantic (5) | 5/5 Σ418.9 $18.65 24.2M 31m | 5/5 Σ387.4 $1.93 2.0M 6m | 4/5 Σ333.9 $0.11 3.1M 7m | 5/5 Σ405.9 $0.31 10.5M 14m | — |
-| python/pytest (5) | 5/5 Σ413.7 $15.88 21.2M 45m | 5/5 Σ381.1 $2.30 2.4M 7m | 5/5 Σ389.2 $0.09 2.2M 6m | 5/5 Σ392.0 $0.48 15.2M 25m | — |
-| rust/clap (5) | 5/5 Σ413.7 $12.81 17.0M 25m | 5/5 Σ390.3 $3.24 3.9M 10m | 5/5 Σ405.9 $0.19 6.0M 8m | 5/5 Σ410.2 $0.27 8.8M 22m | — |
-| rust/gitoxide (6) | 5/6 Σ439.0 $14.75 18.3M 26m | 5/6 Σ408.2 $3.35 3.9M 7m | 5/6 Σ425.2 $0.18 5.6M 7m | 5/6 Σ424.8 $0.48 17.2M 24m | — |
-| rust/ruff (6) | 5/6 Σ423.7 $45.67 68.6M 203m | 6/6 Σ460.0 $15.70 24.7M 35m | 6/6 Σ469.8 $0.44 16.8M 17m | 5/6 Σ412.7 $0.92 33.5M 43m | — |
-| rust/tokio (5) | 5/5 Σ421.6 $8.30 8.6M 40m | 5/5 Σ391.7 $1.46 1.7M 4m | 5/5 Σ384.4 $0.07 2.1M 4m | 5/5 Σ408.7 $0.14 4.0M 8m | — |
+| cpp/ada (7) | 7/7 Σ575.1 $1.38 4.0M 20m | 7/7 Σ576.7 $2.15 6.7M 23m | 6/7 Σ526.7 $0.20 6.4M 19m | 7/7 Σ562.9 $4.76 7.0M 12m | 7/7 Σ582.2 $0.16 5.3M 8m |
+| cpp/cli11 (8) | 8/8 Σ641.4 $5.32 14.1M 77m | 8/8 Σ622.8 $5.68 19.1M 59m | 8/8 Σ657.1 $0.49 18.4M 28m | 8/8 Σ621.0 $5.87 8.2M 18m | 8/8 Σ644.0 $0.81 33.6M 45m |
+| cpp/fmt (7) | 7/7 Σ564.0 $2.22 6.1M 30m | 7/7 Σ570.3 $1.49 4.3M 21m | 7/7 Σ577.5 $0.21 6.7M 19m | 7/7 Σ533.1 $3.81 4.9M 12m | 7/7 Σ550.9 $0.17 5.9M 11m |
+| cpp/simdjson (5) | 4/5 Σ317.4 $3.76 10.1M 77m | 4/5 Σ320.7 $5.00 15.9M 50m | 0/5 Σ83.0 $0.51 19.5M 28m | 5/5 Σ386.6 $4.86 6.8M 12m | 5/5 Σ403.8 $0.47 18.4M 20m |
+| js/axios (5) | 2/5 Σ196.3 $1.04 3.2M 14m | 2/5 Σ197.7 $1.31 4.0M 34m | 2/5 Σ208.6 $0.10 2.7M 10m | 2/5 Σ178.2 $2.65 2.8M 10m | 2/5 Σ209.1 $0.10 3.0M 9m |
+| js/fastify (5) | 5/5 Σ400.1 $2.79 8.6M 37m | 4/5 Σ332.8 $1.26 3.6M 30m | 4/5 Σ340.7 $0.30 9.8M 20m | 5/5 Σ395.7 $3.36 4.3M 11m | 4/5 Σ344.7 $0.15 5.2M 8m |
+| js/nest (5) | 4/5 Σ337.9 $1.74 5.2M 25m | 5/5 Σ410.0 $1.26 3.7M 17m | 4/5 Σ354.9 $0.13 3.5M 10m | 5/5 Σ400.3 $2.29 2.6M 8m | 5/5 Σ423.1 $0.14 4.6M 9m |
+| js/vue (5) | 5/5 Σ413.3 $1.85 4.7M 33m | 5/5 Σ408.5 $2.12 6.6M 24m | 5/5 Σ422.2 $0.26 8.8M 14m | 5/5 Σ395.9 $2.38 2.9M 9m | 5/5 Σ386.7 $0.09 2.4M 7m |
+| php/doctrine_orm (6) | 5/6 Σ409.7 $4.59 13.5M 50m | 6/6 Σ464.4 $4.18 13.7M 28m | 6/6 Σ481.0 $0.38 13.7M 23m | 4/6 Σ328.1 $4.47 5.7M 12m | 4/6 Σ358.5 $0.19 6.3M 12m |
+| php/guzzle (5) | 4/5 Σ319.0 $3.00 7.3M 40m | 4/5 Σ326.6 $4.91 15.0M 33m | 4/5 Σ337.2 $0.26 8.4M 20m | 4/5 Σ324.0 $5.75 7.7M 16m | 4/5 Σ340.7 $0.36 13.1M 19m |
+| php/phpspreadsheet (6) | 5/6 Σ411.4 $4.56 14.1M 102m | 6/6 Σ481.7 $2.68 8.5M 56m | 6/6 Σ480.8 $0.50 16.4M 25m | 6/6 Σ459.2 $4.06 5.1M 14m | 5/6 Σ425.5 $0.22 7.2M 13m |
+| php/symfony (5) | 5/5 Σ404.4 $2.07 5.3M 22m | 5/5 Σ405.7 $3.58 12.1M 15m | 5/5 Σ414.2 $0.23 5.1M 8m | 5/5 Σ397.6 $2.53 2.7M 9m | 5/5 Σ418.2 $0.11 3.3M 6m |
+| python/aiohttp (6) | 6/6 Σ482.7 $1.35 3.6M 18m | 6/6 Σ493.0 $1.20 3.6M 11m | 6/6 Σ523.0 $0.14 3.5M 10m | 6/6 Σ457.4 $1.92 2.0M 6m | 6/6 Σ490.4 $0.10 3.0M 6m |
+| python/mypy (5) | 5/5 Σ361.0 $1.24 2.9M 58m | 5/5 Σ387.6 $5.77 18.2M 62m | 4/5 Σ329.5 $0.27 8.6M 35m | 5/5 Σ372.7 $3.70 4.5M 12m | 5/5 Σ388.2 $0.32 11.8M 16m |
+| python/pydantic (5) | 5/5 Σ376.4 $0.98 2.7M 28m | 5/5 Σ390.6 $4.56 14.4M 30m | 5/5 Σ378.6 $0.19 6.0M 12m | 5/5 Σ385.1 $3.28 4.0M 10m | 5/5 Σ409.1 $0.19 6.1M 11m |
+| python/pytest (5) | 5/5 Σ393.5 $3.60 11.2M 47m | 5/5 Σ399.2 $6.13 20.1M 48m | 5/5 Σ397.3 $0.20 6.0M 18m | 5/5 Σ374.0 $5.93 8.2M 18m | 5/5 Σ401.1 $0.19 6.1M 12m |
+| rust/clap (5) | 5/5 Σ378.3 $1.25 3.6M 26m | 5/5 Σ403.3 $2.09 6.9M 16m | 5/5 Σ420.5 $0.26 8.1M 22m | 5/5 Σ390.5 $4.50 5.6M 17m | 5/5 Σ409.9 $0.24 8.8M 11m |
+| rust/gitoxide (6) | 5/6 Σ418.1 $2.23 5.7M 27m | 5/6 Σ418.9 $4.07 12.6M 28m | 6/6 Σ504.6 $0.32 11.2M 19m | 5/6 Σ405.4 $3.88 5.2M 9m | 5/6 Σ436.2 $0.24 8.4M 10m |
+| rust/ruff (6) | 5/6 Σ397.7 $6.55 18.5M 87m | 6/6 Σ468.5 $22.01 77.8M 97m | 5/6 Σ415.8 $0.67 25.6M 27m | 5/6 Σ381.3 $11.49 17.6M 27m | 5/6 Σ413.8 $0.47 17.5M 23m |
+| rust/tokio (5) | 5/5 Σ397.4 $0.88 2.6M 11m | 5/5 Σ410.1 $1.80 5.5M 23m | 4/5 Σ320.7 $0.10 2.6M 7m | 5/5 Σ395.8 $2.23 2.6M 8m | 5/5 Σ381.6 $0.13 4.2M 7m |
 
-- **opus**: 20/20 sequences · 107/112 turns passed · ΣΣ 9008.3 · $355.80 · 480M tokens · 14.9h agent time
-- **gpt56-sol**: 20/20 sequences · 103/112 turns passed · ΣΣ 8049.8 · $73.88 · 94M tokens · 3.2h agent time
-- **gpt56-luna**: 20/20 sequences · 99/112 turns passed · ΣΣ 8125.8 · $3.92 · 130M tokens · 3.1h agent time
-- **luna-octomind**: 20/20 sequences · 99/112 turns passed · ΣΣ 8190.7 · $8.92 · 304M tokens · 9.6h agent time
-- **glm-5.2-opencode**: 10/20 sequences · 50/58 turns passed · ΣΣ 4119.4 · $55.30 · 172M tokens · 9.0h agent time
+- **glm-5.3-octomind**: 20/20 sequences · 102/112 turns passed · ΣΣ 8195.2 · $52.40 · 147M tokens · 13.8h agent time
+- **glm-5.3-opencode**: 20/20 sequences · 105/112 turns passed · ΣΣ 8489.2 · $83.24 · 272M tokens · 11.7h agent time
+- **gpt-5.6-luna-octomind**: 20/20 sequences · 97/112 turns passed · ΣΣ 8173.9 · $5.69 · 191M tokens · 6.2h agent time
+- **gpt-5.6-sol-codex**: 20/20 sequences · 104/112 turns passed · ΣΣ 8144.6 · $83.72 · 110M tokens · 4.2h agent time
+- **gpt-5.6-luna-codex**: 20/20 sequences · 102/112 turns passed · ΣΣ 8417.9 · $4.83 · 174M tokens · 4.4h agent time
 <!-- LONGRUN-RESULTS:END -->
 
 ## What a case is

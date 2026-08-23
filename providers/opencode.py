@@ -38,8 +38,16 @@ class OpencodeProvider(Provider):
             "json",
             "-m",
             provider_model,
-            prompt,
         ]
+        # Multi-turn sequences resume the SAME session, exactly like the other
+        # clients: `opencode run -s <id>` continues a prior session. Without it
+        # every turn starts from an empty context, which is not a cheaper agent
+        # but a different benchmark — measured on rust/tokio, a memoryless
+        # opencode held a flat ~15k prefix while resuming clients grew to 70k,
+        # and it failed the one turn that depended on earlier work.
+        if resume_session_id:
+            cmd += ["--session", resume_session_id]
+        cmd.append(prompt)
 
         # DockerExecutor uses `docker exec -i` because other providers receive
         # their prompt on stdin. OpenCode receives its prompt as argv; explicitly
@@ -55,6 +63,7 @@ class OpencodeProvider(Provider):
         cached_input = 0
         last_text: Optional[str] = None
         tool_titles: list[str] = []
+        session_id: Optional[str] = resume_session_id
 
         for line in (proc.stdout or "").splitlines():
             line = line.strip()
@@ -66,10 +75,15 @@ class OpencodeProvider(Provider):
                 continue
             part = obj.get("part") or {}
             typ = obj.get("type")
+            if session_id is None:
+                sid = part.get("sessionID") or obj.get("sessionID")
+                if isinstance(sid, str) and sid:
+                    session_id = sid
             if typ == "step_finish":
                 tokens = part.get("tokens") or {}
-                # Per-step counters, summed over the run (opencode has no resume,
-                # so there is nothing cumulative to subtract). Canonical
+                # Per-step counters, summed over the run: each step_finish is one
+                # API request and reports only that request, so a resumed session
+                # still bills only its own turn. Canonical
                 # semantics, identical to the other clients: cache writes are
                 # billed input, while reasoning remains separate from visible
                 # output and is billed explicitly by compute_cost().
@@ -100,6 +114,7 @@ class OpencodeProvider(Provider):
             output_tokens=output_tokens or None,
             reasoning_tokens=reasoning_tokens or None,
             total_tokens=total or None,
+            session_id=session_id,
             provider_trace={"tool_calls": tool_titles},
             raw_output=proc.stdout or "",
         )

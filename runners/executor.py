@@ -240,6 +240,26 @@ class DockerExecutor(Executor):
             env_args += ["-e", f"{k}={v}"]
 
         mounts = ["-v", f"{self._octomind_config}:{self.CFG}:ro"]
+
+        # octobench: client session state, kept on the HOST beside the workspace.
+        # Agents write their sessions inside the container, which is fine while a
+        # sequence runs (that is what `-r`/`--session` resume reads) but the
+        # container is removed at sequence end and takes the evidence with it —
+        # compaction summaries, fold points, what the agent believed it had done.
+        # Mounting it out costs nothing and makes a finished run investigable.
+        # claude and codex are deliberately absent: their state dirs already
+        # receive individual auth FILE mounts below, and mounting the parent
+        # directory would shadow them.
+        state_root = self._ws.parent / "state"
+        for sub, dest, env_var in (
+            ("octomind", "/octobench-state/octomind", "OCTOMIND_DATA_DIR"),
+            ("opencode", "/root/.local/share/opencode", None),
+        ):
+            host_dir = state_root / sub
+            host_dir.mkdir(parents=True, exist_ok=True)
+            mounts += ["-v", f"{host_dir}:{dest}"]
+            if env_var:
+                env_args += ["-e", f"{env_var}={dest}"]
         # octobench: optional octomind binary override (built-from-ref),
         # mounted over the baked binary so one image serves multiple refs.
         _ob = os.environ.get("OCTOMIND_BIN")
@@ -340,7 +360,13 @@ class DockerExecutor(Executor):
 
     def run(self, argv, env_overrides=None, input_text=None) -> ExecResult:
         self._ensure()
-        exec_cmd = ["docker", "exec", "-i", "-w", self._workdir]
+        # Attach stdin only when the caller supplies input. An unconditional
+        # `docker exec -i` inherits a detached tmux launcher's terminal and can
+        # stop on SIGTTIN before the agent starts (for example, guardrail setup).
+        exec_cmd = ["docker", "exec"]
+        if input_text is not None:
+            exec_cmd.append("-i")
+        exec_cmd += ["-w", self._workdir]
         if env_overrides:
             for k, v in env_overrides.items():
                 exec_cmd += ["-e", f"{k}={v}"]
