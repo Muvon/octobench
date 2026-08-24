@@ -238,7 +238,7 @@ Cost/token accounting across resumed turns:
 
 ## Available Cases
 
-20 cases across 5 languages (4 per language), all turns fail-to-pass proven
+25 cases across 5 languages (5 per language), all turns fail-to-pass proven
 in the agent image:
 
 | Language | Repo | Turns | Domain |
@@ -247,22 +247,27 @@ in the agent image:
 | Python   | pytest | 5 | fixture subsystem |
 | Python   | mypy | 5 | type-checker narrowing |
 | Python   | aiohttp | 6 | multipart header hardening |
+| Python   | cpython | 14 | asyncio lifecycle / cancellation correctness |
 | JavaScript | fastify | 5 | routing/content-type |
 | JavaScript | axios | 5 | HTTP client errors |
 | JavaScript | vue | 5 | reactivity core |
 | JavaScript | nest | 5 | DI container |
+| JavaScript | eslint | 15 | core-rule and autofix correctness |
 | C++      | fmt | 7 | formatter edges |
 | C++      | simdjson | 5 | JSON parser robustness |
 | C++      | ada | 7 | URL parsing / URLPattern |
 | C++      | cli11 | 8 | CLI parsing/config/help |
+| C++      | duckdb | 15 | optimizer and join correctness |
 | PHP      | guzzle | 5 | HTTP client hardening |
 | PHP      | symfony | 5 | structured-data pipeline |
 | PHP      | phpspreadsheet | 6 | spreadsheet object model |
 | PHP      | doctrine_orm | 6 | query layer / mapping validation |
+| PHP      | laravel | 12 | queues and Redis reliability |
 | Rust     | clap | 5 | CLI rendering surface |
 | Rust     | tokio | 5 | waker correctness |
 | Rust     | gitoxide | 6 | git-format conformance |
 | Rust     | ruff | 6 | ty type-checker correctness |
+| Rust     | cargo | 10 | build pipeline and resolver correctness |
 
 ## Creating a New Long-Run Case
 

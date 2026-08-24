@@ -1,0 +1,501 @@
+id: longrun_cpp_duckdb_optimizer
+name: DuckDB optimizer and join correctness (15-turn sequence)
+language: cpp
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/duckdb/duckdb
+  target_branch: main
+  base_sha: e5d6787a684fd90084704edbc412049760304a8f
+  prs: [24258, 24228, 24526, 24683, 24700, 24015, 24600, 24760, 24788, 24784, 24669, 24786, 24660, 24901, 24846]
+  continuity_theme: query planning, join reconstruction, filter pushdown, and semantics-preserving optimizer rewrites
+  provenance_note: >-
+    Fifteen chronological production-and-test changes merged to DuckDB main by
+    non-bot contributors and maintainers. PR bodies, reviews, commits, author
+    metadata, and trailers showed no declared AI use or AI co-author marker.
+    Divergent release-branch work, source-only patches, a change from a newly
+    created account with insufficient provenance history, and the already
+    published external-cache one-shot were excluded.
+  verified: true # all 15 cumulative fail-to-pass turns proven 2026-08-24
+turns:
+  - name: Keep UNION branches distinct when their table filters use different columns
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: composite
+    prompt_style: reproduction-report
+    spec_level: symptom-led
+    test_visibility: hidden
+    capability_tags: [debugging, query-optimizer, state-management]
+    instruction: |
+      A `UNION ALL` can return the wrong result when common-subplan
+      materialization sees two scans whose filters occupy the same projected
+      position but refer to different base columns. For example, after inserting
+      `(1, 10), (2, 20), (3, 30)` into `t(a, b)`, this query reports `2` for both
+      branches even though the second count must be `3`:
+
+      ```sql
+      SELECT 'a', count(*) FROM t WHERE a > 1
+      UNION ALL
+      SELECT 'b', count(*) FROM t WHERE b > 1;
+      ```
+
+      Fix common-subplan canonicalization so filter identity follows the actual
+      base column. Preserve materialization when the filtered subplans really
+      are identical, and decline it safely when a unique mapping cannot be
+      established.
+    gold_sha: 9f32ea718b5ab98cd8263ab7ba58d2d9f9a584a2
+    pr_url: https://github.com/duckdb/duckdb/pull/24258
+    issue_url: https://github.com/duckdb/duckdb/issues/23679
+    test_paths:
+      - test/sql/optimizer/test_common_subplan_table_filters.test
+    test_command: |
+      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/sql/optimizer/test_common_subplan_table_filters.test
+
+  - name: Preserve left association across mixed joins without ON clauses
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: composite
+    prompt_style: reproduction-report
+    spec_level: symptom-led
+    test_visibility: mixed
+    capability_tags: [parser, query-planner, debugging, cross-file]
+    instruction: |
+      Mixed NATURAL and explicit joins are being associated in the wrong order.
+      With `a(x)=(1)`, empty `b(x)`, `c(x)=(1)`, and `d(y)=(9)`, this should
+      return `(1, 9)`, not `(NULL, 9)`:
+
+      ```sql
+      SELECT c.x, d.y
+      FROM a NATURAL LEFT JOIN b
+      NATURAL JOIN c
+      RIGHT JOIN d ON TRUE;
+      ```
+
+      Make join forms that omit an `ON` clause bind only to their immediate
+      table input so the complete chain keeps SQL's expected left association.
+      Keep other NATURAL, CROSS, positional, and qualified join behavior intact.
+    gold_sha: 759c3dfd40f9d4833b86ca587f1789b4c10772e9
+    pr_url: https://github.com/duckdb/duckdb/pull/24228
+    issue_url: https://github.com/duckdb/duckdb/issues/24045
+    test_paths:
+      - test/sql/join/natural/natural_join.test
+    test_command: |
+      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/sql/join/natural/natural_join.test
+
+  - name: Restore column bindings after child ANY ANTI joins
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [crash]
+    prompt_source: composite
+    prompt_style: failure-report
+    spec_level: symptom-led
+    test_visibility: mixed
+    capability_tags: [query-planner, state-management, debugging]
+    instruction: |
+      A query that self-joins a view containing an ANTI JOIN and later binds a
+      `COALESCE` across the joined aliases can abort with:
+
+      `INTERNAL Error: Vector::Reference used on vector of different type (source BIGINT referenced VARCHAR)`
+
+      The column-binding resolver mutates its active bindings while visiting a
+      child ANY/ANTI join and leaves the wrong binding set installed for its
+      parent. Make that traversal restore the parent's binding context after the
+      child is bound. Existing SEMI/ANTI, nested-join, and projection binding
+      behavior must remain unchanged.
+    gold_sha: 89df4911a45806a1eb28eac7af1e8798b467efd1
+    pr_url: https://github.com/duckdb/duckdb/pull/24526
+    issue_url: https://github.com/duckdb/duckdb/issues/24288
+    test_paths:
+      - test/sql/join/test_predicate_binding.test
+    test_command: |
+      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/sql/join/test_predicate_binding.test
+
+  - name: Detect outer references carried by nested dependent joins
+    difficulty: expert
+    task_type: bug-fix
+    failure_modes: [crash]
+    prompt_source: composite
+    prompt_style: failure-report
+    spec_level: symptom-led
+    test_visibility: hidden
+    capability_tags: [query-planner, correlation, debugging, state-management]
+    instruction: |
+      A correlated query combining a lateral subquery, a nested dependent join,
+      and UNION/UNION ALL fails during planning with an internal "Failed to bind
+      column reference" error. The outer reference is carried in the nested
+      dependent join's correlation metadata rather than as a visible bound
+      expression, so subtree-access analysis incorrectly treats it as
+      independent.
+
+      Include dependent-join correlation metadata when deciding whether a
+      subtree needs the active outer domain. Only correlations referring to the
+      current flattener's active aliases should count; unrelated nested
+      correlations must stay independent.
+    gold_sha: 782f2f8229180d6d82d15320c1938ac566ea8710
+    pr_url: https://github.com/duckdb/duckdb/pull/24683
+    issue_url: https://github.com/duckdb/duckdb/issues/23860
+    test_paths:
+      - test/issues/general/test_23860.test
+    test_command: |
+      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/issues/general/test_23860.test
+
+  - name: Reuse recursive outer nested-loop state safely
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [crash]
+    prompt_source: pr-derived
+    prompt_style: symptom-report
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [query-execution, lifecycle, state-management, debugging]
+    instruction: |
+      Recursive CTEs containing a FULL or RIGHT outer nested-loop join can fail
+      when the executor reuses its local source state. Assertion builds try to
+      initialize an already initialized scan chunk; release builds can retain
+      duplicate vectors and later access them out of bounds.
+
+      Make one-time scan-chunk initialization follow the local state's lifetime.
+      On each recursive reuse, reset the existing chunk and replace only the
+      outer-match scan bookkeeping. FULL and RIGHT joins must produce the same
+      rows in materialized and non-materialized recursive CTEs across repeated
+      iterations.
+    gold_sha: ca9bf23600423863cf23c2762dee0b4c54945e42
+    pr_url: https://github.com/duckdb/duckdb/pull/24700
+    test_paths:
+      - test/sql/cte/materialized/test_outer_joins_recursive_cte_materialized.test
+      - test/sql/cte/test_outer_joins_recursive_cte.test
+    test_command: |
+      cmake --build build/debug --target unittest -j"$(nproc)" &&
+      build/debug/test/unittest test/sql/cte/materialized/test_outer_joins_recursive_cte_materialized.test &&
+      build/debug/test/unittest test/sql/cte/test_outer_joins_recursive_cte.test
+
+  - name: Simplify same-input greatest and least for row-group pruning
+    difficulty: medium
+    task_type: performance
+    failure_modes: [performance-regression]
+    prompt_source: composite
+    prompt_style: outcome-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [query-optimizer, performance, expression-rewrite]
+    instruction: |
+      Filters such as `greatest(r, r) = 101` and `least(r, r) = 101` do not
+      prune row groups even though they are equivalent to `r = 101`. This is
+      visible in both native scans and Parquet scans with zonemaps or bloom
+      filters.
+
+      Simplify GREATEST/LEAST when every argument is the same expression so the
+      ordinary comparison and row-group pruning machinery can see the base
+      column. Preserve null behavior, aliases, differing arguments, and the
+      existing behavior of the functions outside that provable identity.
+    gold_sha: 718aba0cbec72ebdd3d008a1037f4456e7024e48
+    pr_url: https://github.com/duckdb/duckdb/pull/24015
+    issue_url: https://github.com/duckdb/duckdb/issues/24013
+    test_paths:
+      - test/sql/copy/parquet/bloom_filters.test
+      - test/sql/function/generic/test_least_greatest.test
+    test_command: |
+      fixture=test/sql/optimizer/octobench_least_greatest_bloom_pruning.test
+      trap 'rm -f "$fixture"' EXIT
+      cp "$CASE_DIR/fixtures/least_greatest_bloom_pruning.test" "$fixture" &&
+      cmake --build build/debug --target unittest -j"$(nproc)" &&
+      build/debug/test/unittest "$fixture" &&
+      build/debug/test/unittest test/sql/function/generic/test_least_greatest.test
+
+  - name: Propagate safe statistics through materialized CTEs and array folds
+    difficulty: expert
+    task_type: performance
+    failure_modes: [crash, performance-regression]
+    prompt_source: pr-derived
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: mixed
+    capability_tags: [query-optimizer, statistics, performance, cross-file]
+    instruction: |
+      Propagate statistics from a non-recursive materialized CTE definition to
+      each reference so downstream optimization can use its column validity,
+      min/max bounds, and row cardinality. This should remove predicates proved
+      true or false, enable cardinality-safe aggregate rewrites such as
+      `sum_no_overflow` and `count_star`, and also work for the materialized CTE
+      produced while decorrelating lateral joins. Do not propagate anchor
+      statistics to a recursive CTE whose recurring table grows at runtime.
+
+      Array distance, inner-product, and cosine functions may propagate their
+      outer validity only when statistics also prove that neither array's child
+      elements can be NULL. If an element may be NULL, evaluation must remain
+      fallible and the optimizer must not remove the call or suppress its normal
+      error.
+
+      Also correct Top-N window elimination's group statistics: the replacement
+      aggregate sits below later filters and joins, so size it from the window's
+      partition-input statistics, not a final statistics map narrowed by
+      operators above the window. A join that keeps groups 0–3 from a 40-group
+      window must not under-size its perfect-hash aggregate or reject valid
+      input.
+    gold_sha: 6b8c8cc71b1e20bdbdb77eb9c1c231fd71bed5b8
+    pr_url: https://github.com/duckdb/duckdb/pull/24600
+    test_paths:
+      - test/optimizer/cte_statistics_propagation.test
+      - test/optimizer/test_aggregate_function_rewrite.test
+      - test/optimizer/topn_window_elimination_group_stats.test
+      - test/sql/optimizer/test_fd_derived_groups.test
+    test_command: |
+      cmake --build build/debug --target unittest -j"$(nproc)" &&
+      build/debug/test/unittest test/optimizer/cte_statistics_propagation.test &&
+      build/debug/test/unittest test/optimizer/test_aggregate_function_rewrite.test &&
+      build/debug/test/unittest test/optimizer/topn_window_elimination_group_stats.test
+
+  - name: Plan ASOF joins over EXCEPT ALL and INTERSECT ALL safely
+    difficulty: expert
+    task_type: bug-fix
+    failure_modes: [crash]
+    prompt_source: composite
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [query-planner, type-system, debugging, cross-file]
+    instruction: |
+      ASOF JOIN can fail with an internal vector/type mismatch when either child
+      is `EXCEPT ALL` or `INTERSECT ALL`:
+
+      ```sql
+      CREATE TABLE a(d INTEGER); INSERT INTO a VALUES (1), (2);
+      CREATE TABLE b(d INTEGER); CREATE TABLE r AS SELECT * FROM a;
+      SELECT * FROM (SELECT * FROM a EXCEPT ALL SELECT * FROM b) x
+      ASOF LEFT JOIN r y ON x.d >= y.d;
+      ```
+
+      Bag set operations add an internal row-number column during physical
+      planning. Keep that implementation column from corrupting the logical
+      child types consumed by ASOF planning. Cover set operations on either or
+      both sides, INNER and LEFT ASOF joins, and both loop-join and regular ASOF
+      planning paths while preserving the set operation's bag semantics.
+    gold_sha: ffe141b41e7d901853c43b397128aba673ccacde
+    pr_url: https://github.com/duckdb/duckdb/pull/24760
+    issue_url: https://github.com/duckdb/duckdb/issues/24672
+    test_paths:
+      - test/sql/join/asof/test_asof_join_setops.test
+    test_command: |
+      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/sql/join/asof/test_asof_join_setops.test
+
+  - name: Fold trivial ANY joins after statistics propagation
+    difficulty: complex
+    task_type: performance
+    failure_modes: [performance-regression]
+    prompt_source: pr-derived
+    prompt_style: outcome-request
+    spec_level: behavioral
+    test_visibility: mixed
+    capability_tags: [query-optimizer, statistics, performance]
+    depends_on: [7]
+    instruction: |
+      Statistics propagation can prove an ANY/BLOCKWISE nested-loop join
+      condition always true or always false, but that knowledge is currently
+      only used for comparison joins. An always-true ANY join remains an
+      expensive join instead of a cross product, while an always-false one
+      misses the empty-result simplification.
+
+      Share the proven-condition simplification with ANY joins. Fold true INNER
+      joins to cross products, false INNER joins to empty results, and preserve
+      the correct unmatched-row behavior for outer, semi, and anti variants.
+      Do not simplify conditions whose truth is not established.
+    gold_sha: 4f3f4f7deb0bea319b4fff06856cd15d4050637e
+    pr_url: https://github.com/duckdb/duckdb/pull/24788
+    test_paths:
+      - test/optimizer/any_join_condition_pruning.test
+      - test/sql/join/test_join_always_true_conditions.test
+    test_command: |
+      cmake --build build/debug --target unittest -j"$(nproc)" &&
+      build/debug/test/unittest test/optimizer/any_join_condition_pruning.test &&
+      build/debug/test/unittest test/sql/join/test_join_always_true_conditions.test
+
+  - name: Leave must-apply cost predicates for their owning join occurrence
+    difficulty: expert
+    task_type: bug-fix
+    failure_modes: [crash]
+    prompt_source: composite
+    prompt_style: failure-report
+    spec_level: symptom-led
+    test_visibility: hidden
+    capability_tags: [query-optimizer, state-management, debugging]
+    instruction: |
+      Join-order reconstruction can abort while planning a LEFT JOIN, a RIGHT
+      JOIN with a preserved-side filter, and a cross product connected through
+      WHERE:
+
+      `INTERNAL Error: Cost predicate 2 was consumed before operator occurrence 1`
+
+      Unused-residual collection is taking predicates that are reserved as
+      costing predicates for a must-apply operator, so their owner cannot consume
+      them later. Keep those predicates out of the unused-residual pool while
+      preserving normal residual collection and single-consumption checks.
+    gold_sha: 2b299d492317b0a748ecb645117a0ab7f907a8d5
+    pr_url: https://github.com/duckdb/duckdb/pull/24784
+    issue_url: https://github.com/duckdb/duckdb/issues/24690
+    test_paths:
+      - test/optimizer/joins/test_must_apply_residual_predicate.test
+    test_command: |
+      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/optimizer/joins/test_must_apply_residual_predicate.test
+
+  - name: Preserve infinite dates in timestamp comparison rewrites
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [rejected-valid-input]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [query-optimizer, boundary-analysis, type-system]
+    instruction: |
+      The timestamp-to-date equality optimizer throws `Conversion Error: Date
+      and time not in timestamp range` for valid infinite values, although the
+      same query returns one row with the optimizer disabled:
+
+      ```sql
+      CREATE TABLE ts_inf(t TIMESTAMP);
+      INSERT INTO ts_inf VALUES (TIMESTAMP '-infinity'),
+        (TIMESTAMP '2025-01-01'), (TIMESTAMP 'infinity');
+      SELECT count(*) FROM ts_inf WHERE CAST(t AS DATE) = DATE 'infinity';
+      ```
+
+      Handle positive and negative infinity without constructing overflowing
+      finite timestamp bounds. Support the constant on either side of equality
+      and preserve the existing finite-date range rewrite.
+    gold_sha: b72829332bd7c85adc11b200a98acfeede2db851
+    pr_url: https://github.com/duckdb/duckdb/pull/24669
+    issue_url: https://github.com/duckdb/duckdb/issues/24306
+    test_paths:
+      - test/optimizer/pushdown/timestamp_to_date_infinity_pushdown.test
+    test_command: |
+      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/optimizer/pushdown/timestamp_to_date_infinity_pushdown.test
+
+  - name: Reconstruct cross products spanning three or more relations
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [crash]
+    prompt_source: composite
+    prompt_style: reproduction-report
+    spec_level: symptom-led
+    test_visibility: hidden
+    capability_tags: [query-optimizer, graph-algorithms, debugging]
+    instruction: |
+      This valid query can fail during join-order reconstruction with `Operator
+      occurrence N was reconstructed more than once`:
+
+      ```sql
+      CREATE TABLE a AS SELECT i AS x FROM range(8) s(i);
+      CREATE TABLE b AS SELECT i AS x FROM range(8) s(i);
+      CREATE TABLE c AS SELECT i AS x FROM range(16) s(i);
+      CREATE TABLE d AS SELECT i AS x FROM range(8) s(i);
+      SELECT 1 FROM a, b, c INNER JOIN d ON (c.x > 0);
+      ```
+
+      A single-sided INNER JOIN predicate becomes a cross product in the query
+      graph, and one cross-product descriptor may legitimately fan out across
+      several edges in a bushy plan. Allow that reuse for unconstrained cross
+      products while retaining exact-once enforcement for constrained INNER,
+      LEFT, SEMI, and ANTI join occurrences.
+    gold_sha: a1353f264bc4dd9adb1962716057f57d7302a527
+    pr_url: https://github.com/duckdb/duckdb/pull/24786
+    issue_url: https://github.com/duckdb/duckdb/issues/24615
+    test_paths:
+      - test/optimizer/joins/single_sided_predicate_reconstruction.test
+    test_command: |
+      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/optimizer/joins/single_sided_predicate_reconstruction.test
+
+  - name: Keep nested struct extracts stable across repeated pruning
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: composite
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [query-optimizer, nested-data, state-management, debugging]
+    instruction: |
+      Top-N plans can read the wrong nested struct field when a field is reached
+      through a cast. For example, this returns `1000` instead of `30`:
+
+      ```sql
+      CREATE TABLE nested AS SELECT
+        {'id': k + 1000, 'ms': {'a': k + 200, 'b': k + 30}} AS v
+      FROM range(3) t(k);
+      SELECT (v.ms::STRUCT(b VARCHAR, a VARCHAR)).b
+      FROM nested ORDER BY v.id LIMIT 1;
+      ```
+
+      Late materialization and Top-N window elimination can run unused-column
+      pruning again after an extract was already pushed into the scan. Do not
+      reinterpret that already-narrowed column as a fresh root extraction.
+      Preserve the first pushdown, leave the remaining extract above it, and
+      return the same values with either optimizer disabled.
+    gold_sha: 663605dd8c99b9774c0f107572a5bb06af1c53af
+    pr_url: https://github.com/duckdb/duckdb/pull/24660
+    issue_url: https://github.com/duckdb/duckdb/issues/24657
+    test_paths:
+      - test/configs/storage_compatibility.json
+      - test/sql/optimizer/pushdown_extract_reapplied.test
+    test_command: |
+      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/sql/optimizer/pushdown_extract_reapplied.test
+
+  - name: Do not narrow filter constants through lossy file-schema casts
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: composite
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [filter-pushdown, type-system, data-correctness, debugging]
+    instruction: |
+      Multi-file filter pushdown changes query semantics when a file's physical
+      type is narrower than the presented schema. A FLOAT `0.1` read as DOUBLE
+      is `0.10000000149011612`; `c > 0.1` must match it and `c = 0.1` must not,
+      but narrowing the constant to FLOAT reverses both results.
+
+      Only rewrite a filter constant into the file's local type when that cast
+      is invertible and cannot round the predicate boundary. This applies to
+      ordinary and dynamic filters, IN and comparison predicates, and other
+      lossy numeric pairs such as BIGINT/DOUBLE and differing DECIMAL scales.
+      When narrowing is unsafe, keep the global predicate semantics while still
+      allowing the existing cast-aware statistics path to prune row groups.
+    gold_sha: 1eac65e7887762e639fcc61294d3f6e5425f8702
+    pr_url: https://github.com/duckdb/duckdb/pull/24901
+    issue_url: https://github.com/duckdb/duckdb/issues/24900
+    test_paths:
+      - test/sql/copy/parquet/parquet_filter_narrowing_cast.test
+    test_command: |
+      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/sql/copy/parquet/parquet_filter_narrowing_cast.test
+
+  - name: Preserve TRY_CAST and nested casts in Top-N late materialization
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [crash, wrong-result]
+    prompt_source: composite
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [query-optimizer, type-system, data-correctness]
+    instruction: |
+      Top-N window elimination's rowid late-materialization path rebuilds some
+      payload expressions incorrectly. `TRY_CAST(val AS INTEGER)` becomes a
+      strict cast and throws instead of returning NULL, while
+      `CAST(CAST(x AS INTEGER) AS DOUBLE)` loses the intermediate conversion and
+      can return `3.7` instead of `4.0`.
+
+      Only late-materialize payload expressions that the top projection can
+      reconstruct exactly. Plain column references and the existing supported
+      single non-try cast should remain eligible; TRY_CAST and multi-cast chains
+      must carry their computed payload through the aggregate. Keep Top-N window
+      elimination enabled, preserve its normal late-materialization wins, and
+      make results match the optimizer-disabled form.
+    gold_sha: 1db14f362be8fb4bc0af98cc40230e9de296b059
+    pr_url: https://github.com/duckdb/duckdb/pull/24846
+    issue_url: https://github.com/duckdb/duckdb/issues/24609
+    test_paths:
+      - test/sql/optimizer/topn_window_elimination_late_materialization.test
+    test_command: |
+      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/sql/optimizer/topn_window_elimination_late_materialization.test

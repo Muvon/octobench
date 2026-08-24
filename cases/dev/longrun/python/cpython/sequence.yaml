@@ -1,0 +1,377 @@
+id: longrun_python_cpython_asyncio
+name: CPython asyncio lifecycle and cancellation fixes (14-turn sequence)
+language: python
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/python/cpython
+  target_branch: main
+  base_sha: a74280e6696125acb7628facc577d0f975c4d69e
+  prs: [153134, 153762, 151983, 153810, 154223, 150867, 154649, 154798, 154898, 154538, 155144, 155889, 155942, 155936]
+  continuity_theme: asyncio cancellation, exception propagation, and transport resource ownership
+  provenance_note: >-
+    Fourteen chronological, human-authored CPython changes reviewed and merged
+    on main. Platform-only FIFO changes were excluded because they cannot be
+    proven fail-to-pass on the Linux benchmark image.
+  verified: true # all 14 cumulative fail-to-pass turns proven 2026-08-23
+turns:
+  - name: Close sockets when create_connection transport setup fails
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [resource-leak]
+    prompt_source: original-issue
+    prompt_style: symptom-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [async, lifecycle, resource-management, debugging]
+    instruction: |
+      `asyncio` leaks the socket passed to `_create_connection_transport()` when
+      protocol or transport construction fails before a transport exists. The
+      socket is currently closed only when awaiting an already-created transport
+      fails.
+
+      Make every pre-transport failure close the owned socket while preserving
+      the existing exception. Cover both an explicitly supplied socket and the
+      normal `create_connection()` path. Do not close a socket after ownership
+      has successfully transferred to a transport.
+    gold_sha: 374920a23d49130f446fe6369220bc548be57cd2
+    pr_url: https://github.com/python/cpython/pull/153134
+    test_paths:
+      - Lib/test/test_asyncio/test_base_events.py
+    test_command: |
+      ./python -m test test_asyncio.test_base_events -m test_create_connection_sock_transport_error_closes_sock -m test_create_connection_transport_error_closes_sock
+
+  - name: Preserve accepted sockets when sock_accept is cancelled
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [resource-leak, race]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [async, cancellation, concurrency, lifecycle]
+    instruction: |
+      There is a cancellation race in selector-based `loop.sock_accept()`:
+      readiness can remove the accept reader and accept a connection just as the
+      waiting future is cancelled. The accepted socket is then neither returned
+      nor closed, and the connection is silently dropped/leaked.
+
+      Make the readiness callback transfer the accepted socket only when it can
+      complete the future. If cancellation wins, close that socket deterministically.
+      Preserve normal accept behavior and cancellation propagation.
+    gold_sha: b090d06e7331c40b3c94e70b35a09f785b279e17
+    pr_url: https://github.com/python/cpython/pull/153762
+    test_paths:
+      - Lib/test/test_asyncio/test_sock_lowlevel.py
+    test_command: |
+      ./python -m test test_asyncio.test_sock_lowlevel -m test_sock_accept_racing
+
+  - name: Let Process.wait finish when the process exits
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [hang]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [async, process-lifecycle, state-management, compatibility]
+    instruction: |
+      `asyncio.subprocess.Process.wait()` currently waits for pipe transports to
+      close after the child has exited. If a descendant inherited stdout or
+      stderr and keeps that pipe open, `wait()` hangs even though the process's
+      return code is already available. This differs from the documented
+      behavior and from `subprocess.Popen.wait()`.
+
+      Complete process waiters when the child process exit is published, without
+      waiting for unrelated pipe EOF. Stream reads and `communicate()` must still
+      wait for their own output and transport cleanup normally.
+    gold_sha: f2521324e6bdf331460abec7c2a88e2d3736b91c
+    pr_url: https://github.com/python/cpython/pull/151983
+    test_paths:
+      - Lib/test/test_asyncio/test_subprocess.py
+    test_command: |
+      ./python -m test test_asyncio.test_subprocess -m test_wait_even_if_pipe_is_open
+
+  - name: Prevent ThreadedChildWatcher from signalling a reused PID
+    difficulty: expert
+    task_type: bug-fix
+    failure_modes: [race, wrong-result]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [async, concurrency, process-lifecycle, state-management]
+    instruction: |
+      `ThreadedChildWatcher` can reap a child and release its PID before the
+      watcher thread publishes the process return code to the event loop. A new
+      unrelated process may reuse that PID during this window, and
+      `BaseSubprocessTransport.send_signal()` can signal the wrong process.
+
+      Keep the child logically alive until its exit status has been published,
+      and make signal delivery refuse processes already known to have exited.
+      Preserve normal return-code delivery and avoid blocking the event loop.
+    gold_sha: 2875d1dc913d2d7810465da4bc3899305da5abc7
+    pr_url: https://github.com/python/cpython/pull/153810
+    test_paths:
+      - Lib/test/test_asyncio/test_subprocess.py
+    test_command: |
+      ./python -m test test_asyncio.test_subprocess -m test_send_signal_never_targets_reaped_pid -m test_pid_not_reaped_before_exit_published
+
+  - name: Retain subprocess output across cancelled communicate calls
+    difficulty: expert
+    task_type: bug-fix
+    failure_modes: [data-loss, wrong-result]
+    prompt_source: original-issue
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [async, cancellation, process-lifecycle, state-management]
+    instruction: |
+      When `asyncio.subprocess.Process.communicate()` is cancelled after reading
+      some stdout or stderr, a later `communicate()` call loses those bytes.
+      Match `subprocess.Popen.communicate()` timeout semantics: retain output
+      already read and return it when communication is resumed.
+
+      Cancellation during either stream reading or process waiting must be
+      resumable. Input that was already supplied is not safely replayable, so a
+      later call that tries to provide input again must raise `ValueError` rather
+      than sending duplicate bytes. A retry without input must finish normally.
+    gold_sha: 027a8336891cf7dab6a437a5d4f9213a6a7828cd
+    pr_url: https://github.com/python/cpython/pull/154223
+    test_paths:
+      - Lib/test/test_asyncio/test_subprocess.py
+    test_command: |
+      ./python -m test test_asyncio.test_subprocess -m test_communicate_cancelled_mid_read_retry -m test_communicate_cancelled_during_wait_retry -m test_communicate_cancelled_input_not_resendable -m test_communicate_cancelled_stdin_retry
+
+  - name: Report BaseException from shutdown_asyncgens
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [async, exception-handling, lifecycle]
+    instruction: |
+      `BaseEventLoop.shutdown_asyncgens()` gathers asynchronous-generator close
+      results and reports ordinary `Exception` instances through the loop's
+      exception handler, but silently ignores direct `BaseException` subclasses.
+
+      Report all failures returned by generator cleanup, including
+      `BaseException`, with the same context used for ordinary exceptions.
+      Successful generator shutdown must remain unchanged.
+    gold_sha: 353e6d3eff1172bd7df9340436b55a505f850a06
+    pr_url: https://github.com/python/cpython/pull/150867
+    test_paths:
+      - Lib/test/test_asyncio/test_base_events.py
+    test_command: |
+      ./python -m test test_asyncio.test_base_events -m test_shutdown_asyncgens_reports_base_exceptions
+
+  - name: Let TaskGroup propagate clean GeneratorExit from aclose
+    difficulty: expert
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [async, cancellation, exception-handling, state-management]
+    instruction: |
+      Closing an async generator whose body contains an `asyncio.TaskGroup`
+      currently turns the body's `GeneratorExit` into a
+      `BaseExceptionGroup`. Consequently `aclose()` surfaces an exception group
+      instead of completing the generator close.
+
+      If the TaskGroup body raised `GeneratorExit` and no child task failed,
+      propagate that `GeneratorExit` directly. Do not swallow child failures:
+      combinations of generator close, cancellation, and failing children must
+      retain their errors rather than silently succeeding.
+    gold_sha: 49f96670d98c50eca769dd3f6fb5b6de11010617
+    pr_url: https://github.com/python/cpython/pull/154649
+    test_paths:
+      - Lib/test/test_asyncio/test_taskgroups.py
+    test_command: |
+      ./python -m test test_asyncio.test_taskgroups -m test_taskgroup_generator_exit_01 -m test_taskgroup_generator_exit_02 -m test_taskgroup_generator_exit_03 -m test_taskgroup_generator_exit_04
+
+  - name: Preserve Future traceback on repeated result calls
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: symptom-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [async, debugging, exception-handling, c-extension]
+    instruction: |
+      The C `_asyncio.Future` clears its stored exception traceback after the
+      first `result()` or await. Raising the same failure a second time then
+      loses the original traceback, unlike the pure-Python Future.
+
+      Keep the traceback available across repeated retrieval without restoring
+      the old duplicate-frame bug or introducing an uncollectable reference
+      cycle. The C and Python implementations should expose equivalent traceback
+      information.
+    gold_sha: 93e2c7703c5a3c98a9a7d6bf4dcab4aac0d27c6e
+    pr_url: https://github.com/python/cpython/pull/154798
+    test_paths:
+      - Lib/test/test_asyncio/test_futures2.py
+    test_command: |
+      make -j"$(nproc)" > /dev/null && ./python -m test test_asyncio.test_futures2 -m test_future_traceback_preserved_after_suppress
+
+  - name: Make Task.get_context safe on uninitialized tasks
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [crash]
+    prompt_source: original-issue
+    prompt_style: failure-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [async, c-extension, lifecycle, boundary-analysis]
+    instruction: |
+      Calling `_asyncio.Task.__new__(Task).get_context()` crashes because the C
+      task's context pointer is still null. Subclasses that skip
+      `Task.__init__()` expose the same state.
+
+      Make `get_context()` safe before initialization. Return `None`, matching
+      neighboring uninitialized task accessors, while preserving the normal
+      context result for initialized tasks.
+    gold_sha: afd10f0e28476f5ca0eaeac34ebf85dda2cdc6e5
+    pr_url: https://github.com/python/cpython/pull/154898
+    test_paths:
+      - Lib/test/test_asyncio/test_tasks.py
+    test_command: |
+      make -j"$(nproc)" > /dev/null && ./python -m test test_asyncio.test_tasks -m test_get_context_uninitialized_segfault
+
+  - name: Preserve sibling TaskGroup errors during GeneratorExit
+    difficulty: expert
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: follow-up
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [async, cancellation, exception-handling, state-management]
+    depends_on: [7]
+    instruction: |
+      Follow up on the TaskGroup/`GeneratorExit` behavior we changed earlier.
+      A `GeneratorExit` from the TaskGroup body must still propagate directly,
+      but a sibling task may fail while the group is unwinding. That sibling
+      failure cannot be packed into the value returned through generator-close
+      APIs, and it must not disappear.
+
+      Keep the clean `GeneratorExit` propagation, report otherwise-lost sibling
+      errors through the loop exception handler, and continue grouping a
+      `GeneratorExit` raised by a child task rather than mistaking it for a body
+      close signal.
+    gold_sha: a7b2e1f4e07718e1e047dd7683b488e239688ceb
+    pr_url: https://github.com/python/cpython/pull/154538
+    test_paths:
+      - Lib/test/test_asyncio/test_taskgroups.py
+    test_command: |
+      ./python -m test test_asyncio.test_taskgroups -m test_taskgroup_20b
+
+  - name: Release shielded tasks from the await graph
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [resource-leak]
+    prompt_source: original-issue
+    prompt_style: symptom-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [async, cancellation, lifecycle, state-management]
+    instruction: |
+      Cancelling the outer future returned by `asyncio.shield()` can leave the
+      inner task retained by await-graph bookkeeping even after the shield
+      relationship is over. Repeated shields therefore keep completed or
+      independently running tasks alive unnecessarily.
+
+      Tear down the await-graph edge when the outer shield is cancelled while
+      preserving the contract that cancellation of the outer future does not
+      cancel the inner task. Normal result and exception propagation must remain
+      unchanged.
+    gold_sha: fbd2e015d462870b9a48bb5e6628af6c372ed1d5
+    pr_url: https://github.com/python/cpython/pull/155144
+    test_paths:
+      - Lib/test/test_asyncio/test_tasks.py
+    test_command: |
+      ./python -m test test_asyncio.test_tasks -m test_shield_cancel_outer_in_task
+
+  - name: Do not hang writelines on a trailing empty chunk
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [hang]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [async, state-management, lifecycle]
+    instruction: |
+      Selector transports can hang forever when `writelines()` is given data
+      whose final chunk is empty. The write buffer reaches an empty terminal
+      state without completing the drain/wakeup path.
+
+      Treat empty chunks consistently whether they appear alone or after real
+      data. The buffered bytes must be written, pending drain waiters must make
+      progress, and adding an empty final chunk must not change the observable
+      output.
+    gold_sha: b2c299373d86b670f50d930564da22550af55308
+    pr_url: https://github.com/python/cpython/pull/155889
+    test_paths:
+      - Lib/test/test_asyncio/test_events.py
+    test_command: |
+      ./python -m test test_asyncio.test_events -m test_writelines_empty_chunk
+
+  - name: Close stream transports when synchronous callbacks raise
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [resource-leak, hang]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [async, lifecycle, exception-handling]
+    instruction: |
+      A plain synchronous `client_connected_cb` passed to
+      `asyncio.start_server()` can raise from `connection_made()`. The exception
+      currently escapes through generic callback handling while the server-side
+      transport remains open, leaking the connection and potentially preventing
+      `Server.wait_closed()` from finishing.
+
+      Mirror the coroutine-callback path: report the error through the loop
+      exception handler with `Unhandled exception in client_connected_cb` context
+      and close the transport. Successful callbacks remain unaffected.
+    gold_sha: 95e32ba8262b2f08d4c574bce55425589cbf9885
+    pr_url: https://github.com/python/cpython/pull/155942
+    test_paths:
+      - Lib/test/test_asyncio/test_streams.py
+    test_command: |
+      ./python -m test test_asyncio.test_streams -m test_unhandled_exception_sync_callback
+
+  - name: Close accepted sockets when server setup fails
+    difficulty: expert
+    task_type: bug-fix
+    failure_modes: [resource-leak, wrong-result]
+    prompt_source: original-issue
+    prompt_style: follow-up
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [async, lifecycle, exception-handling, resource-management]
+    depends_on: [1, 13]
+    instruction: |
+      Apply the same ownership discipline from the client connection and stream
+      callback fixes to accepted server connections. In
+      `BaseSelectorEventLoop._accept_connection2()`, an exception from the
+      protocol factory or transport construction leaks the accepted socket and
+      can remain silent when debug mode is off.
+
+      Close the socket whenever ownership never reaches a transport and report
+      those setup failures through the loop exception handler in all modes. Once
+      a transport exists, waiter failures such as noisy TLS handshakes must keep
+      their existing debug-only reporting to avoid log spam.
+    gold_sha: 1461f0475b55154c0c4e033caae83e29b75f3e4d
+    pr_url: https://github.com/python/cpython/pull/155936
+    test_paths:
+      - Lib/test/test_asyncio/test_selector_events.py
+    test_command: |
+      ./python -m test test_asyncio.test_selector_events -m test_accept_connection2_factory_error_closes_conn -m test_accept_connection2_transport_error_closes_conn -m test_accept_connection2_waiter_error_stays_debug_only

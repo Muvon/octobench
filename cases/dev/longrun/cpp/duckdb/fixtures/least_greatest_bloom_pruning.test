@@ -1,0 +1,33 @@
+# name: least_greatest_bloom_pruning.test
+# description: Idempotent least/greatest expressions expose Bloom-filter pruning.
+# group: [parquet]
+
+require parquet
+
+statement ok
+COPY (
+    SELECT
+        (r1.range * 10)::BIGINT AS r
+    FROM range(100) r1, range(1000)
+    ORDER BY r
+) TO '{TEST_DIR}/least_greatest_bloom.parquet' (
+    FORMAT PARQUET,
+    ROW_GROUP_SIZE 10000,
+    DICTIONARY_SIZE_LIMIT 1000
+);
+
+query II
+EXPLAIN ANALYZE
+SELECT count(*)
+FROM read_parquet('{TEST_DIR}/least_greatest_bloom.parquet')
+WHERE greatest(r, r) = 201;
+----
+analyzed_plan	<REGEX>:(?s).*Row Groups Scanned: 0 / 10.*
+
+query II
+EXPLAIN ANALYZE
+SELECT count(*)
+FROM read_parquet('{TEST_DIR}/least_greatest_bloom.parquet')
+WHERE least(r, r) = 201;
+----
+analyzed_plan	<REGEX>:(?s).*Row Groups Scanned: 0 / 10.*

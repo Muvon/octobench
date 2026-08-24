@@ -1,0 +1,320 @@
+id: longrun_php_laravel_queue_redis
+name: Laravel queue and Redis reliability (12-turn sequence)
+language: php
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/laravel/framework
+  target_branch: 13.x
+  base_sha: d400567edfff75bbaa0c942a906a5b71c996ffc6
+  prs: [61126, 61139, 61149, 61161, 61169, 61175, 61174, 61181, 61183, 61188, 61214, 61231]
+  continuity_theme: queue control, managed-queue routing, and resilient Redis-backed workers
+  provenance_note: >-
+    Twelve chronological human-authored Laravel 13.x changes. A Claude-authored
+    cloud retry, a Copilot-reviewed telemetry patch, a merged test with a broken
+    Mockery alias, and source-only changes were excluded.
+  verified: true # all 12 cumulative fail-to-pass turns proven 2026-08-23
+turns:
+  - name: Add global pause and resume controls for every queue
+    difficulty: complex
+    task_type: feature
+    failure_modes: []
+    prompt_source: original-issue
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [api-design, queue, state-management, cross-file]
+    instruction: |
+      Add an independent global pause switch for queue workers. Users must be
+      able to run `queue:pause --all` and `queue:resume --all`, and use the queue
+      manager programmatically to pause or resume every connection and queue.
+
+      Global and per-queue pauses are separate: `resumeAll()` must not clear a
+      queue that was individually paused. Workers must check the global state
+      without needing to enumerate managed queue names. Dispatch `QueuesPaused`
+      and `QueuesResumed` events when the global state changes, while preserving
+      the existing single-queue commands and events.
+    gold_sha: b3fe92e6e7894fcb298e1663a9d21a11d6b5adfa
+    pr_url: https://github.com/laravel/framework/pull/61126
+    test_paths:
+      - tests/Console/Fixtures/command_signatures.php
+      - tests/Integration/Console/Scheduling/QueuePauseCommandTest.php
+      - tests/Queue/QueuePauseResumeTest.php
+    test_command: php8.4 vendor/bin/phpunit --no-coverage tests/Integration/Console/Scheduling/QueuePauseCommandTest.php tests/Queue/QueuePauseResumeTest.php
+
+  - name: Avoid Redis cross-slot reads for pause state
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [crash, compatibility]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [queue, redis, distributed-systems, debugging]
+    depends_on: [1]
+    instruction: |
+      The new global pause key is fetched in the same cache `many()`/Redis MGET
+      as per-queue pause keys. In Redis Cluster and ElastiCache Serverless those
+      keys occupy different hash slots, so workers receive `CROSSSLOT`; phpredis
+      returns `false` and the polling path crashes in `array_map()`.
+
+      Read global pause state separately and batch only compatible per-queue
+      keys. Preserve global and individual pause semantics and avoid adding
+      extra reads when checking a single queue.
+    gold_sha: 4839d213565458892ce19eaec5189683ea40ec3a
+    pr_url: https://github.com/laravel/framework/pull/61139
+    test_paths:
+      - tests/Integration/Queue/WorkCommandTest.php
+      - tests/Queue/QueuePauseResumeTest.php
+    test_command: php8.4 vendor/bin/phpunit --no-coverage tests/Integration/Queue/WorkCommandTest.php tests/Queue/QueuePauseResumeTest.php
+
+  - name: Expose configured managed queue names
+    difficulty: medium
+    task_type: feature
+    failure_modes: []
+    prompt_source: pr-derived
+    prompt_style: implementation-request
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [queue, api-design, configuration]
+    instruction: |
+      Add `managedQueues()` to the Laravel Cloud queue connection so application
+      code can discover which logical queues are managed instead of re-parsing
+      environment configuration.
+
+      Return the configured queue names for both a simple list and a map whose
+      keys are queue names with per-queue settings. Preserve configuration order,
+      return an empty list when none are configured, and do not expose the map's
+      setting values as queue names.
+    gold_sha: 25cb85445df875274d785986f9aa7d92ccc687cd
+    pr_url: https://github.com/laravel/framework/pull/61149
+    test_paths: [tests/Foundation/Cloud/QueueTest.php]
+    test_command: php8.4 vendor/bin/phpunit --no-coverage tests/Foundation/Cloud/QueueTest.php
+
+  - name: Let clustered phpredis connections rebuild their client
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [resource-leak, compatibility]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [redis, lifecycle, dependency-injection, cross-file]
+    instruction: |
+      Single-node `PhpRedisConnection` instances receive a connector closure and
+      can rebuild a dead client. `connectToCluster()` passes only the initial
+      client, leaving cluster connections with a null connector, so the same
+      reconnect branch silently keeps the dead client forever.
+
+      Construct the cluster client through a reusable closure and pass that
+      connector into `PhpRedisClusterConnection`, together with its config.
+      Rebuilding must replace the client with a fresh instance while normal
+      cluster construction remains unchanged.
+    gold_sha: 931544c67d2dc03b43e46f69fcf28b81f92cebd2
+    pr_url: https://github.com/laravel/framework/pull/61161
+    test_paths: [tests/Redis/PhpRedisConnectorTest.php]
+    test_command: php8.4 vendor/bin/phpunit --no-coverage tests/Redis/PhpRedisConnectorTest.php
+
+  - name: Debounce queued event listeners
+    difficulty: expert
+    task_type: feature
+    failure_modes: []
+    prompt_source: pr-derived
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [queue, events, state-management, api-design]
+    instruction: |
+      Allow queued event listeners to use the existing `#[DebounceFor]`
+      attribute. Repeated events with the same listener-specific `debounceId()`
+      must use last-dispatch-wins behavior: superseded invocations are skipped
+      and only the latest listener runs after the debounce window.
+
+      Different IDs are independent, `maxWait` prevents indefinite deferral,
+      and `debounceVia()` may choose the cache repository. Debouncing applies to
+      that queued listener only, not the event or other listeners. Reject a
+      listener that combines debouncing with `ShouldBeUnique`, whose semantics
+      are first-dispatch-wins.
+    gold_sha: 010ffcbb804cdc858b6dc16db6cbf524a0c484ad
+    pr_url: https://github.com/laravel/framework/pull/61169
+    test_paths:
+      - tests/Events/QueuedEventsTest.php
+      - tests/Integration/Queue/DebouncedListenerTest.php
+    test_command: php8.4 vendor/bin/phpunit --no-coverage tests/Events/QueuedEventsTest.php tests/Integration/Queue/DebouncedListenerTest.php
+
+  - name: Retry only safe Redis commands after transient failures
+    difficulty: expert
+    task_type: behavior-change
+    failure_modes: [compatibility, wrong-result]
+    prompt_source: pr-derived
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [redis, reliability, idempotency, configuration]
+    instruction: |
+      Add configurable automatic retries for transient phpredis failures after
+      rebuilding the client. Read-only commands and idempotent writes may retry;
+      non-idempotent writes and option-sensitive commands such as `SET` with
+      mutation options must not be replayed blindly.
+
+      Respect the configured attempt limit, rebuild between eligible attempts,
+      return the successful retry result, and rethrow once exhausted. Existing
+      behavior remains the default when retries are not configured.
+    gold_sha: 5832b1af23c67d5b9c844b2f186142bc9763efd0
+    pr_url: https://github.com/laravel/framework/pull/61175
+    test_paths: [tests/Redis/PhpRedisConnectorTest.php]
+    test_command: php8.4 vendor/bin/phpunit --no-coverage tests/Redis/PhpRedisConnectorTest.php
+
+  - name: Scan every Redis Cluster master with an opaque cursor
+    difficulty: expert
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [redis, distributed-systems, state-management, parser]
+    instruction: |
+      `PhpRedisClusterConnection::scan()` currently visits only the first master,
+      so tag pruning and metric cleanup silently miss keys on other nodes.
+
+      Iterate all current masters. Encode both node position and that node's
+      native cursor in the caller-visible cursor so iteration can resume across
+      calls, including large string cursors and master reordering/removal. Keep
+      scanning after an empty page, finish with the existing terminal value, and
+      preserve explicit single-node scans.
+    gold_sha: bfa902ca88f7c1e22c5396df37f5a9b0b8b385c2
+    pr_url: https://github.com/laravel/framework/pull/61174
+    test_paths: [tests/Redis/Connections/PhpRedisClusterConnectionTest.php]
+    test_command: php8.4 vendor/bin/phpunit --no-coverage tests/Redis/Connections/PhpRedisClusterConnectionTest.php
+
+  - name: Stop stale-tag scans when the cursor returns to its sentinel
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [hang]
+    prompt_source: original-issue
+    prompt_style: follow-up
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [redis, state-management, debugging]
+    depends_on: [7]
+    instruction: |
+      After the cluster scan work, stale-tag pruning can loop forever on phpredis
+      6.1+: the default cursor sentinel is `null`, while the returned terminal
+      cursor is compared after only one side is cast to string. `"" !== null`
+      stays true, so scanning restarts from the beginning.
+
+      Normalize both sides of the termination comparison in `RedisStore` and the
+      equivalent sorted-set scan in `RedisTagSet`. Preserve nonterminal cursors
+      and older phpredis behavior.
+    gold_sha: 2f843ab9418431786ec6ad144a75711dd592f386
+    pr_url: https://github.com/laravel/framework/pull/61181
+    test_paths: [tests/Cache/CacheRedisStoreTest.php]
+    test_command: php8.4 vendor/bin/phpunit --no-coverage tests/Cache/CacheRedisStoreTest.php
+
+  - name: Restore Redis client mode after pipeline callback failures
+    difficulty: expert
+    task_type: bug-fix
+    failure_modes: [wrong-result, resource-leak]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [redis, lifecycle, exception-handling, state-management]
+    instruction: |
+      If a `pipeline()` or `transaction()` callback throws, phpredis remains in
+      queued/MULTI mode because `exec()` is never reached. Every later command on
+      the long-lived connection then returns the Redis client object rather than
+      a value without throwing.
+
+      Discard queued commands before rethrowing the callback's original
+      exception. Cleanup may itself fail on a broken socket and must never mask
+      or replace that original error. Successful pipelines and transactions are
+      unchanged.
+    gold_sha: 62a35df888f5fc12efa5784bf3f4c48ea2f1fdaa
+    pr_url: https://github.com/laravel/framework/pull/61183
+    test_paths: [tests/Redis/RedisConnectionTest.php]
+    test_command: php8.4 vendor/bin/phpunit --no-coverage tests/Redis/RedisConnectionTest.php
+
+  - name: Forward logical queues to environment-specific destinations
+    difficulty: expert
+    task_type: feature
+    failure_modes: []
+    prompt_source: pr-derived
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [queue, routing, api-design, cross-file]
+    instruction: |
+      Add `Queue::forward()` so applications can centrally redirect a logical
+      queue name to another queue, another connection, or both without changing
+      jobs and dispatch sites. Accept one mapping or an array of source-to-target
+      mappings, and allow callbacks so routing can depend on runtime context.
+
+      Forwarding must apply consistently to each supported queue driver's name
+      resolution and to queued mail, events, broadcasts, and bus dispatch. An
+      explicitly selected queue is still resolved through forwarding, existing
+      class-based `Queue::route()` behavior remains separate, and forwarding
+      must not recurse indefinitely.
+    gold_sha: 18fe70537933b6c831c90096091216f4c4106d26
+    pr_url: https://github.com/laravel/framework/pull/61188
+    test_paths:
+      - tests/Bus/BusDispatcherTest.php
+      - tests/Events/QueuedEventsTest.php
+      - tests/Integration/Broadcasting/BroadcastManagerTest.php
+      - tests/Integration/Mail/SendingQueuedMailTest.php
+      - tests/Queue/QueueRoutesTest.php
+      - tests/Queue/QueueSqsQueueTest.php
+    test_command: php8.4 vendor/bin/phpunit --no-coverage tests/Queue/QueueRoutesTest.php tests/Queue/QueueSqsQueueTest.php tests/Bus/BusDispatcherTest.php tests/Events/QueuedEventsTest.php
+
+  - name: Rebuild phpredis after cluster response errors
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [compatibility, resource-leak]
+    prompt_source: original-issue
+    prompt_style: follow-up
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [redis, reliability, exception-handling]
+    depends_on: [4, 6]
+    instruction: |
+      The reconnect path still misses the exception that Redis Cluster actually
+      raises. `RedisClusterException` derives from `RuntimeException`, not
+      `RedisException`, so `Error processing response from Redis node!` never
+      reaches the client-rebuild logic added earlier.
+
+      Recognize that cluster response failure as reconnectable, rebuild through
+      the stored connector, and retry according to the safe-command policy.
+      Unrelated runtime exceptions must continue to propagate without retry.
+    gold_sha: ed180789a7c17cb48fc2620d1b238b4e865a03c7
+    pr_url: https://github.com/laravel/framework/pull/61214
+    test_paths: [tests/Redis/PhpRedisConnectorTest.php]
+    test_command: php8.4 vendor/bin/phpunit --no-coverage tests/Redis/PhpRedisConnectorTest.php
+
+  - name: Add total queue size APIs without decoding jobs
+    difficulty: complex
+    task_type: feature
+    failure_modes: []
+    prompt_source: pr-derived
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [queue, api-design, performance, cross-file]
+    instruction: |
+      Add lightweight total pending, delayed, and reserved size APIs for callers
+      that need counts across all physical queues without retrieving or decoding
+      every job. Expose them through the queue facade/contract patterns already
+      used by the existing per-queue size methods.
+
+      Implement consistent results for Redis, database, failover, null, sync,
+      SQS, Beanstalkd, and `QueueFake` as applicable. Empty drivers return zero;
+      failover aggregates according to its active backing queues; existing
+      per-queue and all-jobs APIs remain unchanged.
+    gold_sha: 9ed65fab82267fdb958ebd8a0296332dc4325402
+    pr_url: https://github.com/laravel/framework/pull/61231
+    test_paths:
+      - tests/Integration/Queue/RedisQueueTest.php
+      - tests/Queue/QueueDatabaseQueueUnitTest.php
+      - tests/Support/SupportTestingQueueFakeTest.php
+    test_command: php8.4 vendor/bin/phpunit --no-coverage tests/Integration/Queue/RedisQueueTest.php tests/Queue/QueueDatabaseQueueUnitTest.php tests/Support/SupportTestingQueueFakeTest.php

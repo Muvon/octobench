@@ -1,0 +1,370 @@
+id: longrun_js_eslint_rules
+name: ESLint core-rule and autofix correctness (15-turn sequence)
+language: javascript
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/eslint/eslint
+  target_branch: main
+  base_sha: a9e5961050676ef29dba9649dfcd7233d21760c7
+  prs: [21047, 21050, 21051, 21057, 21058, 21069, 21094, 21096, 21081, 21167, 21166, 21163, 21173, 21175, 21207]
+  continuity_theme: AST classification, scope-aware rule behavior, and semantics-preserving autofixes
+  provenance_note: >-
+    Fifteen chronological human-authored ESLint changes on main. Five PRs
+    acknowledging AI-generated content and the already-published
+    no-unreachable-loop case were excluded.
+  verified: true # all 15 cumulative fail-to-pass turns proven 2026-08-23
+turns:
+  - name: Ignore shadowed parseInt and Number in prefer-numeric-literals
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [static-analysis, scope-analysis, autofix, debugging]
+    instruction: |
+      `prefer-numeric-literals` reports and autofixes calls based only on the
+      names `parseInt` and `Number.parseInt`. When either identifier is a local
+      parameter or variable, replacing the call with a numeric literal silently
+      changes the program.
+
+      Only treat these calls as numeric built-ins when the referenced identifier
+      resolves to the global. Shadowed direct and member-call forms must be valid;
+      genuine global calls must keep their existing reports and fixes.
+    gold_sha: 8859bafb018e2b23b5110d52e491b69b94ad890a
+    pr_url: https://github.com/eslint/eslint/pull/21047
+    test_paths: [tests/lib/rules/prefer-numeric-literals.js]
+    test_command: npx mocha tests/lib/rules/prefer-numeric-literals.js
+
+  - name: Ignore shadowed RegExp in no-control-regex
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [static-analysis, scope-analysis, parser]
+    instruction: |
+      `no-control-regex` treats `RegExp("\\x1f")` as a regular-expression
+      constructor even when `RegExp` is shadowed by a local parameter or
+      variable. It then reports control characters in an unrelated user call.
+
+      Validate string patterns only for the real global `RegExp` reference.
+      Preserve checks for regex literals and unshadowed constructor/function
+      calls.
+    gold_sha: a3172b69c7db63ea0321355543e3f527c7d8b76a
+    pr_url: https://github.com/eslint/eslint/pull/21050
+    test_paths: [tests/lib/rules/no-control-regex.js]
+    test_command: npx mocha tests/lib/rules/no-control-regex.js
+
+  - name: Ignore shadowed RegExp in no-invalid-regexp
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: follow-up
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [static-analysis, scope-analysis, parser]
+    depends_on: [2]
+    instruction: |
+      Apply the same global-reference discipline to `no-invalid-regexp`.
+      Calls such as `RegExp("[")` and `new RegExp("[")` must not be parsed as
+      regular expressions when the callee is a shadowing local binding.
+
+      Keep reporting invalid patterns for the actual global constructor and
+      keep the rule's existing handling of literals and flags.
+    gold_sha: e35b05f1961dcd691611bd68b6ff8a87072d6f76
+    pr_url: https://github.com/eslint/eslint/pull/21051
+    test_paths: [tests/lib/rules/no-invalid-regexp.js]
+    test_command: npx mocha tests/lib/rules/no-invalid-regexp.js
+
+  - name: Restrict eqeqeq null-never logic to equality operators
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [static-analysis, ast, boundary-analysis]
+    instruction: |
+      With `eqeqeq: ["error", "always", { null: "never" }]`, expressions such
+      as `a + null` and `null instanceof Foo` are reported even though the
+      exception is only about using `==`/`!=` instead of strict equality when
+      comparing with null.
+
+      Limit the inverse null check to equality operators. Non-equality binary
+      expressions involving null must not report or receive a nonsensical fix;
+      the existing equality behavior must remain intact.
+    gold_sha: b717a22e2408389a2ad40af66543e46390669eb6
+    pr_url: https://github.com/eslint/eslint/pull/21057
+    test_paths: [tests/lib/rules/eqeqeq.js]
+    test_command: npx mocha tests/lib/rules/eqeqeq.js
+
+  - name: Treat static templates as literals in eqeqeq smart mode
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: follow-up
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [static-analysis, ast, language-semantics]
+    depends_on: [4]
+    instruction: |
+      `eqeqeq` smart mode allows loose equality between same-type literals but
+      does not recognize template literals without substitutions as string
+      literals. It therefore reports comparisons like `` `hello` == "hello" ``
+      and `` `a` != `b` ``.
+
+      Classify static template literals as literal string values for this check.
+      Templates containing expressions remain non-literal, and all other smart
+      mode behavior must stay unchanged.
+    gold_sha: 75ec753226010867270787b412f3dae412e421e6
+    pr_url: https://github.com/eslint/eslint/pull/21058
+    test_paths: [tests/lib/rules/eqeqeq.js]
+    test_command: npx mocha tests/lib/rules/eqeqeq.js
+
+  - name: Apply implements ignores to class expressions
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [static-analysis, typescript, ast]
+    instruction: |
+      `class-methods-use-this` honors `ignoreClassesWithImplements` for class
+      declarations but not equivalent class expressions parsed by TypeScript.
+      A `const Foo = class implements Base { method() {} }` is reported while a
+      declared class with the same `implements` clause is ignored.
+
+      Apply the option consistently to declarations and expressions, including
+      the rule's supported `publicFields` and `all` modes, without ignoring
+      classes that have no matching implements clause.
+    gold_sha: 3e7bf15e69e6d3a2c8832356bcc2e9903cc4eede
+    pr_url: https://github.com/eslint/eslint/pull/21069
+    test_paths: [tests/lib/rules/class-methods-use-this.js]
+    test_command: npx mocha tests/lib/rules/class-methods-use-this.js
+
+  - name: Apply class method ignore names to computed keys
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: follow-up
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [static-analysis, ast, configuration]
+    depends_on: [6]
+    instruction: |
+      `class-methods-use-this` ignore-name configuration is applied to ordinary
+      method keys but not to equivalent computed literal keys. For example,
+      ignoring `foo` should cover both `foo() {}` and `["foo"]() {}`, while a
+      genuinely dynamic computed key cannot be matched by name.
+
+      Make the existing ignore options work for statically known computed
+      string keys without broadening them to dynamic expressions. Preserve the
+      implements behavior fixed earlier.
+    gold_sha: 8b6f6c0b33411f34485512456d94f221daf7321f
+    pr_url: https://github.com/eslint/eslint/pull/21094
+    test_paths: [tests/lib/rules/class-methods-use-this.js]
+    test_command: npx mocha tests/lib/rules/class-methods-use-this.js
+
+  - name: Remove quadratic regex behavior from prefer-template
+    difficulty: expert
+    task_type: performance
+    failure_modes: [performance-regression]
+    prompt_source: original-issue
+    prompt_style: failure-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [static-analysis, performance, regex, text-processing]
+    instruction: |
+      `prefer-template` contains a regular-expression check whose runtime grows
+      quadratically on long string literals containing many escape sequences.
+      Linting adversarial but valid source can therefore consume excessive CPU.
+
+      Replace the vulnerable matching logic with bounded linear work while
+      preserving which concatenations the rule reports and the exact escaping
+      decisions used by its fixer. Include both correctness and long-input
+      regression coverage; do not solve it by imposing an arbitrary source-size
+      cutoff.
+    gold_sha: 20b5ad052360a443786a202e94624a3f81846511
+    pr_url: https://github.com/eslint/eslint/pull/21096
+    test_paths: [tests/lib/rules/prefer-template.js]
+    test_command: timeout 60 npx mocha tests/lib/rules/prefer-template.js
+
+  - name: Preserve ASI when prefer-object-spread adds parentheses
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [static-analysis, autofix, language-semantics]
+    instruction: |
+      The `prefer-object-spread` fixer sometimes wraps its replacement in
+      parentheses. At the start of an expression statement following a line
+      without a semicolon, the new leading `(` can join the previous statement
+      through automatic semicolon insertion and change program behavior.
+
+      When the replacement creates that hazard, insert the required leading
+      semicolon. Do not add unnecessary semicolons in safe expression contexts,
+      and preserve the existing object-spread transformation.
+    gold_sha: e23fafe8d4b15355adef6cdebef414c3a2019454
+    pr_url: https://github.com/eslint/eslint/pull/21081
+    test_paths: [tests/lib/rules/prefer-object-spread.js]
+    test_command: npx mocha tests/lib/rules/prefer-object-spread.js
+
+  - name: Ignore MetaProperty names in id-match
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [static-analysis, ast, language-semantics]
+    instruction: |
+      `id-match` checks the component names of `import.meta` and `new.target`
+      against the configured identifier pattern. These are fixed language
+      meta-properties, not user-defined identifiers, so configurations such as
+      `^foo$` incorrectly report `import`, `meta`, `new`, and `target`.
+
+      Ignore identifier nodes that belong to a `MetaProperty`. Continue checking
+      ordinary variables and property names according to the rule's existing
+      options.
+    gold_sha: 4d7db6628e2badf0857cb88734fe641c3874bce9
+    pr_url: https://github.com/eslint/eslint/pull/21167
+    test_paths: [tests/lib/rules/id-match.js]
+    test_command: npx mocha tests/lib/rules/id-match.js
+
+  - name: Ignore MetaProperty names in id-denylist
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: follow-up
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [static-analysis, ast, language-semantics]
+    depends_on: [10]
+    instruction: |
+      Apply the same meta-property distinction to `id-denylist`.
+      `import.meta` and `new.target` must not be reported even when one of their
+      fixed words appears in the denylist, because users cannot rename those
+      language constructs.
+
+      Keep denying matching user-defined identifiers and configurable property
+      names exactly as before.
+    gold_sha: 6898df9364639ee64b9448a4cb6b08a30c16bd37
+    pr_url: https://github.com/eslint/eslint/pull/21166
+    test_paths: [tests/lib/rules/id-denylist.js]
+    test_command: npx mocha tests/lib/rules/id-denylist.js
+
+  - name: Avoid getter reports for functions that cannot return normally
+    difficulty: expert
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: review-and-fix
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [static-analysis, control-flow, ast, cross-file]
+    instruction: |
+      `getter-return` and `accessor-pairs` report getters whose bodies cannot
+      reach a normal return because they always throw or otherwise terminate.
+      The shared AST utility treats some nested/abrupt control-flow shapes as if
+      execution could fall through, producing false positives.
+
+      Correct the shared return-path analysis and make both rules agree. A getter
+      with a reachable normal path still needs a value return; a getter whose
+      every path exits abruptly must be accepted. Preserve handling of nested
+      functions, loops, switches, and try/finally control flow.
+    gold_sha: 151ba3f5834a0909e8b9b1736f4889ac694c0104
+    pr_url: https://github.com/eslint/eslint/pull/21163
+    test_paths:
+      - tests/lib/rules/accessor-pairs.js
+      - tests/lib/rules/getter-return.js
+      - tests/lib/rules/utils/ast-utils.js
+    test_command: npx mocha tests/lib/rules/accessor-pairs.js tests/lib/rules/getter-return.js tests/lib/rules/utils/ast-utils.js
+
+  - name: Prevent ASI hazards in no-unused-labels autofix
+    difficulty: expert
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: reproduction-report
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [static-analysis, autofix, language-semantics, boundary-analysis]
+    instruction: |
+      Removing an unused label can merge its body with the preceding statement
+      through ASI. For example, fixing `foo()\nLABEL: [1, 2].forEach(fn)` creates
+      `foo()\n[1, 2].forEach(fn)`, which parses as a property access on `foo()`.
+
+      Skip the autofix when the labeled body begins with `(`, `[`, a template,
+      `/`, `+`, or `-` and the preceding token is not a safe statement boundary.
+      The diagnostic should still be reported. Keep autofixing when a semicolon
+      or an unambiguous structural boundary makes removal safe.
+    gold_sha: 18eb0a7e787b9fac3049ef3dad0e845d2bd940a4
+    pr_url: https://github.com/eslint/eslint/pull/21173
+    test_paths: [tests/lib/rules/no-unused-labels.js]
+    test_command: npx mocha tests/lib/rules/no-unused-labels.js
+
+  - name: Check conditional-expression branches in loop conditions
+    difficulty: complex
+    task_type: behavior-change
+    failure_modes: []
+    prompt_source: original-issue
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [static-analysis, control-flow, api-design]
+    instruction: |
+      Add a `checkConditionalExpressions` boolean option to
+      `no-unmodified-loop-condition`, defaulting to `false` for compatibility.
+      When enabled, analyze references in each branch of a conditional
+      expression independently, so an unmodified variable such as `done` in
+      `while (chunk ? !done : false) { chunk = next(); }` is reported.
+
+      Preserve the legacy whole-condition behavior when the option is disabled.
+      Do not report branch references that are modified by the loop body, and
+      support nested conditional expressions consistently.
+    gold_sha: 55db4791120ae591d88089c43127b7b0e16866d4
+    pr_url: https://github.com/eslint/eslint/pull/21175
+    test_paths: [tests/lib/rules/no-unmodified-loop-condition.js]
+    test_command: npx mocha tests/lib/rules/no-unmodified-loop-condition.js
+
+  - name: Keep prefer-template fixes from becoming tagged templates
+    difficulty: expert
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: follow-up
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [static-analysis, autofix, language-semantics]
+    depends_on: [8]
+    instruction: |
+      `prefer-template` replaces concatenation with a template literal. When the
+      expression starts a statement after an unterminated previous line, the
+      leading backtick can attach to the previous expression as a tagged
+      template: `tag\n"hello" + value` becomes `tag` followed immediately by
+      `` `hello${value}` `` and calls `tag`.
+
+      Add a preceding semicolon only when the replacement starts an expression
+      statement and ASI would make it unsafe. Preserve valid fixes in all other
+      expression contexts.
+    gold_sha: 684b57972e1ddf25e076fb36189c60bbcacee635
+    pr_url: https://github.com/eslint/eslint/pull/21207
+    test_paths: [tests/lib/rules/prefer-template.js]
+    test_command: npx mocha tests/lib/rules/prefer-template.js

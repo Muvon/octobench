@@ -1,0 +1,263 @@
+id: longrun_rust_cargo_build_pipeline
+name: Cargo source, artifact and resolver correctness (10-turn sequence)
+language: rust
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+meta:
+  repo: https://github.com/rust-lang/cargo
+  target_branch: master
+  base_sha: 88e0ae88276c937e4a5614c8b2812fa9902193a3
+  prs: [17303, 17304, 17306, 17313, 17317, 17327, 17328, 17333, 17356, 17382]
+  continuity_theme: artifact metadata, diagnostics, source handling, resolution, cleaning, and freshness fingerprints
+  provenance_note: >-
+    Ten chronological human-authored Cargo changes on master. The base starts
+    after a behavior-preserving prerequisite refactor; LLM-disclosed,
+    source-only, vacuous/ignored-test, predecessor-dependent, and already
+    published one-shot changes were excluded.
+  verified: true # all 10 cumulative fail-to-pass turns proven 2026-08-23
+turns:
+  - name: Emit unremap metadata beside final artifacts
+    difficulty: expert
+    task_type: feature
+    failure_modes: []
+    prompt_source: pr-derived
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [build-system, serialization, artifact-management, cross-file]
+    instruction: |
+      For artifacts built with trimmed paths, emit a sidecar JSON-lines unremap
+      file that lets downstream debugging tools reconstruct original locations.
+      The format starts with a version record, identifies the Rust toolchain and
+      workspace root, then records each synthetic `from` prefix and original
+      `to` path used by the build.
+
+      Emit sidecars for final artifact kinds and JSON messages, place them beside
+      redirected artifacts when an artifact directory is used, rebuild them when
+      mappings change, omit them when no debuginfo needs them, and remove them
+      through normal Cargo clean operations.
+    gold_sha: cafc91b2f53f5ecd701145aeb23f879357eaa746
+    pr_url: https://github.com/rust-lang/cargo/pull/17303
+    test_paths: [tests/testsuite/profile_trim_paths.rs]
+    test_command: cargo test --test testsuite unremap_file
+
+  - name: Keep diagnostic titles when source snippets are absent
+    difficulty: expert
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: pr-derived
+    prompt_style: review-and-fix
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [diagnostics, api-design, cross-file, text-processing]
+    instruction: |
+      Cargo lint diagnostics currently derive their headline from a snippet path,
+      so short/no-graphics output or diagnostics that intentionally omit a
+      snippet fall back to vague generic titles. Make every lint construct its
+      own specific title independently of whether a source snippet is rendered.
+
+      Preserve labels, notes, help, warning-denial behavior, and replayed cached
+      diagnostics. Titles should include the relevant package, feature, binary,
+      dependency, or field name where that information is available.
+    gold_sha: c79e8f89441b3e73d6d65d125c0c745792808c74
+    pr_url: https://github.com/rust-lang/cargo/pull/17304
+    test_paths: [tests/testsuite/warning_override.rs]
+    test_command: cargo test --test testsuite lint_parse_pass
+
+  - name: Disable core.fsmonitor for Cargo-managed Git repositories
+    difficulty: complex
+    task_type: maintenance
+    failure_modes: [hang, performance-regression]
+    prompt_source: original-issue
+    prompt_style: outcome-request
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [git, configuration, performance, reliability]
+    instruction: |
+      User or system Git configuration can enable `core.fsmonitor` inside the
+      bare repositories Cargo manages. Cargo does not use worktree change
+      detection there, so the monitor is wasted work and can hang fetches on
+      broken platform integrations.
+
+      Force `core.fsmonitor=false` for every Git CLI operation Cargo launches
+      against its managed repositories. Preserve the command's environment,
+      retry diagnostics, argument-injection protections, and user configuration
+      outside Cargo's internal repositories.
+    gold_sha: 223a402c851fc52da0c00078c07c5923ddb20008
+    pr_url: https://github.com/rust-lang/cargo/pull/17306
+    test_paths: [tests/testsuite/git.rs]
+    test_command: cargo test --test testsuite use_the_cli
+
+  - name: Gate blanket profile-hint lint behind its feature
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: pr-derived
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [diagnostics, feature-gating, configuration]
+    instruction: |
+      `cargo::blanket_hint_mostly_unused` is emitted whenever Cargo lints are
+      enabled, even if `-Zprofile-hint-mostly-unused` is not active. That couples
+      stabilization of the general lint framework to an unrelated nightly-only
+      profile feature.
+
+      Register and run this lint only when its owning unstable feature is
+      enabled. Other Cargo lints remain available, and enabling the feature must
+      retain the current diagnostic.
+    gold_sha: b2c8b8bf5d16c9ca0031549d2a68d567968e93c8
+    pr_url: https://github.com/rust-lang/cargo/pull/17313
+    test_paths: [tests/testsuite/lints/blanket_hint_mostly_unused.rs]
+    test_command: cargo test --test testsuite disabled_without_profile_hint_mostly_unused
+
+  - name: Say highest rather than latest in lock messages
+    difficulty: medium
+    task_type: bug-fix
+    failure_modes: [wrong-result]
+    prompt_source: pr-derived
+    prompt_style: localized-request
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [resolver, diagnostics, terminology]
+    instruction: |
+      Cargo's lock/update progress says it selected the "latest compatible"
+      version, but the resolver selects the highest version allowed by the full
+      constraints. Registry age policies, Rust-version filtering, yanks, and
+      other constraints can make that version anything but the latest release.
+
+      Use "highest compatible version" consistently in lock messages, including
+      singular/plural and zero-package cases. Do not change selection behavior,
+      detailed update lines, or notes about newer unavailable releases.
+    gold_sha: 7759f8c906eeb5eeb01c745b96e53cd9c37a3418
+    pr_url: https://github.com/rust-lang/cargo/pull/17317
+    test_paths: [tests/testsuite/min_publish_age.rs]
+    test_command: cargo test --test testsuite filters_too_new_versions
+
+  - name: Make minimum publish age relative to publish-time
+    difficulty: expert
+    task_type: behavior-change
+    failure_modes: [wrong-result]
+    prompt_source: original-issue
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [resolver, time, configuration, reproducibility]
+    instruction: |
+      When `cargo generate-lockfile --publish-time <time>` is combined with a
+      minimum publish age, interpret the age relative to that simulated publish
+      time rather than relative to the real current clock. This lets users
+      reproduce resolution exactly as it would have looked at a historical or
+      future instant, including multiple registries.
+
+      Preserve ordinary current-time resolution when `--publish-time` is absent,
+      registry-specific age overrides, zero-age behavior, patches, precise
+      updates, and dependencies without publication timestamps.
+    gold_sha: 57a3f424d7a9c6afd00306a0fe70f1f05dd957c2
+    pr_url: https://github.com/rust-lang/cargo/pull/17327
+    test_paths: [tests/testsuite/min_publish_age.rs]
+    test_command: cargo test --test testsuite generate_lockfile_with_publish_time_and_min_publish_age
+
+  - name: Explain minimum publish age in lock messages
+    difficulty: complex
+    task_type: feature
+    failure_modes: []
+    prompt_source: pr-derived
+    prompt_style: follow-up
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [resolver, diagnostics, time, configuration]
+    depends_on: [6]
+    instruction: |
+      Make resolver lock messages explain the cutoff used by minimum-publish-age
+      filtering. When resolving against the current clock, say the compatible
+      versions are considered as of the configured age; when `--publish-time` is
+      present, describe the age relative to that simulated timestamp.
+
+      Handle singular/plural package counts, registry defaults and overrides,
+      zero/minimum-age placeholders, and resolutions that have no concrete age.
+      Keep the existing selected/available package details.
+    gold_sha: 43d5282b41266e34b2c906c9a27ecf06968e804f
+    pr_url: https://github.com/rust-lang/cargo/pull/17328
+    test_paths: [tests/testsuite/min_publish_age.rs]
+    test_command: cargo test --test testsuite filters_too_new_versions
+
+  - name: Remove the half-working update breaking option
+    difficulty: complex
+    task_type: behavior-change
+    failure_modes: [wrong-result]
+    prompt_source: pr-derived
+    prompt_style: implementation-request
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [resolver, cli, compatibility, maintenance]
+    instruction: |
+      Remove Cargo's unstable `cargo update --breaking` surface. Its current
+      semantics are incomplete and conflict with the resolver/update model that
+      needs redesign; users should return to the established upgrade tooling
+      rather than relying on this half-working flag.
+
+      Remove the CLI option, unstable feature plumbing, implementation branches,
+      help/manpage/reference documentation, and dedicated tests. Ordinary
+      `cargo update`, precise/package selection, dry-run, and workspace update
+      behavior must remain unchanged, and `cargo update --help` must no longer
+      advertise `--breaking`.
+    gold_sha: 691958b6752375148c5603eb20bd98f13be5fde8
+    pr_url: https://github.com/rust-lang/cargo/pull/17333
+    test_paths:
+      - tests/testsuite/update.rs
+      - doc/man/generated_txt/cargo-update.txt
+      - etc/man/cargo-update.1
+    test_command: "cargo build -q && ! target/debug/cargo update --help | grep -q -- '--breaking'"
+
+  - name: Clean unremap sidecars under the new layout
+    difficulty: complex
+    task_type: bug-fix
+    failure_modes: [resource-leak]
+    prompt_source: pr-derived
+    prompt_style: follow-up
+    spec_level: behavioral
+    test_visibility: hidden
+    capability_tags: [build-system, artifact-management, lifecycle]
+    depends_on: [1]
+    instruction: |
+      `cargo clean -p` removes trim-path unremap sidecars under the legacy target
+      layout, but the new build-directory branch leaves them behind. Package
+      cleaning must remove the selected package's artifact sidecars in both
+      layouts without deleting unrelated packages' metadata.
+
+      Preserve full clean behavior and ordinary artifact cleanup; verify the
+      sidecar is recreated by a later build and then removed again.
+    gold_sha: 83b31e5eff16b42e4810b7affd7a07c5a1f444b2
+    pr_url: https://github.com/rust-lang/cargo/pull/17356
+    test_paths: [tests/testsuite/profile_trim_paths.rs]
+    test_command: cargo test --test testsuite unremap_file_with_cargo_clean
+
+  - name: Add configurable content-based build fingerprints
+    difficulty: expert
+    task_type: feature
+    failure_modes: []
+    prompt_source: original-issue
+    prompt_style: acceptance-spec
+    spec_level: full-spec
+    test_visibility: hidden
+    capability_tags: [build-system, configuration, fingerprinting, diagnostics]
+    instruction: |
+      Replace the unstable checksum-freshness toggle's implicit behavior with a
+      `build.fingerprint` configuration selecting `mtime` or `content`.
+      Content mode is available only with `-Zchecksum-freshness`; without the
+      feature Cargo must warn that the content setting is ignored and continue
+      with mtime behavior.
+
+      Support config files and the corresponding environment value, pass the
+      selected mode through build and rustdoc freshness logic, preserve stable
+      channel rejection of the `-Z` flag, and keep existing checksum rebuild
+      semantics when content mode is enabled.
+    gold_sha: e8cb624d5701824f46a2ec5873cfd59ee3d2f66c
+    pr_url: https://github.com/rust-lang/cargo/pull/17382
+    test_paths:
+      - tests/testsuite/doc.rs
+      - tests/testsuite/freshness.rs
+      - tests/testsuite/freshness_checksum.rs
+    test_command: cargo test --test testsuite warn_on_missing_feature

@@ -211,53 +211,58 @@ above. Retained as a static snapshot; not regenerated with the live table.
 
 The long-run bench measures something the one-shot table cannot: **how a
 client behaves across a single long working session on one repository**. Each
-sequence replays 5–8 real merged PRs from one repo as consecutive turns in the
+sequence replays 5–15 real merged PRs from one repo as consecutive turns in the
 SAME agent session — the client is resumed each turn (its own session memory,
 not a fresh context), asked for the next fix, and every turn is validated and
 judged independently exactly like a one-shot case (held-out gold tests +
 3-model judge panel). A sequence's score is the **sum of its turn finals**, so
 longer sequences can earn more; every sequence has ≥5 turns, making turns 1–5 a
-uniform 20×5 cross-language grid for depth analysis.
+uniform 25×5 cross-language grid for depth analysis.
 
 Session-resume mechanics per client: claude `--resume <session-id>`, octomind
 `-r <session-name>`, codex `exec resume <id>`, opencode `run --session <id>`.
 Every client carries one session across a sequence's turns. Sequences
-live in `cases/dev/longrun/<language>/<repo>/` (20 sequences, 112 turns, 4 per
+live in `cases/dev/longrun/<language>/<repo>/` (25 sequences, 178 turns, 5 per
 language), each proven fail-to-pass per turn cumulatively
 (`scripts/verify_longrun.sh`). Provenance rules (merge-commit golds, same base
 branch, interleaved-commit checks) are in `docs/LONGRUN.md`.
 
 <!-- LONGRUN-RESULTS:BEGIN -->
-_Updated 2026-08-22 16:39 UTC. Cell = passed/turns · Σ sum of turn final scores · cost · total tokens (incl. cache reads) · agent wall time (sum of agent invocations; excludes setup/validation/judging)._
+_Updated 2026-08-24 17:24 UTC. Cell = passed/turns · Σ sum of turn final scores · cost · total tokens (incl. cache reads) · agent wall time (sum of agent invocations; excludes setup/validation/judging)._
 
 | sequence (turns) | glm-5.3-octomind | glm-5.3-opencode | gpt-5.6-luna-octomind | gpt-5.6-sol-codex | gpt-5.6-luna-codex |
 |---|---|---|---|---|---|
 | cpp/ada (7) | 7/7 Σ575.1 $1.38 4.0M 20m | 7/7 Σ576.7 $2.15 6.7M 23m | 6/7 Σ526.7 $0.20 6.4M 19m | 7/7 Σ562.9 $4.76 7.0M 12m | 7/7 Σ582.2 $0.16 5.3M 8m |
 | cpp/cli11 (8) | 8/8 Σ641.4 $5.32 14.1M 77m | 8/8 Σ622.8 $5.68 19.1M 59m | 8/8 Σ657.1 $0.49 18.4M 28m | 8/8 Σ621.0 $5.87 8.2M 18m | 8/8 Σ644.0 $0.81 33.6M 45m |
+| cpp/duckdb (15) | — | — | — | 15/15 Σ1150.3 $36.79 60.9M 81m | 12/15 Σ976.7 $1.90 76.0M 94m |
 | cpp/fmt (7) | 7/7 Σ564.0 $2.22 6.1M 30m | 7/7 Σ570.3 $1.49 4.3M 21m | 7/7 Σ577.5 $0.21 6.7M 19m | 7/7 Σ533.1 $3.81 4.9M 12m | 7/7 Σ550.9 $0.17 5.9M 11m |
 | cpp/simdjson (5) | 4/5 Σ317.4 $3.76 10.1M 77m | 4/5 Σ320.7 $5.00 15.9M 50m | 0/5 Σ83.0 $0.51 19.5M 28m | 5/5 Σ386.6 $4.86 6.8M 12m | 5/5 Σ403.8 $0.47 18.4M 20m |
 | js/axios (5) | 2/5 Σ196.3 $1.04 3.2M 14m | 2/5 Σ197.7 $1.31 4.0M 34m | 2/5 Σ208.6 $0.10 2.7M 10m | 2/5 Σ178.2 $2.65 2.8M 10m | 2/5 Σ209.1 $0.10 3.0M 9m |
+| js/eslint (15) | — | — | — | 14/15 Σ1084.6 $11.53 17.1M 23m | 14/15 Σ1145.3 $0.64 23.9M 29m |
 | js/fastify (5) | 5/5 Σ400.1 $2.79 8.6M 37m | 4/5 Σ332.8 $1.26 3.6M 30m | 4/5 Σ340.7 $0.30 9.8M 20m | 5/5 Σ395.7 $3.36 4.3M 11m | 4/5 Σ344.7 $0.15 5.2M 8m |
 | js/nest (5) | 4/5 Σ337.9 $1.74 5.2M 25m | 5/5 Σ410.0 $1.26 3.7M 17m | 4/5 Σ354.9 $0.13 3.5M 10m | 5/5 Σ400.3 $2.29 2.6M 8m | 5/5 Σ423.1 $0.14 4.6M 9m |
 | js/vue (5) | 5/5 Σ413.3 $1.85 4.7M 33m | 5/5 Σ408.5 $2.12 6.6M 24m | 5/5 Σ422.2 $0.26 8.8M 14m | 5/5 Σ395.9 $2.38 2.9M 9m | 5/5 Σ386.7 $0.09 2.4M 7m |
 | php/doctrine_orm (6) | 5/6 Σ409.7 $4.59 13.5M 50m | 6/6 Σ464.4 $4.18 13.7M 28m | 6/6 Σ481.0 $0.38 13.7M 23m | 4/6 Σ328.1 $4.47 5.7M 12m | 4/6 Σ358.5 $0.19 6.3M 12m |
 | php/guzzle (5) | 4/5 Σ319.0 $3.00 7.3M 40m | 4/5 Σ326.6 $4.91 15.0M 33m | 4/5 Σ337.2 $0.26 8.4M 20m | 4/5 Σ324.0 $5.75 7.7M 16m | 4/5 Σ340.7 $0.36 13.1M 19m |
+| php/laravel (12) | — | — | — | 6/12 Σ484.2 $16.43 23.4M 41m | 6/12 Σ553.9 $0.60 21.5M 30m |
 | php/phpspreadsheet (6) | 5/6 Σ411.4 $4.56 14.1M 102m | 6/6 Σ481.7 $2.68 8.5M 56m | 6/6 Σ480.8 $0.50 16.4M 25m | 6/6 Σ459.2 $4.06 5.1M 14m | 5/6 Σ425.5 $0.22 7.2M 13m |
 | php/symfony (5) | 5/5 Σ404.4 $2.07 5.3M 22m | 5/5 Σ405.7 $3.58 12.1M 15m | 5/5 Σ414.2 $0.23 5.1M 8m | 5/5 Σ397.6 $2.53 2.7M 9m | 5/5 Σ418.2 $0.11 3.3M 6m |
 | python/aiohttp (6) | 6/6 Σ482.7 $1.35 3.6M 18m | 6/6 Σ493.0 $1.20 3.6M 11m | 6/6 Σ523.0 $0.14 3.5M 10m | 6/6 Σ457.4 $1.92 2.0M 6m | 6/6 Σ490.4 $0.10 3.0M 6m |
+| python/cpython (14) | — | — | — | 11/14 Σ844.1 $11.59 17.4M 30m | 8/14 Σ727.2 $0.69 26.2M 32m |
 | python/mypy (5) | 5/5 Σ361.0 $1.24 2.9M 58m | 5/5 Σ387.6 $5.77 18.2M 62m | 4/5 Σ329.5 $0.27 8.6M 35m | 5/5 Σ372.7 $3.70 4.5M 12m | 5/5 Σ388.2 $0.32 11.8M 16m |
 | python/pydantic (5) | 5/5 Σ376.4 $0.98 2.7M 28m | 5/5 Σ390.6 $4.56 14.4M 30m | 5/5 Σ378.6 $0.19 6.0M 12m | 5/5 Σ385.1 $3.28 4.0M 10m | 5/5 Σ409.1 $0.19 6.1M 11m |
 | python/pytest (5) | 5/5 Σ393.5 $3.60 11.2M 47m | 5/5 Σ399.2 $6.13 20.1M 48m | 5/5 Σ397.3 $0.20 6.0M 18m | 5/5 Σ374.0 $5.93 8.2M 18m | 5/5 Σ401.1 $0.19 6.1M 12m |
+| rust/cargo (10) | — | — | — | 8/10 Σ630.6 $18.77 29.2M 34m | 6/10 Σ524.1 $0.95 33.5M 38m |
 | rust/clap (5) | 5/5 Σ378.3 $1.25 3.6M 26m | 5/5 Σ403.3 $2.09 6.9M 16m | 5/5 Σ420.5 $0.26 8.1M 22m | 5/5 Σ390.5 $4.50 5.6M 17m | 5/5 Σ409.9 $0.24 8.8M 11m |
 | rust/gitoxide (6) | 5/6 Σ418.1 $2.23 5.7M 27m | 5/6 Σ418.9 $4.07 12.6M 28m | 6/6 Σ504.6 $0.32 11.2M 19m | 5/6 Σ405.4 $3.88 5.2M 9m | 5/6 Σ436.2 $0.24 8.4M 10m |
 | rust/ruff (6) | 5/6 Σ397.7 $6.55 18.5M 87m | 6/6 Σ468.5 $22.01 77.8M 97m | 5/6 Σ415.8 $0.67 25.6M 27m | 5/6 Σ381.3 $11.49 17.6M 27m | 5/6 Σ413.8 $0.47 17.5M 23m |
 | rust/tokio (5) | 5/5 Σ397.4 $0.88 2.6M 11m | 5/5 Σ410.1 $1.80 5.5M 23m | 4/5 Σ320.7 $0.10 2.6M 7m | 5/5 Σ395.8 $2.23 2.6M 8m | 5/5 Σ381.6 $0.13 4.2M 7m |
 
-- **glm-5.3-octomind**: 20/20 sequences · 102/112 turns passed · ΣΣ 8195.2 · $52.40 · 147M tokens · 13.8h agent time
-- **glm-5.3-opencode**: 20/20 sequences · 105/112 turns passed · ΣΣ 8489.2 · $83.24 · 272M tokens · 11.7h agent time
-- **gpt-5.6-luna-octomind**: 20/20 sequences · 97/112 turns passed · ΣΣ 8173.9 · $5.69 · 191M tokens · 6.2h agent time
-- **gpt-5.6-sol-codex**: 20/20 sequences · 104/112 turns passed · ΣΣ 8144.6 · $83.72 · 110M tokens · 4.2h agent time
-- **gpt-5.6-luna-codex**: 20/20 sequences · 102/112 turns passed · ΣΣ 8417.9 · $4.83 · 174M tokens · 4.4h agent time
+- **glm-5.3-octomind**: 20/25 sequences · 102/112 turns passed · ΣΣ 8195.2 · $52.40 · 147M tokens · 13.8h agent time
+- **glm-5.3-opencode**: 20/25 sequences · 105/112 turns passed · ΣΣ 8489.2 · $83.24 · 272M tokens · 11.7h agent time
+- **gpt-5.6-luna-octomind**: 20/25 sequences · 97/112 turns passed · ΣΣ 8173.9 · $5.69 · 191M tokens · 6.2h agent time
+- **gpt-5.6-sol-codex**: 25/25 sequences · 158/178 turns passed · ΣΣ 12338.4 · $178.85 · 258M tokens · 7.6h agent time
+- **gpt-5.6-luna-codex**: 25/25 sequences · 148/178 turns passed · ΣΣ 12345.0 · $9.62 · 355M tokens · 8.1h agent time
 <!-- LONGRUN-RESULTS:END -->
 
 ## What a case is
