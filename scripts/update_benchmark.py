@@ -409,7 +409,7 @@ def main() -> None:
         "_Cross-model × harness matrix. Each cell = pass-rate · judge average · "
         "total cost and median per case · agent runtime (median per case, plus the "
         "slowest single case) · non-cache tokens. Per-case figures are medians: one "
-        "runaway case distorts a 50-case mean and tells you nothing about the other 49._\n",
+        "runaway case can distort a suite-wide mean without describing the typical case._\n",
         "| model | " + " | ".join(all_harnesses) + " |",
         "|---" * (len(all_harnesses) + 1) + "|",
     ]
