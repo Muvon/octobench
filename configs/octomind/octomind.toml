@@ -7,7 +7,7 @@
 #   • Validate config: octomind config --validate
 
 # Configuration version (DO NOT MODIFY - used for automatic upgrades)
-version = 7
+version = 8
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SYSTEM-WIDE SETTINGS
@@ -518,14 +518,13 @@ verify_hash = true
 # in-env): an unauthenticated model here makes octomind log "compression failed,
 # continuing session" and skip compaction, so context overgrows past the model's
 # window and the provider rejects with 400 "prompt too long".
-model = "openrouter:qwen/qwen3.5-397b-a17b"
+model = "openrouter:qwen/qwen3.8-27b"
 max_tokens = 16000  # Enough for decision + summary
 temperature = 0.3  # Lower temperature for consistent decisions
 top_p = 1.0
 top_k = 0
 max_retries = 1
 retry_timeout = 10
-ignore_cost = false  # When true, compression decision API cost is not tracked (free)
 
 # ═══════════════════════════════════════════════════════════════════════
 # SUPERVISOR - out-of-band control plane: learning, orientation, detectors, gate
