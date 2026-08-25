@@ -354,7 +354,7 @@ SEALED_HOSTS = f"{UPSTREAM_HOSTS} {SEARCH_HOSTS}"
 # not need egress here. Override for a narrowly scoped one-provider campaign.
 DEFAULT_ALLOW_HOSTS = (
     "api.deepseek.com token-plan.ap-southeast-1.maas.aliyuncs.com api.z.ai "
-    "api.anthropic.com chatgpt.com api.openai.com openrouter.ai ollama.com"
+    "api.anthropic.com chatgpt.com auth.openai.com api.openai.com openrouter.ai ollama.com"
 )
 
 
