@@ -2,3 +2,5 @@
 /cases/_specs/
 /results-*/**
 /octobench.egg-info/
+.codex
+.claude
