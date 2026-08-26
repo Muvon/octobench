@@ -12,4 +12,4 @@ git checkout -q "${BASE_SHA}"
 git checkout -q -B main
 git remote remove origin
 
-GEN=ninja make debug -j"$(nproc)" > /dev/null
+GEN=ninja make reldebug -j"$(nproc)" > /dev/null

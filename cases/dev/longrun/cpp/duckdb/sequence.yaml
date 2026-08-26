@@ -51,7 +51,7 @@ turns:
     test_paths:
       - test/sql/optimizer/test_common_subplan_table_filters.test
     test_command: |
-      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/sql/optimizer/test_common_subplan_table_filters.test
+      cmake --build build/reldebug --target unittest -j"$(nproc)" && build/reldebug/test/unittest test/sql/optimizer/test_common_subplan_table_filters.test
 
   - name: Preserve left association across mixed joins without ON clauses
     difficulty: complex
@@ -83,7 +83,7 @@ turns:
     test_paths:
       - test/sql/join/natural/natural_join.test
     test_command: |
-      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/sql/join/natural/natural_join.test
+      cmake --build build/reldebug --target unittest -j"$(nproc)" && build/reldebug/test/unittest test/sql/join/natural/natural_join.test
 
   - name: Restore column bindings after child ANY ANTI joins
     difficulty: complex
@@ -111,7 +111,7 @@ turns:
     test_paths:
       - test/sql/join/test_predicate_binding.test
     test_command: |
-      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/sql/join/test_predicate_binding.test
+      cmake --build build/reldebug --target unittest -j"$(nproc)" && build/reldebug/test/unittest test/sql/join/test_predicate_binding.test
 
   - name: Detect outer references carried by nested dependent joins
     difficulty: expert
@@ -140,7 +140,7 @@ turns:
     test_paths:
       - test/issues/general/test_23860.test
     test_command: |
-      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/issues/general/test_23860.test
+      cmake --build build/reldebug --target unittest -j"$(nproc)" && build/reldebug/test/unittest test/issues/general/test_23860.test
 
   - name: Reuse recursive outer nested-loop state safely
     difficulty: complex
@@ -168,9 +168,9 @@ turns:
       - test/sql/cte/materialized/test_outer_joins_recursive_cte_materialized.test
       - test/sql/cte/test_outer_joins_recursive_cte.test
     test_command: |
-      cmake --build build/debug --target unittest -j"$(nproc)" &&
-      build/debug/test/unittest test/sql/cte/materialized/test_outer_joins_recursive_cte_materialized.test &&
-      build/debug/test/unittest test/sql/cte/test_outer_joins_recursive_cte.test
+      cmake --build build/reldebug --target unittest -j"$(nproc)" &&
+      build/reldebug/test/unittest test/sql/cte/materialized/test_outer_joins_recursive_cte_materialized.test &&
+      build/reldebug/test/unittest test/sql/cte/test_outer_joins_recursive_cte.test
 
   - name: Simplify same-input greatest and least for row-group pruning
     difficulty: medium
@@ -201,9 +201,9 @@ turns:
       fixture=test/sql/optimizer/octobench_least_greatest_bloom_pruning.test
       trap 'rm -f "$fixture"' EXIT
       cp "$CASE_DIR/fixtures/least_greatest_bloom_pruning.test" "$fixture" &&
-      cmake --build build/debug --target unittest -j"$(nproc)" &&
-      build/debug/test/unittest "$fixture" &&
-      build/debug/test/unittest test/sql/function/generic/test_least_greatest.test
+      cmake --build build/reldebug --target unittest -j"$(nproc)" &&
+      build/reldebug/test/unittest "$fixture" &&
+      build/reldebug/test/unittest test/sql/function/generic/test_least_greatest.test
 
   - name: Propagate safe statistics through materialized CTEs and array folds
     difficulty: expert
@@ -243,10 +243,10 @@ turns:
       - test/optimizer/topn_window_elimination_group_stats.test
       - test/sql/optimizer/test_fd_derived_groups.test
     test_command: |
-      cmake --build build/debug --target unittest -j"$(nproc)" &&
-      build/debug/test/unittest test/optimizer/cte_statistics_propagation.test &&
-      build/debug/test/unittest test/optimizer/test_aggregate_function_rewrite.test &&
-      build/debug/test/unittest test/optimizer/topn_window_elimination_group_stats.test
+      cmake --build build/reldebug --target unittest -j"$(nproc)" &&
+      build/reldebug/test/unittest test/optimizer/cte_statistics_propagation.test &&
+      build/reldebug/test/unittest test/optimizer/test_aggregate_function_rewrite.test &&
+      build/reldebug/test/unittest test/optimizer/topn_window_elimination_group_stats.test
 
   - name: Plan ASOF joins over EXCEPT ALL and INTERSECT ALL safely
     difficulty: expert
@@ -279,7 +279,7 @@ turns:
     test_paths:
       - test/sql/join/asof/test_asof_join_setops.test
     test_command: |
-      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/sql/join/asof/test_asof_join_setops.test
+      cmake --build build/reldebug --target unittest -j"$(nproc)" && build/reldebug/test/unittest test/sql/join/asof/test_asof_join_setops.test
 
   - name: Fold trivial ANY joins after statistics propagation
     difficulty: complex
@@ -308,9 +308,9 @@ turns:
       - test/optimizer/any_join_condition_pruning.test
       - test/sql/join/test_join_always_true_conditions.test
     test_command: |
-      cmake --build build/debug --target unittest -j"$(nproc)" &&
-      build/debug/test/unittest test/optimizer/any_join_condition_pruning.test &&
-      build/debug/test/unittest test/sql/join/test_join_always_true_conditions.test
+      cmake --build build/reldebug --target unittest -j"$(nproc)" &&
+      build/reldebug/test/unittest test/optimizer/any_join_condition_pruning.test &&
+      build/reldebug/test/unittest test/sql/join/test_join_always_true_conditions.test
 
   - name: Leave must-apply cost predicates for their owning join occurrence
     difficulty: expert
@@ -338,7 +338,7 @@ turns:
     test_paths:
       - test/optimizer/joins/test_must_apply_residual_predicate.test
     test_command: |
-      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/optimizer/joins/test_must_apply_residual_predicate.test
+      cmake --build build/reldebug --target unittest -j"$(nproc)" && build/reldebug/test/unittest test/optimizer/joins/test_must_apply_residual_predicate.test
 
   - name: Preserve infinite dates in timestamp comparison rewrites
     difficulty: medium
@@ -370,7 +370,7 @@ turns:
     test_paths:
       - test/optimizer/pushdown/timestamp_to_date_infinity_pushdown.test
     test_command: |
-      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/optimizer/pushdown/timestamp_to_date_infinity_pushdown.test
+      cmake --build build/reldebug --target unittest -j"$(nproc)" && build/reldebug/test/unittest test/optimizer/pushdown/timestamp_to_date_infinity_pushdown.test
 
   - name: Reconstruct cross products spanning three or more relations
     difficulty: complex
@@ -404,7 +404,7 @@ turns:
     test_paths:
       - test/optimizer/joins/single_sided_predicate_reconstruction.test
     test_command: |
-      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/optimizer/joins/single_sided_predicate_reconstruction.test
+      cmake --build build/reldebug --target unittest -j"$(nproc)" && build/reldebug/test/unittest test/optimizer/joins/single_sided_predicate_reconstruction.test
 
   - name: Keep nested struct extracts stable across repeated pruning
     difficulty: complex
@@ -439,7 +439,7 @@ turns:
       - test/configs/storage_compatibility.json
       - test/sql/optimizer/pushdown_extract_reapplied.test
     test_command: |
-      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/sql/optimizer/pushdown_extract_reapplied.test
+      cmake --build build/reldebug --target unittest -j"$(nproc)" && build/reldebug/test/unittest test/sql/optimizer/pushdown_extract_reapplied.test
 
   - name: Do not narrow filter constants through lossy file-schema casts
     difficulty: complex
@@ -468,7 +468,7 @@ turns:
     test_paths:
       - test/sql/copy/parquet/parquet_filter_narrowing_cast.test
     test_command: |
-      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/sql/copy/parquet/parquet_filter_narrowing_cast.test
+      cmake --build build/reldebug --target unittest -j"$(nproc)" && build/reldebug/test/unittest test/sql/copy/parquet/parquet_filter_narrowing_cast.test
 
   - name: Preserve TRY_CAST and nested casts in Top-N late materialization
     difficulty: complex
@@ -498,4 +498,4 @@ turns:
     test_paths:
       - test/sql/optimizer/topn_window_elimination_late_materialization.test
     test_command: |
-      cmake --build build/debug --target unittest -j"$(nproc)" && build/debug/test/unittest test/sql/optimizer/topn_window_elimination_late_materialization.test
+      cmake --build build/reldebug --target unittest -j"$(nproc)" && build/reldebug/test/unittest test/sql/optimizer/topn_window_elimination_late_materialization.test
