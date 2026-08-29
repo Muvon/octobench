@@ -1,14 +1,31 @@
 # octobench
 
+[![CI](https://github.com/Muvon/octobench/actions/workflows/ci.yml/badge.svg)](https://github.com/Muvon/octobench/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+
 > **WIP Notice:** This project is actively under development and APIs/behavior may change without notice. Use at your own risk while we stabilize it.
 
 Benchmark framework to compare **LLM tool + config + prompt** setups across a shared set of cases.
 
 **Latest results:** see [BENCHMARK.md](BENCHMARK.md) — the real-commit benchmark
-(25 fail-to-pass-proven tasks from merged OSS pull requests across 5 languages)
-comparing claude, octomind, and codex, with full reproduction instructions.
+(80 fail-to-pass-proven one-shot tasks and 25 long-run sequences harvested from
+merged pull requests in trusted OSS projects across 5 languages) comparing
+claude, codex, octomind, and opencode, with full reproduction instructions.
 
-Contribution guide: see `CONTRIBUTING.md` (focused on adding new cases).
+Contribution guide: see [CONTRIBUTING.md](CONTRIBUTING.md) (focused on adding new cases).
+
+> Note: `octomind` is Muvon's own coding agent — we benchmark it under the same
+> fairness rules as every other client.
+
+## Documentation
+
+- [docs/USAGE.md](docs/USAGE.md) — CLI reference, executors, env vars
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — concepts and case lifecycle
+- [docs/EXTENDING.md](docs/EXTENDING.md) — adding cases and benchmarks
+- [docs/PROVIDER_INTERFACE.md](docs/PROVIDER_INTERFACE.md) — provider contract
+- [docs/HARNESS.md](docs/HARNESS.md) — real-commit case construction rules
+- [docs/ONESHOT.md](docs/ONESHOT.md) / [docs/LONGRUN.md](docs/LONGRUN.md) — case formats
+- [AGENTS.md](AGENTS.md) — onboarding entrypoint for contributors and agents
 
 ## Key ideas
 - **Cases** define prompts and scripts.
@@ -17,7 +34,7 @@ Contribution guide: see `CONTRIBUTING.md` (focused on adding new cases).
 - **setup.sh / quality.sh / validate.sh** are bash scripts whose logs are fed to the judge.
 
 ## Quick start
-1. Create a venv and install deps:
+1. Create a venv and install deps (Python 3.11+):
 
 ```bash
 python3 -m venv .venv
@@ -165,6 +182,13 @@ Script behavior:
 
 Scripts run in the workspace. Use `$CASE_DIR` to access case assets (e.g., `$CASE_DIR/fixtures`).
 
+### Long-run sequences
+
+Multi-turn sessions against one persistent repo live in
+`cases/dev/longrun/<lang>/<repo>/` with a `sequence.yaml` instead of `case.yaml`,
+run by `python3 -m cli.longrun`. Start from `templates/sequence.yaml`; format
+rules are in [docs/LONGRUN.md](docs/LONGRUN.md).
+
 ## Fairness model
 Each framework runs **at its out-of-the-box default** — no benchmark-tuned prompts,
 roles, or configs that would stack the deck:
@@ -181,11 +205,17 @@ roles, or configs that would stack the deck:
 The judge is the only intentional customization, and it is a separate role that
 cannot influence how the frameworks-under-test run.
 
+The real-commit benchmark in [BENCHMARK.md](BENCHMARK.md) applies a stricter
+methodology on top: one shared system prompt across all clients, web access
+disabled, and no route to upstream solutions. See its "What this benchmark
+measures" section for the full fairness contract.
+
 ## Providers
 Provider implementations live in:
 - `providers/claude.py`
 - `providers/codex.py`
 - `providers/octomind.py`
+- `providers/opencode.py`
 - `providers/base.py`
 - `providers/factory.py`
 
