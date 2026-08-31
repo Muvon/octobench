@@ -340,15 +340,27 @@ def main() -> None:
     # reads as missing data rather than as future work. Pass --suite <name> (a list
     # in configs/suites/) to scope it; without one, every discovered case is shown.
     suite = None
+    markers = ("RESULTS", "SUMMARY")
     for arg in list(sys.argv[1:]):
         if arg.startswith("--suite="):
             suite = arg.split("=", 1)[1]
+            sys.argv.remove(arg)
+        elif arg.startswith("--markers="):
+            prefix = arg.split("=", 1)[1]
+            markers = (f"{prefix}-RESULTS", f"{prefix}-SUMMARY")
             sys.argv.remove(arg)
     if suite:
         listing = repo_root / "configs" / "suites" / f"{suite}.txt"
         if not listing.exists():
             raise SystemExit(f"no suite list at {listing}")
-        wanted = {ln.strip() for ln in listing.read_text().splitlines() if ln.strip()}
+        # Mixed suites (gold) carry oneshot/ and longrun/ prefixes; this table
+        # is oneshot-only, so longrun lines are skipped. Bare lines = oneshot.
+        wanted = set()
+        for ln in listing.read_text().splitlines():
+            ln = ln.strip()
+            if not ln or ln.startswith("longrun/"):
+                continue
+            wanted.add(ln.removeprefix("oneshot/"))
         by_path = {}
         for cid, c in cases.items():
             rel = str(c.get("path", "")).replace("dev/oneshot/", "")
@@ -424,13 +436,13 @@ def main() -> None:
     bench = repo_root / "BENCHMARK.md"
     text = bench.read_text()
     new = re.sub(
-        r"(<!-- RESULTS:BEGIN[^>]*-->\n).*?(<!-- RESULTS:END -->)",
+        rf"(<!-- {markers[0]}:BEGIN[^>]*-->\n).*?(<!-- {markers[0]}:END -->)",
         lambda m: m.group(1) + section + "\n" + m.group(2),
         text,
         flags=re.DOTALL,
     )
     new = re.sub(
-        r"(<!-- SUMMARY:BEGIN[^>]*-->\n).*?(<!-- SUMMARY:END -->)",
+        rf"(<!-- {markers[1]}:BEGIN[^>]*-->\n).*?(<!-- {markers[1]}:END -->)",
         lambda m: m.group(1) + summary_section + "\n" + m.group(2),
         new,
         flags=re.DOTALL,
