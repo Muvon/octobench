@@ -33,10 +33,19 @@ turns:
       workspace root, then records each synthetic `from` prefix and original
       `to` path used by the build.
 
-      Emit sidecars for final artifact kinds and JSON messages, place them beside
-      redirected artifacts when an artifact directory is used, rebuild them when
+      Name each sidecar by appending `.trim-paths.jsonl` to the artifact's full
+      file name (extension included) and place it directly beside that artifact.
+      Every copy of an artifact gets one: hashed originals under the target dir,
+      uplifted copies, and artifacts redirected to an artifact directory — with
+      identical contents for copies of the same artifact. Root units of every
+      binary kind are covered (bins, unit-test/integration-test binaries,
+      examples).
+
+      Emit sidecars for final artifact kinds and JSON messages, rebuild them when
       mappings change, omit them when no debuginfo needs them, and remove them
-      through normal Cargo clean operations.
+      through normal Cargo clean operations. Freshness follows the original:
+      deleting only the uplifted sidecar copy must NOT trigger a rebuild (though
+      a fresh build restores it); deleting the original sidecar must.
     gold_sha: cafc91b2f53f5ecd701145aeb23f879357eaa746
     pr_url: https://github.com/rust-lang/cargo/pull/17303
     test_paths: [tests/testsuite/profile_trim_paths.rs]
@@ -247,8 +256,9 @@ turns:
       Replace the unstable checksum-freshness toggle's implicit behavior with a
       `build.fingerprint` configuration selecting `mtime` or `content`.
       Content mode is available only with `-Zchecksum-freshness`; without the
-      feature Cargo must warn that the content setting is ignored and continue
-      with mtime behavior.
+      feature Cargo must warn exactly
+      ``ignoring `build.fingerprint = "content"` without `-Zchecksum-freshness```
+      and continue with mtime behavior (no warning when `mtime` is configured).
 
       Support config files and the corresponding environment value, pass the
       selected mode through build and rustdoc freshness logic, preserve stable

@@ -117,6 +117,63 @@ def _validate_turn(
     }
 
 
+def _restore_dependency(
+    executor: Executor,
+    repo_url: str,
+    gold_sha: str,
+    test_paths: List[str],
+    turn_number: int,
+    verbosity: str,
+) -> None:
+    """Apply one failed predecessor's gold source diff to the workspace."""
+    paths_arg = "\n".join(test_paths)
+    script = (
+        "set -euo pipefail\n"
+        "git add -A\n"
+        "git diff --cached --quiet || "
+        "git -c user.email=bench@octobench -c user.name=octobench "
+        f"commit -qm 'turn {turn_number} agent checkpoint'\n"
+        f"git remote add origin {repo_url} 2>/dev/null || true\n"
+        f"git fetch -q --depth 2 origin {gold_sha}\n"
+        'ex=(":(exclude,icase)*changelog*" ":(exclude)*.md")\n'
+        "while IFS= read -r t; do\n"
+        '  [[ -n "$t" ]] && ex+=(":(exclude)$t")\n'
+        "done <<< \"$TEST_PATHS\"\n"
+        f"git diff --binary '{gold_sha}^1' '{gold_sha}' -- . \"${{ex[@]}}\" "
+        "> /tmp/gold.patch\n"
+        "if git apply --index /tmp/gold.patch 2>/dev/null \\\n"
+        "   || git apply --3way --index /tmp/gold.patch; then\n"
+        "  git -c user.email=bench@octobench -c user.name=octobench "
+        f"commit -qm 'turn {turn_number} dependency gold' 2>/dev/null || true\n"
+        "else\n"
+        "  git reset -q --hard HEAD\n"
+        "  grep '^+++ b/' /tmp/gold.patch | sed 's|^+++ b/||' | "
+        "while IFS= read -r f; do\n"
+        '    git ls-files --error-unmatch "$f" >/dev/null 2>&1 || rm -f "$f"\n'
+        "  done\n"
+        "  exit 1\n"
+        "fi\n"
+        "git remote remove origin 2>/dev/null || true\n"
+    )
+
+    log(
+        f"[longrun] restore failed dependency turn={turn_number} "
+        f"gold={gold_sha[:12]}",
+        verbosity,
+        "normal",
+    )
+    res = executor.run(
+        ["bash", "-c", script],
+        env_overrides={"TEST_PATHS": paths_arg},
+    )
+    if res.exit_code != 0:
+        details = (res.stderr or "").strip() or (res.stdout or "").strip()
+        raise RuntimeError(
+            f"Failed to restore dependency turn {turn_number}"
+            + (f": {details[-500:]}" if details else "")
+        )
+
+
 def _run_sequence(
     sequence: Dict[str, Any],
     sequence_dir: Path,
@@ -155,6 +212,7 @@ def _run_sequence(
     )
 
     turn_results: List[Dict[str, Any]] = []
+    restored_dependency_turns = set()
     session_id: Optional[str] = None
     # Stable session name across all turns — octomind uses --name as the
     # session identifier, so it must not change between turns.
@@ -199,6 +257,27 @@ def _run_sequence(
                 verbosity,
                 "normal",
             )
+
+            restored_dependencies: List[int] = []
+            for dependency_turn in turn.get("depends_on", []):
+                dependency_idx = dependency_turn - 1
+                dependency_result = turn_results[dependency_idx]
+                if (
+                    dependency_result["validation"]["passed"]
+                    or dependency_turn in restored_dependency_turns
+                ):
+                    continue
+                dependency = turns[dependency_idx]
+                _restore_dependency(
+                    executor,
+                    repo_url,
+                    dependency.get("gold_sha", ""),
+                    dependency.get("test_paths", []),
+                    dependency_turn,
+                    verbosity,
+                )
+                restored_dependency_turns.add(dependency_turn)
+                restored_dependencies.append(dependency_turn)
 
             prompt = _build_turn_prompt(system_prompt, instruction, is_first)
             install_guardrails(executor)
@@ -311,6 +390,7 @@ def _run_sequence(
                     "turn": idx + 1,
                     "name": turn_name,
                     "instruction": instruction,
+                    "restored_dependencies": restored_dependencies,
                     "provider": {
                         "exit_code": provider_result.exit_code,
                         "elapsed_ms": provider_result.elapsed_ms,

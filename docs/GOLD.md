@@ -6,9 +6,16 @@ selects the lines matching the mode. Table blocks live at the top of
 BENCHMARK.md (GOLD-SUMMARY / GOLD-RESULTS / GOLD-LONGRUN-RESULTS markers):
 
 ```
-scripts/update_benchmark.py --suite=gold --markers=GOLD 'label=results-gold-*/*/results.json' ...
+scripts/update_benchmark.py --suite=gold --markers=GOLD 'label=results-gold-oneshot-*/*/results.json' ...
 scripts/longrun_table.py    --suite=gold --markers=GOLD 'label=results-gold-longrun-*/*/results.json' ...
+scripts/gold_scorecard.py   --suite=gold 'label=results-gold-oneshot-*/*/results.json results-gold-longrun-*/*/results.json' ...
 ```
+
+The scorecard is the combined-efficiency view (one column per client over ALL
+30 gold items — oneshot cases + longrun turns together): solve rate, judge
+mean, $/solve, cost- and token-waste %, median/p90/max time, cache-read,
+steps-per-item from the recorded traces (all four provider formats, including
+claude's `_stream_*.jsonl`).
 
 Picked from the full 2026-08 result set (BENCHMARK.md matrix:
 glm-5.3-opencode, gpt-5.6-sol-codex, glm-5.3-octomind, claude-opus-5-claude,
@@ -141,6 +148,44 @@ either broken or ranks nobody, so none are in GOLD.
   - All four all-fail oneshot hard-tier cases (pinopretty, react, nest_sse,
     node_webcrypto) audited VALID-HARD — the hard tier is honest; they stay
     out of GOLD only because a case nobody passes ranks nobody.
+
+## Defect repairs (2026-08-31)
+
+Instruction-level repairs (tests and golds untouched — fail-to-pass proofs
+remain valid; instruction text is not part of the proof):
+
+- guzzle-longrun#4: added the `__Host-` `Path=` requirements from the passing
+  oneshot twin (raw header must contain `Path=`; bare `Path` token invalid).
+- gitoxide#2: instruction now states BOTH hard failures — missing first email
+  (`Line {n} does not contain an email`) and a lone email with nothing to map
+  (`{n}: Emails without a name or email to map to are invalid`, gold
+  parse.rs's second error arm, which the held-out test pins via `"1:"`).
+- axios#3: instruction now states the full contract the tests check — stable
+  never-reused IDs, replacement/clear invalidation, mutation-safe iteration,
+  and the Symbol-keyed internals object with the `handlerEntries` Map
+  (spec_level behavioral→full-spec, difficulty medium→complex).
+- cargo#1: instruction now states the `<artifact>.trim-paths.jsonl` naming,
+  both-copies emission (original + uplifted + artifact-dir, identical
+  contents), all root-unit binary kinds, and the delete-uplifted-copy
+  freshness nuance the tests pin.
+- cargo#10: instruction now quotes the exact warning the test pins:
+  ignoring `build.fingerprint = "content"` without `-Zchecksum-freshness`.
+- cpython#10 / cargo#9 / laravel#2+#11 cascades: fixed generically in the
+  runner (failed-dependency gold restoration, `restored_dependencies` recorded
+  per turn) — see cli/longrun.py.
+
+Quarantined pending repair (NOT in GOLD, excluded from any scoring):
+
+- rust/rustls_misplaced_extensions (oneshot): compile-class identity binding +
+  no fail-to-pass proof; needs the re-base + declare-all-bound-symbols repair.
+- laravel#10: compile-class — tests bind to gold's `QueueRoutes::forward()`
+  naming (`Call to undefined method`), unstated in the instruction.
+- laravel#7: Mockery pins the exact cluster-scan call shape
+  (`scan(42, ['127.0.0.1','6379'], '*', 10)`) and `laravel:` key prefix —
+  white-box interaction test beyond the stated contract.
+- laravel#1 (`Failed asserting that false is true`, context opaque) and
+  laravel#6 (retry-count assertion behavioral; RedisExceptions appear
+  simulated) remain UNCERTAIN — audit before the sequence scores anywhere.
 
 ## Gaps (do not block v1)
 

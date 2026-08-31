@@ -165,7 +165,11 @@ turns:
 
       - `__Secure-`: the cookie must have the `Secure` attribute.
       - `__Host-`: the cookie must have `Secure`, must have `Path=/`, and must
-        NOT have a `Domain` attribute.
+        NOT have a `Domain` attribute. The original `Set-Cookie` header must
+        actually contain a `Path=` attribute: a bare `Path` token without `=`
+        does not count, and a header with no `Path` at all is invalid even
+        though the jar defaults a missing Path to `/` (the parsed cookie alone
+        cannot tell you this — check the raw header).
 
       When a cookie with a prefix does not meet these requirements, it should be
       rejected (not stored in the jar). Mixed-case prefixes (e.g. `__SeCuRe-`,

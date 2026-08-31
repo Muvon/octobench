@@ -116,6 +116,13 @@ Per turn, the runner:
 This means the agent never sees the gold tests, but its source fix is validated
 against them. A turn passes if `test_command` exits 0.
 
+Before a dependent turn runs, any declared prerequisite that failed validation
+is restored with that prerequisite's gold source diff, excluding its protected
+test paths. This measures the dependent turn on the tree a maintainer would have
+fixed first. Prerequisites that passed remain the agent's own implementation.
+Restoration happens before the turn's evidence snapshot, so the injected source
+is not attributed to the agent.
+
 Each turn is scored separately (validation + judge + efficiency); the
 sequence's headline score is the SUM of its turn scores
 (`aggregate.sum_final_score`), with `avg_final_score` kept for comparing

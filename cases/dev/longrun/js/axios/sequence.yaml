@@ -68,12 +68,12 @@ turns:
       npx vitest run tests/unit/helpers/HttpStatusCode.test.js
 
   - name: "Trim trailing ejected interceptor handlers"
-    difficulty: medium
+    difficulty: complex
     task_type: performance
     failure_modes: [resource-leak]
     prompt_source: reverse-spec
     prompt_style: implementation-request
-    spec_level: behavioral
+    spec_level: full-spec
     test_visibility: hidden
     capability_tags: [memory-management, lifecycle, state-management]
     instruction: |
@@ -87,7 +87,26 @@ turns:
       it after each `eject()` so trailing tombstones are cleaned up. Interior
       tombstones (with active handlers after them) must be preserved.
 
-      Also ensure that `forEach` skips `null` entries as before.
+      The cleanup must not weaken the ID contract, so track handler identity
+      separately from array position:
+
+      - IDs returned by `use()` are unique per manager and are NEVER reused,
+        even after trimming removed the slot an earlier ID pointed at (a
+        fresh `use()` after add+eject must not return the ejected ID).
+      - Code that replaces the `handlers` array wholesale, or empties it in
+        place (`handlers.length = 0`), invalidates all previously issued IDs:
+        a later `eject(oldId)` must be a no-op instead of removing an
+        unrelated handler.
+      - Keep that bookkeeping in a Symbol-keyed own property of the manager
+        (its only own Symbol property) holding an internal state object with
+        a `handlerEntries` Map from interceptor ID to its entry; entries for
+        handlers that no longer exist are dropped when the map is consulted.
+
+      Iteration must be mutation-safe: `forEach` still skips `null` entries;
+      handlers registered during a `forEach` pass are not visited by that
+      pass; ejections performed during iteration are compacted only after the
+      iteration completes; clearing the array during iteration lets the
+      current pass finish over the handlers it started with.
     gold_sha: 712e02373f1c5ac72fdf5da16f04838338ba817e
     pr_url: https://github.com/axios/axios/pull/11087
     test_paths:

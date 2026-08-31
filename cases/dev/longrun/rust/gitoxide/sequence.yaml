@@ -76,8 +76,11 @@ turns:
       name, no email, and the untouched remainder instead of propagating
       the error. Drop the "too many names or emails" check entirely.
 
-      The only remaining hard failure for a line is a missing first email;
-      report it as `Line {n} does not contain an email`.
+      Two hard failures remain for a line. A missing first email is reported
+      as `Line {n} does not contain an email`. An entry that ends up with
+      nothing to map — a lone email with no name and no second identity, like
+      a bare `<email>` — is also invalid, reported as
+      `{n}: Emails without a name or email to map to are invalid`.
 
       Resulting behaviour: trailing junk after a complete mapping is
       ignored, so a line with a third email, or a comment after the second
