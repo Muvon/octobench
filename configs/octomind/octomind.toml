@@ -7,7 +7,7 @@
 #   • Validate config: octomind config --validate
 
 # Configuration version (DO NOT MODIFY - used for automatic upgrades)
-version = 8
+version = 12
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SYSTEM-WIDE SETTINGS
@@ -20,27 +20,15 @@ version = 8
 # • debug: Show detailed debugging information
 log_level = "info"
 
-# Default model for all operations (provider:model format)
-# Examples: "openrouter:anthropic/claude-3.5-sonnet", "openai:gpt-4o", "deepseek:deepseek-chat"
-model = "zai:glm-5.3"
-
 # Default tag used when no TAG is passed to `octomind run` (and acp/server).
 # Can be a role name (e.g. "developer") or a tap agent (e.g. "octomind:assistant").
 # The built-in tap muvon/octomind-tap ships ready-to-use agents like octomind:assistant.
 default = "assistant:concierge"
 
-# Default max_tokens for all operations
-max_tokens = 32000
-
-# Custom instructions file name (relative to project root)
-# This file will be automatically loaded as a user message in new sessions
-# Set to empty string to disable: custom_instructions_file_name = ""
-custom_instructions_file_name = "INSTRUCTIONS.md"
-
-# Custom constraints file name (relative to project root)
-# This file content will be automatically appended to EACH user request in <constraints>...</constraints> tags
-# Set to empty string to disable: custom_constraints_file_name = ""
-custom_constraints_file_name = "CONSTRAINTS.md"
+# NOTE (v12): custom_instructions_file_name / custom_constraints_file_name are
+# gone from octomind — it now auto-loads a hardcoded AGENTS.md from the workdir.
+# The bench never shipped INSTRUCTIONS.md/CONSTRAINTS.md into cases, so nothing
+# is lost; AGENTS.md pickup is normal client behaviour every client shares.
 
 # Sandbox mode: restrict all filesystem writes to the current working directory
 # When enabled, the process and all child processes (shell, MCP servers) cannot
@@ -48,6 +36,10 @@ custom_constraints_file_name = "CONSTRAINTS.md"
 # Supported on Linux (Landlock, kernel 5.13+) and macOS (Seatbelt).
 # Can also be enabled at runtime with --sandbox CLI flag.
 sandbox = false
+
+# octobench: the container is egress-sealed; telemetry posts would only add
+# blocked-connection noise and retries. Keep off.
+telemetry = false
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PERFORMANCE & LIMITS
@@ -78,23 +70,6 @@ cache_keepalive_enabled = false
 # ends (only sensible in daemon mode under explicit cost monitoring).
 cache_keepalive_max_idle_seconds = 1800
 
-# Maximum number of retries for API calls (can be overridden by --max-retries CLI flag)
-max_retries = 1
-
-# Base timeout for exponential backoff retry logic (config-only, no CLI override)
-retry_timeout = 10
-
-# Per-request HTTP timeout in seconds — hard limit on how long a single
-# HTTP call to the LLM provider may take before being aborted.
-# 0 = no timeout (LLM responses can take minutes for long generations).
-# Applied at the reqwest RequestBuilder level; retry/backoff still applies on timeout.
-request_timeout_seconds = 300
-
-# Reasoning effort hint for thinking-capable models.
-# Valid values: "low", "medium", "high", "xhigh", "max".
-# Each provider maps this to its native knob (effort string, budget tokens, etc.).
-# Models without thinking support silently ignore this.
-reasoning_effort = "medium"
 # ═══════════════════════════════════════════════════════════════════════════════
 # USER INTERFACE
 # Configure how Octomind displays information
@@ -125,13 +100,27 @@ max_request_spending_threshold = 0.0
 # ═══════════════════════════════════════════════════════════════════════
 auto_capabilities = false
 
-# Capability provider overrides for tap agents
-# Each key is a capability name, value is the provider to use instead of "default"
-# Example: codesearch = "octocode" → uses capabilities/codesearch/octocode.toml
-# Leave empty to use default providers for all capabilities
-
 # Required field (strict parse). The bench defines no /prompt templates.
+# Must stay ABOVE the first table header ([model]) or it parses as model.prompts.
 prompts = []
+
+# Complete baseline model profile (v12: replaces the old top-level model /
+# max_tokens / reasoning_effort / retry scalars). Every role, tap, workflow
+# step, dynamic agent, and internal model profile inherits fields it does not
+# override. THE bench main model lives here — keep as is.
+[model]
+name = "zai:glm-5.3"
+# Reasoning effort hint for thinking-capable models.
+# Valid values: "low", "medium", "high", "xhigh", "max".
+reasoning_effort = "medium"
+max_tokens = 32000
+temperature = 0.3
+top_p = 0.7
+top_k = 20
+max_retries = 1
+retry_timeout = 10
+# Hard timeout for one provider request. 0 = no timeout.
+request_timeout_seconds = 300
 
 [capabilities]
 # octobench: route websearch to Brave (real npm pkg) — the default `tavily`
@@ -139,9 +128,10 @@ prompts = []
 websearch = "brave"
 
 # Tap model overrides for specific agents
-# Each key is a tap agent tag (e.g., "developer:general"), value is the model to use
-# This allows setting a preferred model for specific tap agents.
-# Priority: CLI --model > taps override > role.model > config.model
+# Each key is a tap agent tag and each value is only a model name (v12: nested
+# profiles are no longer accepted here). The selected model keeps the main
+# [model] parameters unless the resolved role independently overrides them.
+# Priority: runtime override > role model > tap model > main model name
 # Example:
 # [taps]
 # "developer:general" = "ollama:glm-5"
@@ -169,11 +159,9 @@ websearch = "brave"
 # The built-in tap (muvon/octomind-tap) already ships production-ready roles:
 #   https://github.com/muvon/octomind-tap
 #
-# To use a tap agent directly, just run:
-#   octomind run octomind:assistant
-#   octomind run octomind:developer
-#
-# Define a custom role below only when you need project-specific behaviour.
+# Roles inherit the complete [model] profile. Add [roles.model] only for fields
+# that genuinely differ (v12: role-level temperature/top_p/top_k scalars moved
+# into the nested [roles.model] table).
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # octobench clean-bench role. Run with `octomind run developer`.
@@ -197,9 +185,6 @@ websearch = "brave"
 # would just measure the same agent four times.
 [[roles]]
 name = "developer"
-temperature = 0.1
-top_p = 0.2
-top_k = 10
 system = """
 <identity>
 Elite senior developer. Pragmatic, precise, zero waste.
@@ -322,6 +307,12 @@ Trivial edits (typo, rename, single-line tweak) → just "Done." or one-line des
 """
 welcome = ""
 
+# Same sampling the role carried pre-v12 (mirrors developer:general).
+[roles.model]
+temperature = 0.1
+top_p = 0.2
+top_k = 10
+
 # Tools spelled out per capability, exactly as the tap's capability files define
 # them, so the role's surface is auditable against developer:general:
 #   core                  → plan
@@ -358,11 +349,9 @@ allowed_tools = [
 ]
 
 # Example: override the developer role with your own system prompt
+# (sampling inherits the main [model] profile: 0.3 / 0.7 / 20)
 [[roles]]
 name = "assistant"
-temperature = 0.3
-top_p = 0.7
-top_k = 20
 system = """
 You are helpful and knowledgeable assistant.
 Working directory: {{CWD}}
@@ -372,6 +361,32 @@ welcome = "Hello! Ready to code. Working in {{CWD}} (Role: {{ROLE}})"
 [roles.mcp]
 server_refs = ["core", "runtime", "filesystem", "agent"]
 allowed_tools = ["core:*", "runtime:*", "filesystem:*", "agent:*"]
+
+[[roles]]
+name = "judge"
+system = """
+You are a strict benchmark judge for octobench.
+Return ONLY valid JSON matching the requested schema.
+No markdown, no prose outside the requested format, no extra keys.
+{{SYSTEM}}
+"""
+welcome = ""
+
+[roles.model]
+temperature = 0.0
+top_p = 1.0
+top_k = 1
+# A verdict is a small JSON object: measured over 318 real panel verdicts the
+# largest was 1,605 chars (~401 tokens). Inheriting the global 32000 made every
+# judge call reserve ~80x what it can use, and OpenRouter reserves against
+# max_tokens, so the panel started returning 402 "requires more credits, or
+# fewer max_tokens" long before the balance was actually spent. 8192 leaves
+# 20x headroom, including for a panel model that emits reasoning.
+max_tokens = 8192
+
+[roles.mcp]
+server_refs = []
+allowed_tools = []
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MCP (MODEL CONTEXT PROTOCOL) SERVERS
@@ -383,6 +398,9 @@ allowed_tools = ["core:*", "runtime:*", "filesystem:*", "agent:*"]
 # Global tool restrictions (empty = no restrictions)
 allowed_tools = []
 
+# Per-operation timeout. For tool calls this is an idle deadline: each MCP
+# progress notification resets it (octofs heartbeats long shell runs, so 30s
+# here does not kill builds/tests).
 # Built-in MCP servers (always available)
 [[mcp.servers]]
 name = "core"
@@ -402,19 +420,11 @@ type = "builtin"
 timeout_seconds = 30
 tools = []
 
-
-# HTTP MCP server configuration:
-# - Just provide a URL (localhost or remote - doesn't matter)
-# - OAuth authentication is handled automatically via MCP Authorization Discovery (RFC 9728)
-# - No manual OAuth configuration needed — just provide the URL
-# - Use Stdin type for local processes instead
-# [[mcp.servers]]
-# name = "my_http_server"
-# type = "http"
-# url = "http://localhost:3000/mcp"  # URL to connect to
-# timeout_seconds = 30
-# tools = []
-
+[[mcp.servers]]
+name = "orchestration"
+type = "builtin"
+timeout_seconds = 30
+tools = []
 
 # octobench: static octocode server — overrides the tap capability launch args.
 # --no-git skips git-based optimizations (root-owned /testbed trips ownership
@@ -473,8 +483,7 @@ validation_timeout = 60
 max_retries = 3
 
 # ═══════════════════════════════════════════════════════════════════════
-# PLAN-DRIVEN AUTONOMOUS COMPRESSION
-# Configure automatic context compression for plan-driven sessions
+# AUTOMATIC CONTEXT COMPRESSION
 # ═══════════════════════════════════════════════════════════════════════
 
 [compression]
@@ -489,13 +498,15 @@ knowledge_retention = 25
 # they do not all fit. 0 disables analysis-finding retention.
 analysis_findings_max_tokens = 6000
 
+# Single compression trigger in absolute tokens (0 = compression disabled).
+# How deep each compression goes is computed per cycle from the measured session
+# growth rate and the context ceiling.
 threshold = 70000
 
-# NOTE: these belong to [compression]. A key placed AFTER the
-# [[compression.pressure_levels]] blocks below is parsed as a field of the last
-# pressure level and silently ignored — knowledge_retention sat there, inert,
-# through every bench run before 2026-08-08. Every scalar must stay above the
-# nested attention and pressure-level tables.
+# NOTE: scalar compression keys must remain ABOVE the nested attention and
+# model tables. A scalar placed after a nested table header is parsed as a
+# field of that table and silently ignored — knowledge_retention sat there,
+# inert, through every bench run before 2026-08-08.
 
 # Evidence-grounded causal compaction (PACT): runtime-owned task/constraint
 # pins, causal tool packets, an exact active frontier, attributed folds, and a
@@ -510,15 +521,15 @@ telemetry = true
 enabled = true
 verify_hash = true
 
-# Decision model configuration for compression decisions and summary generation
-# Use a fast, cheap model like Haiku for cost savings (10x cheaper than Sonnet)
-# Cost comparison: Haiku ~$0.0003 vs Sonnet ~$0.003 per compression decision
-[compression.decision]
-# Keep this on the same provider the bench authenticates (only OLLAMA_API_KEY
-# in-env): an unauthenticated model here makes octomind log "compression failed,
-# continuing session" and skip compaction, so context overgrows past the model's
-# window and the provider rejects with 400 "prompt too long".
-model = "openrouter:qwen/qwen3.7-flash"
+# Decision model for compression decisions and summary generation
+# (v12: renamed from [compression.decision]; `model = "..."` became `name`;
+# partial override — omitted fields inherit the main [model] profile).
+[compression.model]
+# Keep this on a provider the bench authenticates: an unauthenticated model here
+# makes octomind log "compression failed, continuing session" and skip
+# compaction, so context overgrows past the model's window and the provider
+# rejects with 400 "prompt too long".
+name = "openrouter:qwen/qwen-3.8-flash"
 max_tokens = 16000  # Enough for decision + summary
 temperature = 0.3  # Lower temperature for consistent decisions
 top_p = 1.0
@@ -537,84 +548,62 @@ retry_timeout = 10
 [supervisor]
 # Master switch for the whole control plane
 enabled = true
-# Shared cheap model for supervisor mechanics (a mechanic may override)
-model = "openrouter:deepseek/deepseek-v4-flash-0731"
+
+# ONE shared profile for gate, resolve, plan, condense, and learning (v12:
+# the per-mechanic model knobs — gate.verifier_model, plan.model,
+# condense.model, learning.model — are gone).
+#
+# Model choice carries the gate-verifier evidence, because the gate is the
+# measured-sensitive seat: instrumented A/B replays (2026-08-12/23) showed
+# openrouter:qwen/qwen-3.8-flash returning the full gate protocol 2/2 and
+# flagging missed conditions, while minimax dropped mandated rules and the
+# ollama-served deepseek emitted ZERO protocol lines (every verdict parsed
+# Indeterminate; ollama cloud also ignores the schema parameter). The old
+# deepseek-v4-flash seat only served plan/condense narrowing, which qwen
+# handles. Transport must stay openrouter: it honours schema enforcement.
+[supervisor.model]
+name = "openrouter:qwen/qwen-3.8-flash"
+# The gate's checklist + evidence protocol needs room (was gate max_tokens
+# 24000 pre-v12). qwen flash is cheap; the OpenRouter max_tokens-reservation
+# issue only bit the high-volume judge panel.
+max_tokens = 24000
+temperature = 0.0
+top_p = 1.0
+top_k = 0
+
 [supervisor.learning]
 # Enable the learning system (lessons + orientation memory, distill + recall)
-enabled = true 
-# Model for extraction and retrieval LLM calls (cheap model recommended)
-model = "openrouter:qwen/qwen3.7-flash"
-# Backend: "file" (default, zero deps) or "mcp" (external tool with field mapping)
-backend = "file"
+# (v12: file backend is the only storage; the backend/model knobs are gone).
+enabled = true
+
+[supervisor.learning.evolution]
+# Compile grounded memories into scoped skills and guardrail candidates.
+# Keep off: cross-case skill synthesis would carry state between bench cases.
+enabled = false
+
 # Verify-gate: on self-reported `done`, run a checklist before accepting.
 # The free deterministic pre-gate and goal recitation are always on; detector
-# thresholds are fixed constants in v7 rather than user configuration.
+# thresholds are fixed constants.
 [supervisor.gate]
 enabled = true
 
-max_tokens = 24000
-
-# Model the gate verifies WITH (also runs the task classifier / conditions
-# compiler). Cross-family is the default guidance, but instrumented traces
-# (2026-08-12) showed minimax-m3 dropping mandated rules on both seats —
-# omitting required checklist conditions and never applying the
-# acceptance-only evidence rule — while deepseek applied them with depth in
-# an A/B replay on identical input. Capability beats family diversity here.
-# Transport matters: the ollama-served variant answers without its reasoning
-# pass (measured: bare 9s PASS verdicts, 2-line checklists) while the
-# openrouter-served one reasons deeply on identical input (A/B 2026-08-12).
-# Measured 2026-08-23 by replaying the real GATE_PROMPT on a turn the gate
-# wrongly passed: ollama:deepseek-v4-flash emitted ZERO protocol lines on both
-# attempts - no evidence shapes, no condition checklist - so every verdict
-# parsed as Indeterminate. openrouter:qwen/qwen3.7-flash returned the full
-# protocol 2/2 and flagged the missed condition as a gap. Schema enforcement is
-# unavailable on ollama cloud: it accepts the schema parameter and ignores it,
-# so the verifier must sit on a route that can be held to the contract.
-verifier_model = "openrouter:qwen/qwen3.7-flash"
-
-# Adaptive external plan manager. Keep its helper model aligned with the
-# existing supervisor and condense path.
+# Adaptive external plan manager.
 [supervisor.plan]
 enabled = true
-model = "openrouter:deepseek/deepseek-v4-flash-0731"
 
 # Condense: task-aware narrowing of oversized tool outputs. When a tool result
 # exceeds tokens_threshold, ONE cheap-model call per round decides what the
 # agent needs to see: all relevant -> kept in full; partly relevant -> only the
-# needed lines (selected by LINE RANGES over a numbered copy and reconstructed
-# verbatim -- never rewritten); irrelevant -> replaced with a short note. The
-# full original is spilled to a session file first, so nothing is lost -- the
-# agent can read any cut span on demand. Runs BEFORE the blunt
-# mcp_response_tokens_threshold prefix-cut, which still applies as the ceiling.
+# needed lines (selected by LINE RANGES and reconstructed verbatim -- never
+# rewritten); irrelevant -> replaced with a short note. v12: runs AFTER the
+# blunt mcp_response_tokens_threshold prefix-cut, so it only narrows what the
+# agent would actually have received.
 [supervisor.condense]
 enabled = true
+# Learn a bounded per-session trigger from realized condenser savings.
+# Off: a fixed threshold keeps runs comparable across cases.
+adaptive = false
 # Per-result trigger (estimated tokens). 0 = off. Keep well below
-# mcp_response_tokens_threshold: that cap is the backstop, this is the smart
-# path that fires earlier.
+# mcp_response_tokens_threshold: that cap is the ceiling, this is the smart
+# path under it.
 tokens_threshold = 5000
-# Model that does the narrowing (cheap + fast recommended).
-model = "openrouter:deepseek/deepseek-v4-flash-0731"
-
-[[roles]]
-name = "judge"
-temperature = 0.0
-top_p = 1.0
-top_k = 1
-# A verdict is a small JSON object: measured over 318 real panel verdicts the
-# largest was 1,605 chars (~401 tokens). Inheriting the global 32000 made every
-# judge call reserve ~80x what it can use, and OpenRouter reserves against
-# max_tokens, so the panel started returning 402 "requires more credits, or
-# fewer max_tokens" long before the balance was actually spent. 8192 leaves
-# 20x headroom, including for a panel model that emits reasoning.
-max_tokens = 8192
-system = """
-You are a strict benchmark judge for octobench.
-Return ONLY valid JSON matching the requested schema.
-No markdown, no prose outside the requested format, no extra keys.
-{{SYSTEM}}
-"""
-welcome = ""
-
-[roles.mcp]
-server_refs = []
-allowed_tools = []
