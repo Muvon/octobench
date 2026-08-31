@@ -4,3 +4,4 @@
 /octobench.egg-info/
 .codex
 .claude
+/benchmarks/ifbench_vendor/.nltk_data/
