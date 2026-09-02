@@ -18,12 +18,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
-import time
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -31,7 +28,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from cli.main import build_task_prompt, load_yaml  # noqa: E402
+from cli.main import load_yaml  # noqa: E402
 from scoring.aggregate import compute_efficiency_score, compute_final_score  # noqa: E402
 
 
@@ -205,13 +202,17 @@ def reconstruct_run(run_dir: Path, repo_root: Path) -> list[dict]:
         validate_log = read_log(logs_dir / "validate.stdout.log")
 
         # Infer exit codes
-        setup_log["exit_code"] = 0 if setup_log["stdout"].strip() or not setup_log["stderr"].strip() else 1
+        setup_log["exit_code"] = (
+            0 if setup_log["stdout"].strip() or not setup_log["stderr"].strip() else 1
+        )
         # If setup stderr has "error" or "failed", mark as failed
         setup_err = setup_log["stderr"].lower()
         if "could not be resolved" in setup_err or "error" in setup_err and "install" in setup_err:
             setup_log["exit_code"] = 1
 
-        validate_log["exit_code"] = infer_validate_exit(validate_log["stdout"], validate_log["stderr"])
+        validate_log["exit_code"] = infer_validate_exit(
+            validate_log["stdout"], validate_log["stderr"]
+        )
 
         # Build evidence
         case = case_files.get(case_id, {})
@@ -223,14 +224,25 @@ def reconstruct_run(run_dir: Path, repo_root: Path) -> list[dict]:
         if provider_data["stdout"]:
             provider_evidence_parts.append("FINAL MESSAGE:\n" + provider_data["stdout"][-2000:])
         if provider_data["tool_titles"]:
-            provider_evidence_parts.append("TOOL CALLS (tail):\n" + "\n".join(f"- {c}" for c in provider_data["tool_titles"]))
+            provider_evidence_parts.append(
+                "TOOL CALLS (tail):\n"
+                + "\n".join(f"- {c}" for c in provider_data["tool_titles"])
+            )
         provider_evidence = "\n\n".join(provider_evidence_parts)
 
         evidence_parts = []
         if provider_evidence:
-            evidence_parts.append("<provider_evidence>\n" + provider_evidence.strip() + "\n</provider_evidence>")
+            evidence_parts.append(
+                "<provider_evidence>\n"
+                + provider_evidence.strip()
+                + "\n</provider_evidence>"
+            )
         if evidence_diff:
-            evidence_parts.append("<evidence_diff>\n" + evidence_diff.strip() + "\n</evidence_diff>")
+            evidence_parts.append(
+                "<evidence_diff>\n"
+                + evidence_diff.strip()
+                + "\n</evidence_diff>"
+            )
         evidence = "\n\n".join(evidence_parts)
 
         # Compute cost
@@ -297,7 +309,9 @@ def reconstruct_run(run_dir: Path, repo_root: Path) -> list[dict]:
         )
         validation_failed = validate_log["exit_code"] != 0
         raw_final = compute_final_score(0.0, efficiency, scoring_cfg)
-        penalty = float(scoring_cfg.get("validation_fail_penalty", 25.0)) if validation_failed else 0.0
+        penalty = 0.0
+        if validation_failed:
+            penalty = float(scoring_cfg.get("validation_fail_penalty", 25.0))
         record["scoring"] = {
             "efficiency_score": efficiency,
             "raw_final_score": raw_final,
@@ -331,8 +345,13 @@ def merge_results(main_records: list[dict], merge_files: list[Path]) -> list[dic
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("run_dir", help="Original run directory (e.g. results-dsv4-opencode/20260808-063657)")
-    parser.add_argument("--merge", nargs="*", default=[], help="Additional results.json files to merge in (override by case_id)")
+    parser.add_argument(
+        "run_dir", help="Original run directory (e.g. results-dsv4-opencode/20260808-063657)"
+    )
+    parser.add_argument(
+        "--merge", nargs="*", default=[],
+        help="Additional results.json files to merge in (override by case_id)",
+    )
     args = parser.parse_args()
 
     repo_root = Path.cwd().resolve()

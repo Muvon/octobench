@@ -106,7 +106,11 @@ def main() -> None:
                 diff_text = git.stdout
                 if len(diff_text) > 60_000:
                     diff_text = diff_text[:60_000] + "\n... [diff truncated]"
-                evidence += "\n\n<evidence_diff_regenerated>\n" + diff_text + "\n</evidence_diff_regenerated>"
+                evidence += (
+                    "\n\n<evidence_diff_regenerated>\n"
+                    + diff_text
+                    + "\n</evidence_diff_regenerated>"
+                )
         payload = {
             "task": build_task_prompt(case),
             "prep_log": scripts["setup"]["stdout"] + scripts["setup"]["stderr"],
@@ -130,7 +134,9 @@ def main() -> None:
         )
         validation_failed = scripts["validate"]["exit_code"] != 0
         raw_final = compute_final_score(float(judge_out.get("score", 0)), efficiency, scoring_cfg)
-        penalty = float(scoring_cfg.get("validation_fail_penalty", 25.0)) if validation_failed else 0.0
+        penalty = 0.0
+        if validation_failed:
+            penalty = float(scoring_cfg.get("validation_fail_penalty", 25.0))
         r["scoring"].update(
             {
                 "efficiency_score": efficiency,

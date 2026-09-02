@@ -5,7 +5,6 @@ default-deny egress prevents solution retrieval through source hosts, search,
 mirrors, package registries, or unknown future domains.
 """
 import os
-import sys
 
 os.environ["OCTOBENCH_SEAL_NETWORK"] = "1"
 os.environ.pop("OCTOBENCH_ALLOW_HOSTS", None)

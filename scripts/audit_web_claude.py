@@ -47,7 +47,10 @@ for root in roots:
                     continue
                 cmds += 1
                 cmd = inp.get("command") or ""
-                hits = [t for t, rx in (("NET-CMD", NET_CMD), ("UPSTREAM-IN-CMD", UPSTREAM)) if rx.search(cmd)]
+                hits = [
+                    t for t, rx in (("NET-CMD", NET_CMD), ("UPSTREAM-IN-CMD", UPSTREAM))
+                    if rx.search(cmd)
+                ]
                 if hits:
                     flagged += 1
                     print(f"[{','.join(hits)}] {seq}/{turn}")

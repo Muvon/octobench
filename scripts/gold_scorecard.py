@@ -169,7 +169,9 @@ def column(items: list[dict]) -> dict[str, str]:
         "cost waste %": f"{100 * sum(i['cost'] for i in failed) / cost:.1f}%" if cost else "-",
         "tok median/item": _k(_median([i["noncache"] for i in items])),
         "tok per solve": _k(nc_total / p) if p else "-",
-        "tok waste %": f"{100 * sum(i['noncache'] for i in failed) / nc_total:.1f}%" if nc_total else "-",
+        "tok waste %": (
+            f"{100 * sum(i['noncache'] for i in failed) / nc_total:.1f}%" if nc_total else "-"
+        ),
         "cache read median": _k(_median([i["cache"] for i in items])),
         "reasoning share": f"{100 * reas_t / (reas_t + out_t):.0f}%" if reas_t else "n/a",
         "time median": _m(_median(ms)),
@@ -196,7 +198,7 @@ def main() -> None:
     metrics = next((list(c.keys()) for _l, c in table if c), [])
     if not metrics:
         raise SystemExit("no records matched")
-    print("| metric | " + " | ".join(l for l, _c in table) + " |")
+    print("| metric | " + " | ".join(lbl for lbl, _c in table) + " |")
     print("|---" * (len(table) + 1) + "|")
     for m in metrics:
         print(f"| {m} | " + " | ".join(c.get(m, "-") for _l, c in table) + " |")

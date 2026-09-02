@@ -34,7 +34,10 @@ total = flagged = 0
 for root in roots:
     for path in sorted(glob.glob(f"{root}/**/provider.raw.jsonl", recursive=True)):
         parts = path.split("/")
-        seq = next((p for p in parts if p.startswith("longrun_")), parts[-6] if len(parts) >= 6 else "?")
+        seq = next(
+            (p for p in parts if p.startswith("longrun_")),
+            parts[-6] if len(parts) >= 6 else "?",
+        )
         turn = parts[-3] if len(parts) >= 3 else "?"
         for line in open(path, errors="replace"):
             try:

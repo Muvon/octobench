@@ -144,6 +144,10 @@ def _stream(proc: subprocess.Popen, name: str, verbosity: str, log_fn) -> Dict:
     return {"exit_code": code, "stdout": "".join(stdout_lines), "stderr": "".join(stderr_lines)}
 
 
+def _decode_output(data) -> str:
+    # TimeoutExpired output is bytes even in text mode.
+    return data if isinstance(data, str) else (data or b"").decode(errors="replace")
+
 class HostExecutor(Executor):
     def __init__(self, workspace: Path, case_dir: Path, octomind_config: Path):
         self._ws = Path(workspace).resolve()
@@ -165,9 +169,8 @@ class HostExecutor(Executor):
                 timeout=self.case_timeout_s,
             )
         except subprocess.TimeoutExpired as e:
-            # TimeoutExpired output is bytes even in text mode.
-            stdout = e.stdout if isinstance(e.stdout, str) else (e.stdout or b"").decode(errors="replace")
-            stderr = e.stderr if isinstance(e.stderr, str) else (e.stderr or b"").decode(errors="replace")
+            stdout = _decode_output(e.stdout)
+            stderr = _decode_output(e.stderr)
             return ExecResult(
                 stdout,
                 stderr + f"\noctobench: case timeout after {self.case_timeout_s}s",
@@ -378,7 +381,9 @@ class DockerExecutor(Executor):
         platform_args = ["--platform", self._platform] if self._platform else []
         # NET_ADMIN lets cli.main seal the container's egress for the agent phase
         # (see seal_network); without it the agent can reach the upstream fix.
-        net_args = ["--cap-add=NET_ADMIN"] if os.environ.get("OCTOBENCH_SEAL_NETWORK") == "1" else []
+        net_args = (
+            ["--cap-add=NET_ADMIN"] if os.environ.get("OCTOBENCH_SEAL_NETWORK") == "1" else []
+        )
         cmd = [
             "docker", "run", "-d", *platform_args, *net_args,
             "--name", self.name, "-w", self._workdir,
@@ -410,8 +415,8 @@ class DockerExecutor(Executor):
         except subprocess.TimeoutExpired as e:
             # The killed `docker exec` client does not stop the process inside
             # the container; close() (docker rm -f) reaps it with the container.
-            stdout = e.stdout if isinstance(e.stdout, str) else (e.stdout or b"").decode(errors="replace")
-            stderr = e.stderr if isinstance(e.stderr, str) else (e.stderr or b"").decode(errors="replace")
+            stdout = _decode_output(e.stdout)
+            stderr = _decode_output(e.stderr)
             return ExecResult(
                 stdout,
                 stderr + f"\noctobench: case timeout after {self.case_timeout_s}s",

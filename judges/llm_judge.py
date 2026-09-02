@@ -177,7 +177,9 @@ def run_judge(prompt_payload: Dict, judge_cfg: Dict, workdir: str) -> Dict:
     task = prompt_payload["task"]
     prep_log = _clamp(prompt_payload.get("prep_log", ""), *JUDGE_BUDGET["prep_log"])
     quality_log = _clamp(prompt_payload.get("quality_log", ""), *JUDGE_BUDGET["quality_log"])
-    validation_log = _clamp(prompt_payload.get("validation_log", ""), *JUDGE_BUDGET["validation_log"])
+    validation_log = _clamp(
+        prompt_payload.get("validation_log", ""), *JUDGE_BUDGET["validation_log"]
+    )
     evidence_log = _clamp(prompt_payload.get("evidence_log", ""), *JUDGE_BUDGET["evidence_log"])
 
     # The verdict comes from the test command's exit code. Without it the judge
@@ -279,7 +281,9 @@ def run_judge(prompt_payload: Dict, judge_cfg: Dict, workdir: str) -> Dict:
 
 if __name__ == "__main__":
     # parser self-check: a `}` inside a string value must not truncate the payload
-    out = _extract_json('log noise <results>{"score": 7, "reasoning": "used dict {k: v}"}</results> tail')
+    out = _extract_json(
+        'log noise <results>{"score": 7, "reasoning": "used dict {k: v}"}</results> tail'
+    )
     assert out["score"] == 7 and out["reasoning"].endswith("}"), out
 
     # panel self-check: a judge that fails once is retried and its verdict counts;

@@ -127,7 +127,9 @@ def _logs_dir(results_path: Path, sequence: Dict, turn_number: int) -> Path:
     )
 
 
-def rejudge_file(results_path: Path, judge_cfg: Dict, scoring_cfg: Dict, efficiency_cfg: Dict) -> int:
+def rejudge_file(
+    results_path: Path, judge_cfg: Dict, scoring_cfg: Dict, efficiency_cfg: Dict
+) -> int:
     data = json.loads(results_path.read_text())
     changed = 0
 
@@ -144,7 +146,9 @@ def rejudge_file(results_path: Path, judge_cfg: Dict, scoring_cfg: Dict, efficie
             meta["io_dir"] = str(logs_dir.resolve())
             meta["repo_root"] = str(Path.cwd().resolve())
             old_score = (turn.get("judge") or {}).get("score")
-            print(f"[rejudge-longrun] {sequence['sequence_id']} turn={turn['turn']} old={old_score}")
+            print(
+                f"[rejudge-longrun] {sequence['sequence_id']} turn={turn['turn']} old={old_score}"
+            )
             judge_out = _judge_exact_prompt(prompts[0].read_text(), meta, str(Path.cwd()))
             if judge_out.get("_judge_incomplete"):
                 raise RuntimeError(
