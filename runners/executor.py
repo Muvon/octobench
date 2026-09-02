@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import os
 import subprocess
 import threading
@@ -86,6 +87,24 @@ class Executor(ABC):
     ) -> Dict:
         """Run a case script by name (setup.sh/quality.sh/validate.sh), streaming logs."""
 
+    def harness_git_env(self) -> Dict[str, str]:
+        """Git transport for HARNESS commands only (setup/validate/restore).
+
+        Never container-wide: the mirrors hold post-base upstream history (the
+        gold commits) and the token is a credential — the agent's own github
+        fetches must keep failing against the network seal exactly as they
+        would without either. The token rides an env-config extraheader so it
+        never appears in a URL, a remote, or a recorded command line.
+        """
+        env: Dict[str, str] = {}
+        token = os.environ.get("GITHUB_TOKEN")
+        if token:
+            cred = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+            env["GIT_CONFIG_COUNT"] = "1"
+            env["GIT_CONFIG_KEY_0"] = "http.https://github.com/.extraheader"
+            env["GIT_CONFIG_VALUE_0"] = f"AUTHORIZATION: basic {cred}"
+        return env
+
     @abstractmethod
     def container_workspace(self) -> str:
         """Path of the workspace as seen by the command (host path or /workspace)."""
@@ -161,6 +180,7 @@ class HostExecutor(Executor):
         if not script_path.exists():
             return {"exit_code": 0, "stdout": "", "stderr": "", "elapsed_ms": 0}
         env = {**os.environ, "CASE_DIR": str(self._case_dir), "WORKDIR": str(self._ws)}
+        env.update(self.harness_git_env())
         if extra_env:
             env.update(extra_env)
         start = time.time()
@@ -240,6 +260,17 @@ class DockerExecutor(Executor):
             env_args += ["-e", f"{k}={v}"]
 
         mounts = ["-v", f"{self._octomind_config}:{self.CFG}:ro"]
+
+        # GitHub's anonymous rate limit poisoned two campaigns (2026-09-02):
+        # setups died in 0.3s and turn validations recorded fetch failures as
+        # model failures. With OCTOBENCH_GIT_MIRRORS set, the container fetches
+        # pinned SHAs from local bare mirrors (scripts/build_git_mirrors.sh)
+        # through per-repo insteadOf rewrites — zero github traffic in-run.
+        # Mount only: the rewrite env comes from harness_git_env() on harness
+        # execs, so the agent phase never sees the mirrors' post-base history.
+        _gm = os.environ.get("OCTOBENCH_GIT_MIRRORS")
+        if _gm and Path(_gm).is_dir():
+            mounts += ["-v", f"{Path(_gm).resolve()}:/git-cache:ro"]
 
         # octobench: client session state, kept on the HOST beside the workspace.
         # Agents write their sessions inside the container, which is fine while a
@@ -398,9 +429,8 @@ class DockerExecutor(Executor):
         if probe.returncode != 0:
             return {"exit_code": 0, "stdout": "", "stderr": "", "elapsed_ms": 0}
         exec_cmd = ["docker", "exec", "-w", self._workdir]
-        if extra_env:
-            for k, v in extra_env.items():
-                exec_cmd += ["-e", f"{k}={v}"]
+        for k, v in {**self.harness_git_env(), **(extra_env or {})}.items():
+            exec_cmd += ["-e", f"{k}={v}"]
         exec_cmd += [self.name, "bash", f"{self.CASE}/{name}"]
         start = time.time()
         proc = subprocess.Popen(
@@ -409,6 +439,12 @@ class DockerExecutor(Executor):
         result = _stream(proc, name, verbosity, log_fn)
         result["elapsed_ms"] = int((time.time() - start) * 1000)
         return result
+
+    def harness_git_env(self) -> Dict[str, str]:
+        env = super().harness_git_env()
+        if os.environ.get("OCTOBENCH_GIT_MIRRORS"):
+            env["GIT_CONFIG_SYSTEM"] = "/git-cache/gitconfig"
+        return env
 
     def container_workspace(self) -> str:
         return self._workdir

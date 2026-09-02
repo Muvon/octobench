@@ -67,12 +67,20 @@ def main() -> None:
     suspects: list[tuple[str, str, dict]] = []
     traces = 0
     for root in roots:
-        for trace in sorted(root.rglob("provider.raw.jsonl")):
+        # _stream_*.jsonl covers claude, which has no provider.raw.jsonl events
+        # in the shapes tools_in() parses — the /git-cache check still applies.
+        for trace in sorted(set(root.rglob("provider.raw.jsonl"))
+                            | set(root.rglob("_stream_*.jsonl"))):
             traces += 1
             found = tools_in(trace)
             case = trace.parts[-4] if len(trace.parts) >= 4 else trace.name
             bad = {k: v for k, v in found.items()
                    if k in FORBIDDEN or k.startswith("codex:")}
+            # The git-mirror mount (runners/executor.py) is harness-only
+            # territory: it holds the upstream repos' FULL history, including
+            # the gold commits. An agent that touches it read the answer key.
+            if "/git-cache" in trace.read_text(errors="replace"):
+                bad["git-cache-access"] = 1
             odd = {k: v for k, v in found.items() if k in SUSPECT}
             if bad:
                 violations.append((str(root), case, bad))

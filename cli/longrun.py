@@ -103,6 +103,7 @@ def _validate_turn(
     script += "exit $__test_exit\n"
 
     env = {"REPO_URL": repo_url, "GOLD_SHA": gold_sha, "TEST_PATHS": paths_arg}
+    env.update(executor.harness_git_env())
     log(f"[longrun] validate turn: gold={gold_sha[:12]}", verbosity, "normal")
     res = executor.run(["bash", "-c", script], env_overrides=env)
     log(
@@ -164,7 +165,7 @@ def _restore_dependency(
     )
     res = executor.run(
         ["bash", "-c", script],
-        env_overrides={"TEST_PATHS": paths_arg},
+        env_overrides={"TEST_PATHS": paths_arg, **executor.harness_git_env()},
     )
     if res.exit_code != 0:
         details = (res.stderr or "").strip() or (res.stdout or "").strip()

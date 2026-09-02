@@ -86,6 +86,19 @@ export OCTOBENCH_JUDGE_MODELS="${OCTOBENCH_JUDGE_MODELS:-openrouter:thinkingmach
 # upstream merged PR — on a bench harvested from merged PRs that is the answer key.
 if [ "$CLIENT" = octomind ]; then export OCTOMIND_AGENT=developer; fi
 
+# Local git mirrors (scripts/build_git_mirrors.sh): containers fetch pinned
+# SHAs from bare mirrors instead of github — the anonymous rate limit poisoned
+# two campaigns before this existed.
+if [ -d "$HOME/.cache/octobench/git-mirrors" ]; then
+  export OCTOBENCH_GIT_MIRRORS="$HOME/.cache/octobench/git-mirrors"
+  echo "git mirrors: $OCTOBENCH_GIT_MIRRORS"
+fi
+# Authenticated github fetches for HARNESS phases (runners/executor.py
+# harness_git_env): lifts the anonymous rate limit for anything unmirrored.
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  echo "github token: set (harness git auth)"
+fi
+
 # ── Preflight ───────────────────────────────────────────────────────────────
 [ -f "$OCTOBENCH_SYSTEM_PROMPT" ] || { echo "FATAL: missing $OCTOBENCH_SYSTEM_PROMPT" >&2; exit 2; }
 grep -q "^  $MODEL:" configs/models.yaml || { echo "FATAL: '$MODEL' is not in configs/models.yaml" >&2; exit 2; }
@@ -192,6 +205,15 @@ if [ "$MODE" = longrun ]; then
     fi
     FREE=$(df --output=avail -BG . | tail -1 | tr -dc '0-9')
     [ "${FREE:-0}" -ge 40 ] || { echo "ABORT: only ${FREE}G free before $sid" >&2; exit 3; }
+    # GitHub anonymous rate limit: when tripped, every setup.sh dies in ~0.3s
+    # with "could not read Username" and the whole list burns as setup-fails
+    # in seconds (2026-09-02). Pause until anonymous fetch works again.
+    # With GITHUB_TOKEN set the harness fetches authenticated (no anonymous
+    # limit), so probing anonymously would only false-pause the run.
+    until [ -n "${GITHUB_TOKEN:-}" ] || timeout 20 git ls-remote --heads https://github.com/CLIUtils/CLI11 >/dev/null 2>&1; do
+      echo "PAUSE github anonymous fetch unavailable before $sid; retry in 300s $(date -u +%FT%TZ)"
+      sleep 300
+    done
     echo "START $sid free=${FREE}G $(date -u +%FT%TZ)"
     rc=0
     timeout "$SEQ_TIMEOUT" .venv/bin/python -m cli.longrun run \
