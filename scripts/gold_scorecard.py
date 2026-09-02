@@ -66,8 +66,13 @@ def _steps_in(logs_dir_glob: str, base: Path) -> int:
     return steps + 1
 
 
-def _case_steps(result_path: Path, case_id: str) -> int:
-    return _steps_in(f"{case_id}/*/logs", result_path.parent)
+def _case_steps(result_path: Path, record: dict) -> int:
+    # Records merged in by rerun_failed.py keep their logs under reruns/<ts>/,
+    # not beside this results.json; the record's workdir points at the truth.
+    wd = record.get("workdir")
+    if wd and Path(wd).parent.is_dir():
+        return _steps_in("logs", Path(wd).parent)
+    return _steps_in(f"{record['case_id']}/*/logs", result_path.parent)
 
 
 def _turn_steps(result_path: Path, sequence_id: str, turn_no: int) -> int:
@@ -98,7 +103,7 @@ def load_items(pattern: str, suite: tuple[set, set] | None) -> list[dict]:
                     "cost": r.get("cost_usd") or 0,
                     "ms": (r.get("result") or {}).get("elapsed_ms") or 0,
                     "noncache": nc, "cache": cache, "out": out, "reas": reas,
-                    "steps": _case_steps(Path(path), cid),
+                    "steps": _case_steps(Path(path), r),
                 })
             elif "sequence_id" in r:  # longrun
                 sid = r["sequence_id"]
