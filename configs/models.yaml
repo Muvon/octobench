@@ -190,6 +190,14 @@ models:
     providers:
       octomind: zai:glm-5.3
       opencode: zai/glm-5.3
+  glm-5.3-flash:                 # z.ai list price; a launch promo halves it to
+    pricing:                     # 0.075/0.015/0.25 until 2026-09-09 (not used here)
+      input: 0.15
+      cached_input: 0.03
+      output: 0.50
+    providers:
+      octomind: zai:glm-5.3-flash
+      opencode: zai/glm-5.3-flash
 
   glm-5.1:                       # historical: octohub:glm served 5.1 before 2026-07
     pricing:

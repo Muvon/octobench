@@ -125,8 +125,15 @@ def _restore_dependency(
     test_paths: List[str],
     turn_number: int,
     verbosity: str,
-) -> None:
-    """Apply one failed predecessor's gold source diff to the workspace."""
+) -> bool:
+    """Apply one failed predecessor's gold source diff to the workspace.
+
+    Returns False when the gold diff cannot be applied — the agent's own later
+    edits can conflict with it. The workspace is left untouched in that case
+    (the script hard-resets), so the turn still runs, just without the
+    predecessor's work, which is how the bench behaved before restoration
+    existed. `restore_failed_dependencies` on the turn record marks it.
+    """
     paths_arg = "\n".join(test_paths)
     script = (
         "set -euo pipefail\n"
@@ -169,10 +176,14 @@ def _restore_dependency(
     )
     if res.exit_code != 0:
         details = (res.stderr or "").strip() or (res.stdout or "").strip()
-        raise RuntimeError(
-            f"Failed to restore dependency turn {turn_number}"
-            + (f": {details[-500:]}" if details else "")
+        log(
+            f"[longrun] RESTORE-FAILED turn={turn_number} (turn runs unrestored)"
+            + (f": {details[-300:]}" if details else ""),
+            verbosity,
+            "normal",
         )
+        return False
+    return True
 
 
 def _run_sequence(
@@ -260,6 +271,7 @@ def _run_sequence(
             )
 
             restored_dependencies: List[int] = []
+            restore_failed_dependencies: List[int] = []
             for dependency_turn in turn.get("depends_on", []):
                 dependency_idx = dependency_turn - 1
                 dependency_result = turn_results[dependency_idx]
@@ -269,16 +281,18 @@ def _run_sequence(
                 ):
                     continue
                 dependency = turns[dependency_idx]
-                _restore_dependency(
+                if _restore_dependency(
                     executor,
                     repo_url,
                     dependency.get("gold_sha", ""),
                     dependency.get("test_paths", []),
                     dependency_turn,
                     verbosity,
-                )
-                restored_dependency_turns.add(dependency_turn)
-                restored_dependencies.append(dependency_turn)
+                ):
+                    restored_dependency_turns.add(dependency_turn)
+                    restored_dependencies.append(dependency_turn)
+                else:
+                    restore_failed_dependencies.append(dependency_turn)
 
             prompt = _build_turn_prompt(system_prompt, instruction, is_first)
             install_guardrails(executor)
@@ -392,6 +406,7 @@ def _run_sequence(
                     "name": turn_name,
                     "instruction": instruction,
                     "restored_dependencies": restored_dependencies,
+                    "restore_failed_dependencies": restore_failed_dependencies,
                     "provider": {
                         "exit_code": provider_result.exit_code,
                         "elapsed_ms": provider_result.elapsed_ms,
