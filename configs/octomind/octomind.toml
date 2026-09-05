@@ -529,7 +529,7 @@ verify_hash = true
 # makes octomind log "compression failed, continuing session" and skip
 # compaction, so context overgrows past the model's window and the provider
 # rejects with 400 "prompt too long".
-name = "openrouter:qwen/qwen-3.8-flash"
+name = "openrouter:qwen/qwen3.8-flash"
 max_tokens = 16000  # Enough for decision + summary
 temperature = 0.3  # Lower temperature for consistent decisions
 top_p = 1.0
@@ -555,14 +555,14 @@ enabled = true
 #
 # Model choice carries the gate-verifier evidence, because the gate is the
 # measured-sensitive seat: instrumented A/B replays (2026-08-12/23) showed
-# openrouter:qwen/qwen-3.8-flash returning the full gate protocol 2/2 and
+# openrouter:qwen/qwen3.8-flash returning the full gate protocol 2/2 and
 # flagging missed conditions, while minimax dropped mandated rules and the
 # ollama-served deepseek emitted ZERO protocol lines (every verdict parsed
 # Indeterminate; ollama cloud also ignores the schema parameter). The old
 # deepseek-v4-flash seat only served plan/condense narrowing, which qwen
 # handles. Transport must stay openrouter: it honours schema enforcement.
 [supervisor.model]
-name = "openrouter:qwen/qwen-3.8-flash"
+name = "openrouter:google/gemini-3.5-flash-lite"
 # The gate's checklist + evidence protocol needs room (was gate max_tokens
 # 24000 pre-v12). qwen flash is cheap; the OpenRouter max_tokens-reservation
 # issue only bit the high-volume judge panel.

@@ -43,6 +43,11 @@ def tools_in(trace: Path) -> Counter:
             event = json.loads(line)
         except Exception:
             continue
+        # A bare JSON scalar is a valid line (agents log plain strings); only
+        # objects carry tool events, and treating a str as one crashes the
+        # audit — which bench.sh reports as "forbidden tool use".
+        if not isinstance(event, dict):
+            continue
         # octomind
         if event.get("type") == "tool_use" and event.get("tool"):
             found[event["tool"]] += 1
