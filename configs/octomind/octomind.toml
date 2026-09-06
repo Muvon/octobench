@@ -7,7 +7,7 @@
 #   • Validate config: octomind config --validate
 
 # Configuration version (DO NOT MODIFY - used for automatic upgrades)
-version = 12
+version = 13
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SYSTEM-WIDE SETTINGS
@@ -529,7 +529,7 @@ verify_hash = true
 # makes octomind log "compression failed, continuing session" and skip
 # compaction, so context overgrows past the model's window and the provider
 # rejects with 400 "prompt too long".
-name = "openrouter:qwen/qwen3.8-flash"
+name = "openrouter:deepseek/deepseek-v4-flash-0731"
 max_tokens = 16000  # Enough for decision + summary
 temperature = 0.3  # Lower temperature for consistent decisions
 top_p = 1.0
@@ -607,3 +607,9 @@ adaptive = false
 # mcp_response_tokens_threshold: that cap is the ceiling, this is the smart
 # path under it.
 tokens_threshold = 5000
+
+# Check role + user intent after native pre-call guards. Allow when uncertain.
+# Uses the shared supervisor model; only independently confirmed conflicts block.
+# Permanent learned guards remain controlled by learning.evolution.enabled.
+[supervisor.authorizer]
+enabled = false
