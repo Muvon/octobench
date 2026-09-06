@@ -139,9 +139,13 @@ PYEOF
     exit 1
   }
   echo "=== judge panel audit ==="
-  .venv/bin/python scripts/audit_judges.py "$OUT" \
-    || echo "WARNING: the records above were scored by a short panel — rejudge before publishing" >&2
+  JUDGE_AUDIT_RC=0
+  .venv/bin/python scripts/audit_judges.py "$OUT" || JUDGE_AUDIT_RC=$?
   echo "BENCH-DONE $OUT"
+  if [ "$JUDGE_AUDIT_RC" -ne 0 ]; then
+    echo "FATAL: records above were not scored by the full judge panel — rejudge before publishing" >&2
+    exit 1
+  fi
   exit 0
 fi
 
@@ -246,6 +250,14 @@ echo "=== tool audit ==="
 # Not fatal: a short panel is recoverable by re-judging the stored payload, and
 # aborting here would throw away a finished campaign over a judge outage.
 echo "=== judge panel audit ==="
-.venv/bin/python scripts/audit_judges.py "$OUT" \
-  || echo "WARNING: the records above were scored by a short panel — rejudge before publishing" >&2
+JUDGE_AUDIT_RC=0
+.venv/bin/python scripts/audit_judges.py "$OUT" || JUDGE_AUDIT_RC=$?
 echo "BENCH-DONE $OUT"
+if [ "$JUDGE_AUDIT_RC" -ne 0 ]; then
+  # The run's data is kept (a short panel is recoverable by re-judging the
+  # stored payload) but the exit code must carry the failure: a score that is
+  # not the full panel's mean is not a score, and a silent warning is how such
+  # records reached a published table.
+  echo "FATAL: records above were not scored by the full judge panel — rejudge before publishing" >&2
+  exit 1
+fi
