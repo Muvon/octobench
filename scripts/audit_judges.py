@@ -17,8 +17,13 @@ Exit 1 if any record is short a judge.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
+
+# The bench runs a three-model panel (scripts/bench.sh sets OCTOBENCH_JUDGE_MODELS);
+# this is the fallback when auditing records after the fact without that env set.
+DEFAULT_PANEL_SIZE = 3
 
 
 def valid(v: dict) -> bool:
@@ -28,16 +33,33 @@ def valid(v: dict) -> bool:
     return not (float(v["score"]) == 0 and not str(v.get("reasoning") or "").strip())
 
 
+def expected_panel_size() -> int:
+    """How many verdicts a valid score needs, from the run's own panel config."""
+    models = os.environ.get("OCTOBENCH_JUDGE_MODELS", "")
+    configured = [m for m in models.split(",") if m.strip()]
+    return len(configured) or DEFAULT_PANEL_SIZE
+
+
 def check(judge: dict, label: str, short: list, unknown: list) -> None:
     panel = judge.get("judges")
     if not panel:
-        # Single-model judging predates the panel; nothing to audit against.
-        unknown.append((label, judge.get("_judge_model") or "no panel recorded"))
+        # No panel at all is a DEAD panel, not an unknown: it stores score 0 and
+        # that 0 propagates into the published mean. Only genuinely pre-panel
+        # records (single-model judging, which names its model) are exempt.
+        if judge.get("_judge_model"):
+            unknown.append((label, judge["_judge_model"]))
+        else:
+            short.append((label, "no panel recorded (dead panel), "
+                                 f"stored score {judge.get('score')}"))
         return
     ok = sum(1 for v in panel if valid(v))
-    if ok < len(panel) or judge.get("_judge_incomplete"):
+    want = expected_panel_size()
+    # `ok < len(panel)` alone cannot see a panel that never recorded a seat:
+    # one stored verdict looks "complete" against a one-entry panel.
+    if ok < len(panel) or len(panel) < want or judge.get("_judge_incomplete"):
         missing = [v.get("model") for v in panel if not valid(v)]
-        short.append((label, f"{ok}/{len(panel)} verdicts, missing {missing}, "
+        short.append((label, f"{ok}/{len(panel)} verdicts (want {want}), "
+                             f"missing {missing}, "
                              f"stored score {judge.get('score')}"))
 
 
