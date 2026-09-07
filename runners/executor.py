@@ -385,7 +385,12 @@ class DockerExecutor(Executor):
             ["--cap-add=NET_ADMIN"] if os.environ.get("OCTOBENCH_SEAL_NETWORK") == "1" else []
         )
         cmd = [
-            "docker", "run", "-d", *platform_args, *net_args,
+            # --init: PID 1 here is `sleep infinity`, which never reaps. A test
+            # that orphans a child (cpython's test_asyncio.test_subprocess does)
+            # leaves it a zombie, and the suite blocks forever waiting for a
+            # reap that cannot come — an agent-independent hang that reads as a
+            # failed turn. tini reaps, so the suite behaves as it does on a host.
+            "docker", "run", "-d", "--init", *platform_args, *net_args,
             "--name", self.name, "-w", self._workdir,
             *mounts, *env_args, self.image, "sleep", "infinity",
         ]
