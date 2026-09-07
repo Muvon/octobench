@@ -562,7 +562,7 @@ enabled = true
 # deepseek-v4-flash seat only served plan/condense narrowing, which qwen
 # handles. Transport must stay openrouter: it honours schema enforcement.
 [supervisor.model]
-name = "openrouter:thinkingmachines/inkling-small"
+name = "openrouter:qwen/qwen3.7-flash"
 # The gate's checklist + evidence protocol needs room (was gate max_tokens
 # 24000 pre-v12). qwen flash is cheap; the OpenRouter max_tokens-reservation
 # issue only bit the high-volume judge panel.
