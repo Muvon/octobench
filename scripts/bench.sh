@@ -101,6 +101,24 @@ fi
 
 # ── Preflight ───────────────────────────────────────────────────────────────
 [ -f "$OCTOBENCH_SYSTEM_PROMPT" ] || { echo "FATAL: missing $OCTOBENCH_SYSTEM_PROMPT" >&2; exit 2; }
+# OpenRouter funds the judge panel AND octomind's supervisor/compression seats.
+# An exhausted balance is silent at the call site: the judge stores score 0 and
+# compaction no-ops until the context ceiling kills every remaining turn. One
+# campaign lost 17 turns and 33 judgments that way, so check the balance before
+# spending hours, not after.
+OR_ERR=$(curl -s -m 30 https://openrouter.ai/api/v1/chat/completions \
+  -H "Authorization: Bearer $OPENROUTER_API_KEY" -H "Content-Type: application/json" \
+  -d '{"model":"deepseek/deepseek-v4-flash-0731","messages":[{"role":"user","content":"ok"}],"max_tokens":1}' \
+  | .venv/bin/python -c 'import json,sys
+try:
+    print((json.load(sys.stdin).get("error") or {}).get("message", ""))
+except Exception as e:
+    print(f"unparseable response: {e}")')
+if [ -n "$OR_ERR" ]; then
+  echo "FATAL: OpenRouter is not usable — judge panel and octomind's supervisor/compression run on it" >&2
+  echo "       $OR_ERR" >&2
+  exit 2
+fi
 grep -q "^  $MODEL:" configs/models.yaml || { echo "FATAL: '$MODEL' is not in configs/models.yaml" >&2; exit 2; }
 [ -d "$HOME/.cache/octobench/models" ] || echo "WARNING: no warmed model cache — run scripts/prepare_caches.sh (sealed runs cannot fetch it)" >&2
 if [ "$CLIENT" = opencode ]; then

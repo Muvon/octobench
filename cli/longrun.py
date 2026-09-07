@@ -118,6 +118,22 @@ def _validate_turn(
     }
 
 
+# Substrings that mean the account cannot pay for the call. Retrying, or moving
+# to the next turn, cannot clear any of them.
+_BILLING_MARKERS = (
+    "insufficient credits",
+    "insufficient_quota",
+    "exceeded your current quota",
+    "billing",
+    "payment required",
+)
+
+
+def _is_billing_failure(text: str) -> bool:
+    low = (text or "").lower()
+    return any(m in low for m in _BILLING_MARKERS)
+
+
 def _restore_dependency(
     executor: Executor,
     repo_url: str,
@@ -328,6 +344,15 @@ def _run_sequence(
                     verbosity,
                     "normal",
                 )
+                # An exhausted account does not recover by trying the next turn:
+                # every remaining one fails the same way in seconds and records as
+                # a model failure. Stop the sequence so the run is short and
+                # obviously broken instead of long and quietly wrong.
+                if _is_billing_failure(err_tail):
+                    raise RuntimeError(
+                        f"provider billing failure on turn {idx + 1}, aborting sequence: "
+                        f"{err_tail[:200]}"
+                    )
 
             after = snapshot_files(executor.workspace_host_path())
             diff = diff_snapshots(before, after)
