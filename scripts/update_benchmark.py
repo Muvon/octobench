@@ -212,6 +212,10 @@ def _provider_actions(trace: Path, provider: str) -> list[tuple[str, bool]]:
             event = json.loads(line)
         except Exception:
             continue
+        # A trace line can be a bare JSON scalar (a plain string), which parses
+        # fine but has no .get — only mappings carry events.
+        if not isinstance(event, dict):
+            continue
         action = None
         network = False
         if provider == "codex" and event.get("type") == "item.started":
