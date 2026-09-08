@@ -35,6 +35,10 @@ def main() -> None:
     results_path = Path(sys.argv[1]).resolve()
     matrix = sys.argv[2]
     max_retries = int(sys.argv[3]) if len(sys.argv) > 3 else 2
+    # A retry has to reproduce the run it replaces: a different image can carry
+    # different agent tooling (octofs 0.15.2 vs 0.15.3 once merged records that
+    # were not comparable), so the caller passes the image the run used.
+    image = sys.argv[4] if len(sys.argv) > 4 else "octobench-agent:latest"
     repo_root = Path.cwd().resolve()
 
     for attempt in range(1, max_retries + 1):
@@ -53,7 +57,7 @@ def main() -> None:
                     ".venv/bin/python", "-m", "cli.main", "run",
                     "--cases", str(case_dir),
                     "--config", matrix,
-                    "--executor", "docker", "--image", "octobench-agent:latest",
+                    "--executor", "docker", "--image", image,
                     "--out", str(out_dir), "--verbosity", "quiet",
                 ],
                 cwd=repo_root, capture_output=True, text=True,

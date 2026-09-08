@@ -147,8 +147,8 @@ yaml.safe_dump({"runs": [run]}, open(out, "w"))
 PYEOF
   cat "$MATRIX"
   for rj in "$OUT"/*/results.json; do
-    echo "=== rerun $rj (rounds=$ROUNDS) ==="
-    .venv/bin/python scripts/rerun_failed.py "$rj" "$MATRIX" "$ROUNDS"
+    echo "=== rerun $rj (rounds=$ROUNDS, image=$IMAGE) ==="
+    .venv/bin/python scripts/rerun_failed.py "$rj" "$MATRIX" "$ROUNDS" "$IMAGE"
   done
   rm -f "$MATRIX"
   echo "=== tool audit ==="
@@ -200,7 +200,20 @@ if [ -z "$CASES" ]; then
 fi
 
 echo "=== $MODE | client=$CLIENT model=$MODEL cases=$CASES out=$OUT ==="
-if [ -n "$OCTOMIND_BIN" ]; then echo -n "octomind binary: "; "$OCTOMIND_BIN" --version; fi
+# A pinned binary runs inside the image, not on the host: one built against a
+# newer libc than the image still reports its version here but cannot execute
+# there. octofs failing that way is silent — the agent simply loses its tools —
+# so prove every pin runs in the image before spending a campaign on it.
+for pin in OCTOMIND_BIN OCTOFS_BIN CODEX_BIN OPENCODE_BIN; do
+  bin="${!pin:-}"
+  [ -n "$bin" ] || continue
+  [ -x "$bin" ] || { echo "FATAL: $pin is not executable: $bin" >&2; exit 2; }
+  if ! ver=$(docker run --rm -v "$bin:/pinned:ro" --entrypoint /pinned "$IMAGE" --version 2>&1); then
+    echo "FATAL: $pin cannot run inside $IMAGE: $ver" >&2
+    exit 2
+  fi
+  echo "$pin: $ver (verified in $IMAGE)"
+done
 if [ -n "${OCTOBENCH_JUDGE_BIN:-}" ]; then
   [ -x "$OCTOBENCH_JUDGE_BIN" ] || {
     echo "FATAL: OCTOBENCH_JUDGE_BIN is not executable: $OCTOBENCH_JUDGE_BIN" >&2
