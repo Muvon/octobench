@@ -48,7 +48,7 @@ telemetry = false
 
 # Global token limit for ALL MCP tool responses (0 = unlimited)
 # When exceeded, responses are automatically truncated with notice
-mcp_response_tokens_threshold = 20000
+mcp_response_tokens_threshold = 8000
 
 # Maximum tokens per session before truncation kicks in (0 = disabled, >0 = enabled)
 max_session_tokens_threshold = 200000
@@ -562,7 +562,7 @@ enabled = true
 # deepseek-v4-flash seat only served plan/condense narrowing, which qwen
 # handles. Transport must stay openrouter: it honours schema enforcement.
 [supervisor.model]
-name = "openrouter:qwen/qwen3.7-flash"
+name = "openrouter:deepseek/deepseek-v4-flash-0731"
 # The gate's checklist + evidence protocol needs room (was gate max_tokens
 # 24000 pre-v12). qwen flash is cheap; the OpenRouter max_tokens-reservation
 # issue only bit the high-volume judge panel.
@@ -606,7 +606,7 @@ adaptive = false
 # Per-result trigger (estimated tokens). 0 = off. Keep well below
 # mcp_response_tokens_threshold: that cap is the ceiling, this is the smart
 # path under it.
-tokens_threshold = 5000
+tokens_threshold = 4000
 
 # Check role + user intent after native pre-call guards. Allow when uncertain.
 # Uses the shared supervisor model; only independently confirmed conflicts block.

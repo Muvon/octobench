@@ -70,19 +70,19 @@ RUN curl --retry 5 --retry-all-errors --retry-delay 3 --connect-timeout 30 -fsSL
 
 # ── Pinned agent CLIs (prebuilt, no source builds) ───────────────────────────
 ARG TARGETARCH
-ARG OCTOMIND_VERSION=0.51.1
+ARG OCTOMIND_VERSION=0.52.0
 ARG OCTOCODE_VERSION=0.25.0
-ARG OCTOFS_VERSION=0.15.4
+ARG OCTOFS_VERSION=0.15.6
 ARG OCTOBRAIN_VERSION=0.13.1
 ARG CODEX_VERSION=0.146.0
 ARG CLAUDE_VERSION=2.1.221
 
-# octomind: local HEAD build (replaces GitHub release download)
+# octomind: local HEAD build (upcoming release). octofs: released GitHub binary.
 COPY octomind-head /usr/local/bin/octomind
 
-# octomind + octofs + octocode + octobrain: static musl binaries from GitHub releases.
-# octofs = file/shell tools, octocode = codesearch, octobrain = memory (all referenced
-# by developer:general's MCP servers).
+# octocode + octobrain: static musl binaries from GitHub releases.
+# octocode = codesearch, octobrain = memory (both referenced by
+# developer:general's MCP servers).
 RUN set -eux; \
     case "${TARGETARCH:-arm64}" in \
       arm64) TRIPLE=aarch64-unknown-linux-musl; CLAUDE_PLAT=linux-arm64 ;; \
