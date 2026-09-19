@@ -239,4 +239,3 @@ class CodexProvider(Provider):
             },
             raw_output=proc.stdout or "",
         )
-

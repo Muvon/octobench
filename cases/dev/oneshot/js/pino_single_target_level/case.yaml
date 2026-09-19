@@ -53,7 +53,7 @@ instruction: |
   **Expected behavior:**
 
   ```bash
-  node test 
+  node test
 
   {"level":50,"time":1719528510555,"pid":47437,"hostname":"anime-desktop","msg":"Error"}
   ```
@@ -61,7 +61,7 @@ instruction: |
   **Actual behavior:**
 
   ```bash
-  node test 
+  node test
 
   {"level":30,"time":1719528510555,"pid":47437,"hostname":"anime-desktop","msg":"Info"}
   {"level":40,"time":1719528510555,"pid":47437,"hostname":"anime-desktop","msg":"Warn"}

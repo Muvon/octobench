@@ -161,4 +161,3 @@ class ClaudeProvider(Provider):
             },
             raw_output=proc.stdout or "",
         )
-
