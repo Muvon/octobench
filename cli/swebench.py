@@ -52,7 +52,8 @@ def fetch_rows(split: str, length: int = 100, offset: int = 0) -> List[Dict]:
     # Snapshot cache: the dataset is frozen, but the HF rows endpoint has outages
     # (503s) that would otherwise fail every bench run. Refresh on success; fall
     # back to the last good snapshot on failure.
-    cache = f"/home/box/work/muvon/octobench/.hf_rows_cache_{split}_{offset}_{length}.json"
+    repo_root = Path(__file__).resolve().parent.parent
+    cache = repo_root / f".hf_rows_cache_{split}_{offset}_{length}.json"
     # Cache-first: the dataset is a frozen snapshot, and parallel bench runs
     # paginating a split rate-limit the HF endpoint (429) when every process
     # re-fetches every window. A present cache is authoritative.

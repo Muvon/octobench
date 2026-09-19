@@ -5,3 +5,6 @@
 .codex
 .claude
 /benchmarks/ifbench_vendor/.nltk_data/
+
+# Local octomind HEAD build copied into the head agent image (docker/Dockerfile.agent.head).
+/docker/octomind-head

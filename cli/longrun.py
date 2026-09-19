@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 import shlex
+import signal
 import sys
 import time
 from datetime import datetime, timezone
@@ -616,6 +617,11 @@ def _cmd_validate(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    # bench.sh caps each sequence with `timeout`, which sends SIGTERM, and
+    # Python's default SIGTERM exit skips `finally`: a capped sequence leaked its
+    # workspace (54G for duckdb, enough to trip bench.sh's disk floor) and its
+    # container. Exiting via SystemExit runs the cleanup; 124 keeps timeout's code.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(124))
     parser = argparse.ArgumentParser(prog="python3 -m cli.longrun")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
