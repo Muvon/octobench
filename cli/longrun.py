@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import sys
 import time
 from datetime import datetime, timezone
@@ -54,6 +55,15 @@ from scoring.aggregate import (
 )
 
 
+# Ceiling on one turn's gold-test run. An agent change can make a gold test
+# loop forever; with no bound, that single validate ate the rest of a 10h
+# sequence cap and lost every scored turn. Real validates run median 1s, max
+# 87s (130 turns), so this never truncates a legitimate run. Enforced by
+# `timeout` inside the container: killing the `docker exec` client alone
+# leaves the test running into later turns.
+VALIDATE_TIMEOUT_S = 1800
+
+
 def _utc_ts() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -88,7 +98,7 @@ def _validate_turn(
         script += f'git checkout -q {gold_sha} -- "{tp}"\n'
     # Run test without set -e so we capture the exit code.
     script += "set +e\n"
-    script += f"{test_command}\n"
+    script += f"timeout -k 30 {VALIDATE_TIMEOUT_S} bash -c {shlex.quote(test_command)}\n"
     script += "__test_exit=$?\n"
     script += "set -e\n"
     # Clean up: restore test files to HEAD so gold tests don't leak into
