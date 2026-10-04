@@ -405,7 +405,7 @@ def main() -> None:
         resolved = bool(rec["swebench"]["resolved"])
         judge_score = float(rec["judge"].get("score", 0))
         eff = compute_efficiency_score(
-            rec["result"]["elapsed_ms"], rec["tokens"]["total"], rec.get("cost_usd"), efficiency_cfg
+            rec["result"]["elapsed_ms"], rec.get("cost_usd"), efficiency_cfg
         )
         rec["scoring"] = {
             "resolved": resolved,

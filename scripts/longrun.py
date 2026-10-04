@@ -277,7 +277,7 @@ def _run_sequence(
                 )
 
             efficiency = compute_efficiency_score(
-                provider_result.elapsed_ms, tokens_total, cost_usd, efficiency_cfg
+                provider_result.elapsed_ms, cost_usd, efficiency_cfg
             )
             judge_score = float(judge_out.get("score", 0))
             raw_final = compute_final_score(judge_score, efficiency, scoring_cfg)

@@ -159,7 +159,6 @@ def rejudge_file(
 
             efficiency = compute_efficiency_score(
                 turn["provider"]["elapsed_ms"],
-                turn["tokens"]["total"],
                 turn.get("cost_usd"),
                 efficiency_cfg,
             )

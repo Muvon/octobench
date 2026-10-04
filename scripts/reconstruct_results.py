@@ -303,7 +303,6 @@ def reconstruct_run(run_dir: Path, repo_root: Path) -> list[dict]:
         # Compute scoring
         efficiency = compute_efficiency_score(
             record["result"]["elapsed_ms"],
-            record["tokens"]["total"],
             record.get("cost_usd"),
             efficiency_cfg,
         )

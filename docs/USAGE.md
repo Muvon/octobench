@@ -85,6 +85,17 @@ three-phase:
    unrelated first-run plugin installer from entering the sealed phase.
 3. The harness unseals before validation fetches hidden gold tests.
 
+For comparable GOLD campaigns, use `scripts/bench.sh`; it owns the clean-bench
+switches, including `OCTOBENCH_CONTEXT_WINDOW=200000`. Claude maps the value to
+`CLAUDE_CODE_AUTO_COMPACT_WINDOW`, Codex to `model_context_window`, OpenCode to
+`model.limit.context`, and Octomind checks it against
+`max_session_tokens_threshold`. Direct CLI runs must set the same clean-bench
+environment or explicitly opt out as unsafe.
+
+Suite entries are `oneshot/<lang>/<case>` or `longrun/<lang>/<repo>`. Append
+`:N` to a long-run entry to execute only turns 1 through N; without a suffix the
+full sequence runs. One-shot entries do not accept a suffix.
+
 A destination denylist is insufficient here: mirrors, package registries, proxy
 sites, and new search domains can all expose an upstream solution. If a task needs
 a package download during phase 2, fix its `setup.sh`; do not widen the scored

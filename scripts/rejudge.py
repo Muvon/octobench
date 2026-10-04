@@ -130,7 +130,7 @@ def main() -> None:
         r["judge"] = judge_out
 
         efficiency = compute_efficiency_score(
-            r["result"]["elapsed_ms"], r["tokens"]["total"], r.get("cost_usd"), efficiency_cfg
+            r["result"]["elapsed_ms"], r.get("cost_usd"), efficiency_cfg
         )
         validation_failed = scripts["validate"]["exit_code"] != 0
         raw_final = compute_final_score(float(judge_out.get("score", 0)), efficiency, scoring_cfg)

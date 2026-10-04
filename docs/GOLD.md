@@ -1,198 +1,222 @@
-# octobench GOLD — hand-picked 30 (initial version, 2026-08-31)
+# octobench GOLD v2 — 15 one-shots and 5 long-run sequences
 
-One suite: `configs/suites/gold.txt` — 30 lines, `oneshot/<lang>/<case>` ×20 +
-`longrun/<lang>/<repo>` ×10; `scripts/bench.sh <oneshot|longrun> ... --suite gold`
-selects the lines matching the mode. Table blocks live at the top of
-BENCHMARK.md (GOLD-SUMMARY / GOLD-RESULTS / GOLD-LONGRUN-RESULTS markers):
+## Purpose
 
+GOLD shows, per model × client pair, **solve rate** and **efficiency** (cost,
+tokens, wall time), on the smallest task set whose results are enough to say
+"this pair is better or cheaper than that one", at the lowest run cost that
+still supports the conclusion:
+
+- **One-shot tasks** cover a variety of task types (bug fix, feature,
+  performance, symptom-driven debugging, refactor) and complexity tiers across
+  the five languages, each simple enough that its score reads plainly.
+- **Long-run sequences** test one persistent session over many turns,
+  including sessions that outgrow the model's context window, so context
+  management (compaction, recovery after it) is part of the result.
+- Every item earns its slot: either verdicts split across columns (solve
+  signal) or every column solves it and it compares cost on equal work. Items
+  every column passes without efficiency value, or every column fails, are cut.
+- A failure counts only after it is classified a legitimate model failure, not
+  a case defect, infra or flake. Each item runs three times; results are
+  reported as means, and a difference inside the run-to-run spread is a tie.
+
+## Suite and regeneration commands
+
+[configs/suites/gold.txt](../configs/suites/gold.txt) contains 20 entries:
+15 one-shots (three per language) and five long-run sequences. A `:N` suffix
+means turns 1 through N in the same persistent session. V2 runs DuckDB through
+13, Cargo through 7, CPython through 11, all 15 ESLint turns, and all six
+PhpSpreadsheet turns: 52 long-run turns and 67 scored tasks in total.
+
+`scripts/bench.sh <oneshot|longrun> ... --suite gold` selects the matching mode.
+The launcher support for turn caps is being added separately. Regenerate the
+GOLD-SUMMARY, GOLD-RESULTS, and GOLD-LONGRUN-RESULTS blocks in
+[BENCHMARK.md](../BENCHMARK.md) from explicit v2 run
+inputs, using the existing command forms:
+
+```bash
+scripts/update_benchmark.py --suite=gold --markers=GOLD 'label=results-gold-v2-oneshot-*/*/results.json' ...
+scripts/longrun_table.py    --suite=gold --markers=GOLD 'label=results-gold-v2-longrun-*/*/results.json' ...
 ```
-scripts/update_benchmark.py --suite=gold --markers=GOLD 'label=results-gold-oneshot-*/*/results.json' ...
-scripts/longrun_table.py    --suite=gold --markers=GOLD 'label=results-gold-longrun-*/*/results.json' ...
-scripts/gold_scorecard.py   --suite=gold 'label=results-gold-oneshot-*/*/results.json results-gold-longrun-*/*/results.json' ...
-```
 
-The scorecard is the combined-efficiency view (one column per client over ALL
-30 gold items — oneshot cases + longrun turns together): solve rate, judge
-mean, $/solve, cost- and token-waste %, median/p90/max time, cache-read,
-steps-per-item from the recorded traces (all four provider formats, including
-claude's `_stream_*.jsonl`).
+Replace `label` and the trailing arguments with each column's result patterns.
+Before regeneration, the long-run reporting tools must support `:N` and
+aggregate only the selected turns. That tooling work is separate from this
+content revision; the former `gold_scorecard.py` is being removed separately.
+Do not mix pre-repair and v2 runs or publish full-sequence totals as
+capped-sequence results.
 
-Picked from the full 2026-08 result set (BENCHMARK.md matrix:
-glm-5.3-opencode, gpt-5.6-sol-codex, glm-5.3-octomind, claude-opus-5-claude,
-gpt-5.6-luna-codex; longrun 6 columns) so that the set, taken together, ranks a
-client on **three axes at once**:
+## V2 one-shot selection
 
-- **SOLVING** — cases whose verdict *splits* across clients/models. A case
-  everyone passes or everyone fails ranks nobody.
-- **TOKEN EFFICIENCY** — cases everyone solves but with a ≥3x non-cache token
-  spread: same outcome, very different context discipline.
-- **SPEED** — same cases read on wall time and step count; plus one explicit
-  runaway-containment probe.
+Grounding uses the current GOLD-RESULTS block (updated 2026-09-11), supplemented
+by the main one-shot table for the three newly admitted items and the supplied
+106-cell audit. These are historical observations, not three-round v2 means.
+`tok` below excludes cache reads; time is agent runtime, excluding setup,
+validation, and judging. Short column names retain both model and client:
+Claude = Opus 5/Claude; Sol and Luna = GPT-5.6; GLM and Flash = GLM-5.3 and
+GLM-5.3-Flash; OM = Octomind, OC = OpenCode.
 
-Every pick is grounded in recorded numbers below (j = judge mean, tok =
-non-cache tokens). Excluded-case reasons are at the end — an all-fail case is
-either broken or ranks nobody, so none are in GOLD.
-
-## Oneshot 20 (4 per language, all from the proven oneshot-50 with 5-client data)
-
-### cpp
-| case | axis | grounding |
+| Case | Axis | Grounding |
 |---|---|---|
-| `yamlcpp_binary_emit_styles` | SOLVING (harness) | Same model, opposite verdicts: glm-opencode FAIL j=32.5 vs glm-octomind PASS j=95.67. Also killed both archived deepseek columns (49.33/36.33). |
-| `yamlcpp_octal_scalars` | SOLVING (edge) | luna FAIL j=39.33, everyone else PASS 89–94. The pass octomind earned came from its verify-gate (instrumented 2026-08-12) — harness mechanics visible in the verdict. |
-| `redis_acl_effective_keys` | TOKENS+SPEED | All pass; 68K tok/3m (sol) ↔ 357K tok/35m (octomind) ↔ 41m (opencode). Big-codebase exploration discipline. |
-| `libgit2_revwalk_pathspec_root` | TOKENS | All pass; 76K/3m (sol) ↔ 441K/26m (octomind), cost $0.98 ↔ $3.07. Widest pure token spread in cpp. |
+| `cpp/yamlcpp_binary_emit_styles` | Solve; same-model client split | 5/8 pass. Luna-Codex, GLM-OC, and Flash-OC add an extra blank line after empty Literal; their OM counterparts pass. GLM j=47.33 vs 93.67. |
+| `cpp/yamlcpp_octal_scalars` | Solve; parser edge | 3/8 pass: Sol-Codex and both GLM clients. Five legitimate failures accept invalid `0oxff`; Claude j=38.33, Sol j=89.33. |
+| `cpp/redis_acl_effective_keys` | Tokens, cost, speed | 8/8 pass; 87K–319K tok, $0.07–$4.12, 3–74m. GLM-OC takes 319K/74m versus GLM-OM 180K/23m. |
+| `js/gemini_cancelled_turn_rollback` | Solve; cancellation state | Claude and Sol-Codex pass; Luna-Codex fails, leaving history length 3 instead of 0. j=92.67/90.33/38.33 respectively; only these three columns have results. |
+| `js/fastify_query_method` | Speed, interaction cost | 8/8 pass; 3–24m and 89K–203K tok. Sol-Codex takes 19 steps/5m; GLM-OC 103 steps/24m; Luna-OM 122 steps/5m. |
+| `js/undici_async_mock_reply` | Tokens, speed | 8/8 pass; 66K–196K tok and 4–28m. Sol-Codex 66K/5m versus Luna-OM 196K/5m and Flash-OM 153K/28m. |
+| `php/commonmark_fence_tabs` | Solve; tab parsing | 6/8 pass. Luna fails on both clients: Codex loses the first info-string character; OM preserves a tab where three spaces are required. Sol-Codex now passes, j=91.67. |
+| `php/guzzle_cookie_prefixes` | Solve; normalization | 5/8 pass. Sol-Codex, Luna-Codex, and Luna-OM reject valid normalized host-only/root cookies; Claude and all four GLM/Flash columns pass. |
+| `php/carbon_period_end_sync` | Tokens, cost, speed | 8/8 pass; 56K–238K tok, $0.03–$4.37, 2–36m. GLM-OM is 238K/36m; Luna-OM 56K/2m. |
+| `python/aiohttp_paused_content_eof` | Solve; bounded buffering | Claude and Sol-Codex pass; Luna-Codex expands all 5 MiB instead of retaining at most 2 MiB. j=92.0/92.0/40.67; only these three columns have results. |
+| `python/scrapy_http2_frame_size` | Solve; protocol configuration | Claude and Luna-Codex pass; Sol-Codex rejects a 65,535-byte frame despite a 1 MiB configured limit. j=92.67/92.0/37.33; only these three columns have results. |
+| `python/pydantic_pipeline_constraints` | Tokens, speed | 8/8 pass; 31K–110K tok, 1–15m. Luna-OM takes 31K/1m; Flash-OC 110K/15m. |
+| `rust/tokio_alt_timer_cancel_race` | Speed; concurrency anchor | Current data is 8/8 pass, 54K–141K tok and 2–28m. GLM-OC now completes in 8m; the old 45m runaway is not the current selection rationale. |
+| `rust/ripgrep_maxdepth_ignore_skip` | Tokens, speed | 8/8 pass; 62K–152K tok, 3–22m. Sol-Codex takes 62K/4m; GLM-OC 152K/16m. |
+| `rust/chrono_iter_reverse` | Tokens, speed | 8/8 pass; 51K–237K tok, 4–24m. GLM-OM takes 237K/23m; Claude 51K/4m. |
 
-### js
-(the 50 has no *valid* verdict-splitting js case — pinopretty/react fail everyone — so js carries the efficiency axes)
-| case | axis | grounding |
+## V2 long-run selection
+
+The GOLD-LONGRUN-RESULTS block (updated 2026-09-19) records the original full
+sequences. The prefix counts below are recomputed from the supplied historical
+per-turn results; they include defects and undetermined failures and are not
+valid v2 solve rates. Efficiency ranges are explicitly labeled as full-sequence
+historical totals, with tokens including cache reads. Removed tails passed in
+every recorded column and add cost beyond the retained failure and context
+coverage.
+
+| Sequence retained | Axis | Grounding |
 |---|---|---|
-| `fastify_query_method` | SPEED (steps) | All pass; 20 steps/4m (sol) ↔ 203 steps/31m (octomind), 124 steps (opencode). Step economy under a real framework repo. |
-| `webpack_lazy_backend_shutdown` | SOLVING-quality | All pass but j splits: octomind 87.33 vs 92.33–94.0 elsewhere; tok 55K ↔ 120K. |
-| `vite_hmr_restart_stale` | TOKENS | All pass; 33K/2m (sol) ↔ 252K/19m (octomind), j 88.33–93.0. |
-| `undici_async_mock_reply` | TOKENS+SPEED | All pass; 79–96K/4–5m (claude/sol) ↔ 267K/14m (octomind). Consistent mid-weight spread. |
+| `cpp/duckdb:13` | Solve, context, efficiency | Historical prefix: Sol 13/13; Claude, Luna-Codex, GLM-OM 11/13; Luna-OM 9/13; Flash-OM 12/13. Both OC columns lack data. Legitimate splits at 6, 7, 9, 13; Luna-OM #9 remains undetermined after failed dependency restoration. Full 15-turn totals: 55.8M–211.9M tokens, $1.97–$121.78, 77–501m. |
+| `rust/cargo:7` | Solve, context, diagnostics | Historical prefix: 4/7–6/7; full sequence 7/10–9/10. Turn 1 has six legitimate sidecar failures and #4 one legitimate feature-gating failure. #2/#6/#7 instructions were repaired (see below), so their historical results are not comparable. Full 10-turn totals: 39.5M–192.6M tokens, $1.15–$111.85, 46–254m. |
+| `python/cpython:11` | Cancellation, exception handling, context | Historical prefix: Flash-OC 5/11, Flash-OM 8/11, other six columns 7/11; full sequence 8/14–11/14. #2/#5/#10 instructions were repaired (see below); unresolved #4/#7/#11 cells need the now-verbose logs. Full 14-turn totals: 22.0M–81.4M tokens, $0.62–$28.58, 30–231m. |
+| `js/eslint` (15) | Solve, context, autofix safety | Historical 12/15–14/15. Legitimate failures at #5, #13, #15; #12 was a descriptor-detection case defect (instruction repaired; historical #12 results are not comparable), with one provider timeout. Full totals: 13.6M–60.5M tokens, $0.47–$20.98, 24–156m. |
+| `php/phpspreadsheet` (6) | Solve; short-session comparison | Sol-Codex 5/6, Luna-Codex 4/6, other six columns 6/6. Legitimate reader-class failure at #2 and overlapping-column deletion failures at #6. Totals: 4.3M–18.9M tokens, $0.26–$11.72, 13–88m. |
 
-### php
-| case | axis | grounding |
-|---|---|---|
-| `commonmark_fence_tabs` | SOLVING (model ceiling) | Only claude passes (j=93.67, validate 5/5 OK — proves the case solvable). glm, gpt-sol, gpt-luna, both deepseeks all FAIL j 38–46. Separates the top model from everything else. |
-| `guzzle_cookie_prefixes` | SOLVING (model family) | gpt family fails (sol 41.33, luna 42.33), glm+claude pass 94–95. Clean model-axis split with harness held constant (codex fails on both its models). |
-| `monolog_max_trace_length` | SOLVING (harness, replicated) | The purest harness discriminator: opencode FAIL / octomind PASS **on two model families** (glm: 39.67 vs 89.33; archived deepseek: 36.0 vs 94.67). |
-| `carbon_period_end_sync` | TOKENS+quality | All pass; 77K/4m (sol) ↔ 465K/37m (octomind); j 81.67 (luna) ↔ 94.0. |
+## Context window
 
-### python
-(the python tier of the 50 is light; this is the heaviest available — see Gaps)
-| case | axis | grounding |
-|---|---|---|
-| `poetry_show_outdated_explicit_source` | TOKENS+SPEED | All pass; 48K/2m (sol) ↔ 157K/15m (octomind), 112K/21m (opencode). Heaviest python case. |
-| `pydantic_pipeline_constraints` | TOKENS | All pass; 36K/2m (sol) ↔ 230K/15m (octomind). 6x spread. |
-| `click_powershell_completion` | SOLVING-derivability | The audited "derivable from conventions" case (case-validity reference). All pass, but 3m (sol/claude) ↔ 20m (opencode). |
-| `anyio_tls_idna2008` | TOKENS (mild) | All pass; 47K (claude) ↔ 121K (octomind); j 89.67–94.67. Weakest slot — placeholder until the 80-corpus python splitters get full coverage. |
+Every client works inside an emulated 200K-token window, set by
+`OCTOBENCH_CONTEXT_WINDOW=200000`. The campaign configuration is:
 
-### rust
-| case | axis | grounding |
-|---|---|---|
-| `tokio_alt_timer_cancel_race` | SPEED (runaway) | The explicit containment probe: opencode INFRA — hit the 45m cap on an idle box — while every other client finishes in 2–7m. Case wording was validity-hardened (bool-return contract), so the runaway is real behaviour. |
-| `chrono_iter_reverse` | TOKENS | All pass; 53K/3m (sol) ↔ 316K/29m (octomind). 6x. |
-| `uuid_parse_panic` | quality+TOKENS | All pass but claude j=80.0 is the outlier vs 90.67–95.33; 40K (sol) ↔ 261K (octomind), 172K (opencode). |
-| `ripgrep_maxdepth_ignore_skip` | TOKENS+SPEED | All pass; 66K/2m (sol) ↔ 242K/17m (octomind); also the `test_paths: []` convention exemplar. |
+| Client | Window and compaction configuration |
+|---|---|
+| Claude 2.1.221 | `CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000` in the environment. |
+| Codex 0.146.0 | `model_context_window=200000`; compacts at 90% of that window. |
+| OpenCode v1.18.34 | Each model's `limit.context` is 200000. Without this explicit limit, OpenCode cannot learn it on the sealed network and never compacted. |
+| Octomind | Configured for compression at 70K tokens and a session ceiling of `max_session_tokens_threshold=200000`. |
 
-## Longrun 10 (2 per language)
+The supplied `cross200k.txt` records the first turn where accumulated session
+content passes 200K. These measurements locate context pressure; they do not
+by themselves prove when a client compacted, and they are not cumulative billed
+tokens including repeated cache reads.
 
-| sequence | axis | grounding |
-|---|---|---|
-| `cpp/duckdb` (15) | ALL THREE | The crown: solving spread claude 15/15 · sol 14/15 · luna 13/15; tokens 52.7M (sol) ↔ 264.9M (claude); cost $2.33 (luna) ↔ $151.70 (claude); wall 60m ↔ 520m. No turn fails everyone (claude's 15/15 proves each turn solvable). |
-| `cpp/cli11` (8) | TOKENS+SPEED | Everyone 8/8 → pure efficiency: 8.2M tok/18m (sol) ↔ 33.6M/45m (luna) ↔ 77m (octomind); cost $0.81 ↔ $17.91. |
-| `js/eslint` (15) | TOKENS at depth | All recorded clients 14/15 (the shared miss is turn 12 — audit-flagged); 17.1M/23m (sol) ↔ 33.6M/42m (opencode). Deepest valid js sequence. |
-| `js/fastify` (5) | SOLVING | Turn 2 (ContentType cache) splits: luna 4/5 + opencode 4/5 vs 5/5 elsewhere; Σ 332.8 ↔ 400.1. |
-| `php/doctrine_orm` (6) | SOLVING | Widest clean verdict spread in longrun: sol 4/6 · luna 4/6 · octomind 5/6 · opencode 6/6 · claude 6/6, and no turn fails everyone. |
-| `php/phpspreadsheet` (6) | SOLVING+SPEED | octomind 5/6 + luna 5/6 vs 6/6; wall 14m (sol) ↔ 102m (octomind). |
-| `python/cpython` (14) | SOLVING at depth | Biggest solving spread of any sequence: luna 8/14 · opencode 10/14 · sol 11/14 · claude 12/14 (turns 5+10 fail all recorded clients — audit-flagged; the other 12 turns still rank everyone). |
-| `python/mypy` (5) | TOKENS (same-model) | Everyone 5/5; same model, 6x apart: glm-octomind 2.9M/$1.24 vs glm-opencode 18.2M/$5.77; codex 12m vs both glm columns ~1h. |
-| `rust/cargo` (10) | SOLVING+TOKENS | sol 8/10 · claude 7/10 · opencode 7/10 · luna 6/10; tokens 29.2M (sol) ↔ 244.3M (claude), 160.1M (opencode); $18.77 ↔ $138.64. Turns 1/9/10 fail all recorded clients and turn 9 depends on turn 1's feature — audit before treating those three as signal. |
-| `rust/ruff` (6) | SOLVING (model flip) | The only model-axis flip in longrun: turn 6 (ClassVar/Final in NamedTuple) defeats claude, sol AND luna, while glm-opencode passes 6/6. Tokens 17.5M (luna) ↔ 77.8M (opencode). |
+| Retained sequence | Claude | GLM-OpenCode | Flash-OpenCode | Observed first crossing |
+|---|---|---|---|---|
+| DuckDB | 2 | No measurement | No measurement | 2 |
+| Cargo | 1 | 2 | 2 | 1–2 |
+| CPython | 7 | 8 | 8 | 7–8 |
+| ESLint | 12 | 10 | 13 | 10–13 |
+| PhpSpreadsheet | Never (196K at turn 6) | Never (118K) | Never (107K) | Never; the short-session item |
 
-## Excluded, with reasons
+The supplied crossing report does not measure Codex or Octomind crossings.
+Codex compaction becomes observable only with the session-log retention being
+added separately. Compression thresholds differ even with the common ceiling;
+record the configuration and actual compaction events with each v2 round.
 
-- `rust/rustls_misplaced_extensions` — **broken case, confirmed**: compile-class
-  failures (E0063 missing gold-named struct field, E0631 visibility signature);
-  also the one case with no fail-to-pass proof. Fix or drop.
-- `js/react_hidden_hydration_hang` — valid but fails all 7 runs; ranks nobody,
-  only measures runaway containment (221m/2.8M tok octomind, $69 claude). Keep
-  as an optional stress annex, outside scoring.
-- `js/pinopretty_strip_controls`, `js/nest_sse_abort_signal` — fail everyone,
-  assert-class; validity unconfirmed (over-specified expectations suspected) —
-  audit before any use.
-- `js/node_webcrypto_supports_constraints` — valid-hard (Node core, 9 files) but
-  fails all recorded clients → no discrimination yet; promote once something passes it.
-- Longrun `js/axios` (turns 3+4 fail all 5), `php/guzzle` (turn 4 fails all 5
-  while the same change passes as a oneshot case), `rust/gitoxide` (turn 2 fails
-  all 5), `php/laravel` (6 of 12 turns fail everyone) — common-fail turns =
-  suspected broken turns; audit before scoring.
-- Longrun `cpp/simdjson` — codex columns tainted (web_search seal bypass).
-- Everything with near-uniform passes (nest, vue, symfony, aiohttp, pytest,
-  pydantic, clap, tokio, ada, fmt) — anchors, not discriminators.
+## Audit and instruction repairs
 
-## Finalization checks (2026-08-31)
+The supplied audit examined **106 failing cells: 53 legitimate model failures,
+40 case defects, 4 infrastructure failures, and 9 undetermined**. These counts
+cover the audited candidate set, including exclusions, rather than just v2.
+No flake or cascade was confirmed solely from timing or failed restoration.
 
-- All 30 suite entries exist on disk; all 20 oneshot manifests carry
-  `verified: true` (fail-to-pass proven via scripts/verify_case.sh).
-- Longrun legitimacy is proven empirically from the recorded campaigns: every
-  turn of all 10 sequences has ≥1 client PASS (solvable — validation only exits
-  0 when the held-out gold tests pass), and every sequence contains turns some
-  client failed (non-trivial — the tests don't pass for free). duckdb
-  additionally carries an explicit `verified: true` (15/15 cumulative proof).
-- Tag balance of the oneshot 20: difficulty 1 simple / 7 medium / 9 complex /
-  3 expert; task type 14 bug-fix / 5 feature / 1 performance; prompt source
-  10 reverse-spec / 7 human-reconstructed / 2 original-issue / 1 composite;
-  visibility 14 hidden / 6 mixed — variety per HARNESS.md §5–6, no one-shape skew.
-- Validity audit of all-client-fail turns (2026-08-31, evidence-cited):
-  - eslint#12 VALID-HARD, cpython#5 VALID-HARD — stay as genuine hard turns.
-  - **cpython#10 BROKEN (cascade)**: declares `depends_on: [7]` but the runner
-    never injects a failed predecessor's gold source, so it scores an
-    independent failure that is actually turn 7's cascade. Repair: re-base its
-    validation on turn 7's gold, or score it as cascade, not failure.
-  - **cargo#9 BROKEN (same cascade shape, depends_on: [1])**; cargo#1 and #10
-    UNCERTAIN (instructions look complete; exact failing assertions not in the
-    synced tree). Same repair options.
-  - Systemic finding: `depends_on` turns are mis-scored whenever a predecessor
-    failed — cumulative fail-to-pass proof (verify_longrun.sh applies each gold
-    fix) cannot establish a dependent turn's validity after an agent failure.
-    Also hit: laravel#2/#11 (not in GOLD).
-  - Confirmed BROKEN outside GOLD (stay excluded): guzzle-longrun#4
-    (instruction omits the `Path=` requirements its tests check — the passing
-    oneshot twin states them), gitoxide#2 (test demands legacy message casing
-    contradicting the instructed message), axios#3 (hidden tests bind to
-    gold-internal `internals.handlerEntries.size` + unstated semantics);
-    axios#4/#5 audited VALID-HARD.
-  - All four all-fail oneshot hard-tier cases (pinopretty, react, nest_sse,
-    node_webcrypto) audited VALID-HARD — the hard tier is honest; they stay
-    out of GOLD only because a case nobody passes ranks nobody.
+ESLint #12 and CPython #10 are case defects, not valid-hard turns. This corrects
+the 2026-08-31 audit: ESLint #12 was labeled valid-hard despite asking for
+return-path analysis while its selected change requires descriptor detection.
+CPython #10 asked for GeneratorExit handling while its selected assertion
+concerns KeyboardInterrupt and a suppressed sibling exception. The older
+CPython #10 cascade diagnosis is also insufficient:
+the audited Flash-OpenCode run successfully restored #7 before failing #10.
+CPython #5's earlier valid-hard label is superseded by its undeclared internal
+member requirement. A passing column proves solvability, not derivability.
 
-## Defect repairs (2026-08-31)
+This revision repairs the following contracts without changing gold SHAs,
+protected test paths, dependencies, or selected assertions:
 
-Instruction-level repairs (tests and golds untouched — fail-to-pass proofs
-remain valid; instruction text is not part of the proof):
+| Turn | Instruction repair |
+|---|---|
+| CPython #2 | Cancellation already observed at readiness leaves the connection pending; the cancelled call raises without a loop error, and the next accept returns the same usable peer connection. |
+| CPython #5 | Retain output through cancellation and process waiting; explicitly expose incrementally populated `_stdout_buf`, propagate cancellation, finish retries after child termination, close stdin, and never replay supplied input. |
+| CPython #10 | Propagate KeyboardInterrupt/SystemExit and report each suppressed sibling exception exactly once through the loop handler's `exception` context, preserving earlier generator-close behavior. |
+| ESLint #12 | Detect only correctly positioned descriptors of enabled, unshadowed Object/Reflect built-ins; cover optional chaining, maps versus computed keys, and the directly bound `isPropertyDescriptor` utility contract shared by the three accessor rules. |
+| Cargo #2 | Pin the redundant-homepage headline naming `package.repository`; preserve snippets, help, notes, cached replay, warning suppression, and denial status. |
+| Cargo #6 | Calculate and retain ADDING publication-age annotations relative to `--publish-time`, alongside the historical LOCKING headline and unchanged lockfile conventions. |
+| Cargo #7 | Specify literal LOCKING age/timestamp suffixes, including `as of 7 days ago`, while preserving selection, lockfiles, and available-version details. |
 
-- guzzle-longrun#4: added the `__Host-` `Path=` requirements from the passing
-  oneshot twin (raw header must contain `Path=`; bare `Path` token invalid).
-- gitoxide#2: instruction now states BOTH hard failures — missing first email
-  (`Line {n} does not contain an email`) and a lone email with nothing to map
-  (`{n}: Emails without a name or email to map to are invalid`, gold
-  parse.rs's second error arm, which the held-out test pins via `"1:"`).
-- axios#3: instruction now states the full contract the tests check — stable
-  never-reused IDs, replacement/clear invalidation, mutation-safe iteration,
-  and the Symbol-keyed internals object with the `handlerEntries` Map
-  (spec_level behavioral→full-spec, difficulty medium→complex).
-- cargo#1: instruction now states the `<artifact>.trim-paths.jsonl` naming,
-  both-copies emission (original + uplifted + artifact-dir, identical
-  contents), all root-unit binary kinds, and the delete-uplifted-copy
-  freshness nuance the tests pin.
-- cargo#10: instruction now quotes the exact warning the test pins:
-  ignoring `build.fingerprint = "content"` without `-Zchecksum-freshness`.
-- cpython#10 / cargo#9 / laravel#2+#11 cascades: fixed generically in the
-  runner (failed-dependency gold restoration, `restored_dependencies` recorded
-  per turn) — see cli/longrun.py.
+Tags are adjusted to the repaired contracts: CPython #2 and Cargo #7 are medium;
+CPython #5/#10, ESLint #12, and Cargo #2/#6 are complex. CPython #2, ESLint #12,
+and Cargo #2 use acceptance-spec style; ESLint #12 and Cargo #2 become full-spec.
+The other existing full-spec and follow-up tags remain appropriate.
+All 14 CPython test commands append `-v`; selectors and pass/fail semantics stay
+identical. Internal names are stated only where selected assertions bind to
+them. The CPython #5 error attribution is source-traced; old logs do not contain
+the AttributeError traceback.
 
-Quarantined pending repair (NOT in GOLD, excluded from any scoring):
+All seven requested defect findings were supported by the selected gold tests
+and fixes. This is a content preparation revision: it does not claim new
+fail-at-base/pass-with-gold proof or client reruns. Before publishing v2 results,
+repeat the proof and requested client/model runs under [HARNESS.md](HARNESS.md),
+keeping pre-repair observations separate.
 
-- rust/rustls_misplaced_extensions (oneshot): compile-class identity binding +
-  no fail-to-pass proof; needs the re-base + declare-all-bound-symbols repair.
-- laravel#10: compile-class — tests bind to gold's `QueueRoutes::forward()`
-  naming (`Call to undefined method`), unstated in the instruction.
-- laravel#7: Mockery pins the exact cluster-scan call shape
-  (`scan(42, ['127.0.0.1','6379'], '*', 10)`) and `laravel:` key prefix —
-  white-box interaction test beyond the stated contract.
-- laravel#1 (`Failed asserting that false is true`, context opaque) and
-  laravel#6 (retry-count assertion behavioral; RedisExceptions appear
-  simulated) remain UNCERTAIN — audit before the sequence scores anywhere.
+## Exclusions and reasons
 
-## Gaps (do not block v1)
+| Excluded item | Reason |
+|---|---|
+| Long-run `cli11`, `mypy`, `doctrine_orm` | Every recorded column passes every turn: 8/8, 5/5, and 6/6 respectively. Kept sequences already cover efficiency and context depth. |
+| Long-run `fastify` | Its only split is turn 4, a case defect: validation demands cache population under the normalized Content-Type beyond the instructed reuse behavior. |
+| Long-run `ruff` | Its turn-4 split is infrastructure: the fixture was restored without its paired snapshot. Turn 6 fails every column; seven are legitimate annotation misses and one is an extra diagnostic-label requirement. It provides no clean ranking split. |
+| One-shot `libgit2_revwalk_pathspec_root`, `webpack_lazy_backend_shutdown`, `vite_hmr_restart_stale`, `monolog_max_trace_length`, `poetry_show_outdated_explicit_source`, `click_powershell_completion`, `anyio_tls_idna2008`, `uuid_parse_panic` | Every current column passes; their efficiency coverage is supplied by the kept anchors. Historical monolog verdict splits no longer hold. |
+| `prettier_setext_blockquote_marker` | Fixture/snapshot infrastructure contamination; restore them together before admission. |
+| `cpphttplib_connection_upgrade_token` | Protected assertions bind unnamed internal helpers; repair the contract or validate public handshake behavior before admission. |
+| `llvm_slp_root_phi_order` | Mixed: Luna retains the crash; Sol fails an exact shuffle-shape constraint. Repair validation and establish semantic correctness before admission. |
+| `symfony_console_wrap` | Mixed: Claude leaves an overwide line; Luna is penalized for ANSI escape bytes counted as visible width. Repair validation before admission. |
 
-1. glm-octomind has no data on 4 of the 10 longrun picks (duckdb, eslint,
-   cpython, cargo) — the 5 long sequences were never run on it.
-2. Python oneshot slot 4 is weak; the real python splitters
-   (`scrapy_http2_frame_size` sol-FAIL, `aiohttp_paused_content_eof` luna-FAIL)
-   are 80-corpus-only — swap them in once opencode/octomind run the 80.
-3. Audit items that could adjust GOLD scoring: eslint turn 12, cpython turns
-   5+10, cargo turns 1/9/10.
+## Methodology
+
+Run **three full rounds per model × client column** on the complete v2 suite,
+with the same versions, sealed environment, context configuration, and selected
+turn caps. Keep all three observations and report means with min–max for cost,
+tokens, and time. A gap inside the run-to-run spread is a tie; one historical
+run or a mean judge score is not three independent task attempts.
+
+Report objective solve rate separately from cost, tokens, and time. Classify
+failed cells before interpreting them: case defects, infrastructure, leakage,
+nondeterminism, and undetermined outcomes are not legitimate model failures.
+Report missing or excluded observations and the scoring denominator explicitly.
+Compare efficiency only on items every compared column solved, using the same
+item set across those columns. Keep unsuccessful-run expenditure visible
+separately so cheaper failure is not confused with cheaper completion.
+
+Report non-cache tokens and cache reads separately, with a clearly labeled total;
+the historical one-shot and long-run tables use different token totals. Agent
+wall time excludes setup, validation, and judging. Compare like-for-like client
+versions and model pairings, and distinguish a model comparison from a
+same-model client comparison. Preserve raw validation and session evidence,
+including dependency restoration outcomes and compaction events.
+
+## Remaining evidence gaps
+
+- Gemini rollback, aiohttp EOF, and Scrapy frame-size results exist only for
+  Claude, Sol-Codex, and Luna-Codex. The other five columns need full v2 rounds.
+- CPython #4 has five undetermined cells, #7 one, and #11 two until verbose logs
+  identify the failing assertions. Three other #4 failures are already
+  legitimate; adding `-v` does not retroactively classify the missing evidence.
+- DuckDB #9 on Luna-OM is the ninth undetermined cell: prerequisite #7 failed
+  restoration. A missing CROSS_PRODUCT does not establish cascade causation;
+  inspect the exact tree or rerun after successful restoration.
+- Codex compaction requires the separately added session-log retention. The
+  crossing report also has no Codex/Octomind measurements, and DuckDB lacks both
+  OpenCode result columns.
+- The excluded Ruff #6 diagnostic-label discrepancy needs its exact historical
+  validation blob; LLVM's different shuffle shape still needs behavioral proof.
+- Repaired instructions need fresh proof and client runs. Turn-cap support in
+  the launcher and reporting tools must be complete before v2 regeneration.

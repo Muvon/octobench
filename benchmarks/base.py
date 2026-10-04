@@ -193,9 +193,8 @@ def finalize_scoring(record: Dict, ctx: RunContext) -> None:
     """Compute efficiency + final score. Objective verdicts drive final_score
     (100/0, like SWE-bench-Live); judge-only verdicts use the weighted formula."""
     res = record.get("result", {})
-    toks = record.get("tokens", {})
     eff = compute_efficiency_score(
-        res.get("elapsed_ms"), toks.get("total"), record.get("cost_usd"), ctx.efficiency_cfg
+        res.get("elapsed_ms"), record.get("cost_usd"), ctx.efficiency_cfg
     )
     judge_score = float((record.get("judge") or {}).get("score", 0) or 0)
     objective = (record.get("verdict") or {}).get("objective")

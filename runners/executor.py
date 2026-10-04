@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import os
+import shutil
 import subprocess
 import threading
 import time
@@ -116,6 +117,35 @@ class Executor(ABC):
     @abstractmethod
     def octomind_config_path(self) -> str:
         """OCTOMIND_CONFIG_PATH value valid in this executor's environment."""
+
+    def codex_sessions_host_path(self) -> Path:
+        codex_home = os.environ.get("CODEX_HOME")
+        if codex_home is None:
+            return Path.home() / ".codex" / "sessions"
+        return Path(codex_home).expanduser() / "sessions"
+
+    def retain_codex_rollout(self, session_id: str, turn_number: int) -> None:
+        if not (self._case_dir / "sequence.yaml").is_file():
+            return
+        sessions_dir = self.codex_sessions_host_path()
+        matches = [
+            path
+            for path in sessions_dir.rglob("*.jsonl")
+            if session_id in path.name
+        ]
+        if len(matches) != 1:
+            raise RuntimeError(
+                f"expected one Codex rollout for session {session_id}, found {len(matches)}"
+            )
+        destination = (
+            self.workspace_host_path().parent
+            / "turns"
+            / f"turn_{turn_number}"
+            / "logs"
+            / "codex.rollout.jsonl"
+        )
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(matches[0], destination)
 
     def close(self) -> None:
         pass
@@ -281,13 +311,14 @@ class DockerExecutor(Executor):
         # container is removed at sequence end and takes the evidence with it —
         # compaction summaries, fold points, what the agent believed it had done.
         # Mounting it out costs nothing and makes a finished run investigable.
-        # claude and codex are deliberately absent: their state dirs already
-        # receive individual auth FILE mounts below, and mounting the parent
-        # directory would shadow them.
+        # Claude is deliberately absent because its state directory receives an
+        # auth file mount below. Codex mounts only `sessions`, so its auth file is
+        # still visible while rollout evidence survives container removal.
         state_root = self._ws.parent / "state"
         for sub, dest, env_var in (
             ("octomind", "/octobench-state/octomind", "OCTOMIND_DATA_DIR"),
             ("opencode", "/root/.local/share/opencode", None),
+            ("codex", "/root/.codex/sessions", None),
         ):
             host_dir = state_root / sub
             host_dir.mkdir(parents=True, exist_ok=True)
@@ -461,6 +492,9 @@ class DockerExecutor(Executor):
 
     def workspace_host_path(self) -> Path:
         return self._ws
+
+    def codex_sessions_host_path(self) -> Path:
+        return self._ws.parent / "state" / "codex"
 
     def octomind_config_path(self) -> str:
         return self.CFG

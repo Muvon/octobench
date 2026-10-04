@@ -1,6 +1,4 @@
 latency_ms: 8000
 cost_usd: 0.2
-tps: 50
 weight_latency: 0.4
 weight_cost: 0.4
-weight_tps: 0.2

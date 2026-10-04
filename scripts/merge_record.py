@@ -33,7 +33,7 @@ def main() -> None:
     r = fresh[0]
 
     efficiency = compute_efficiency_score(
-        r["result"]["elapsed_ms"], r["tokens"]["total"], r.get("cost_usd"), efficiency_cfg
+        r["result"]["elapsed_ms"], r.get("cost_usd"), efficiency_cfg
     )
     validation_failed = r["scripts"]["validate"]["exit_code"] != 0
     raw_final = compute_final_score(

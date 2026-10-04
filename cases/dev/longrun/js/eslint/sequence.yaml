@@ -270,25 +270,37 @@ turns:
     test_paths: [tests/lib/rules/id-denylist.js]
     test_command: npx mocha tests/lib/rules/id-denylist.js
 
-  - name: Avoid getter reports for functions that cannot return normally
-    difficulty: expert
+  - name: Recognize descriptors only in calls to enabled global built-ins
+    difficulty: complex
     task_type: bug-fix
     failure_modes: [wrong-result]
     prompt_source: original-issue
-    prompt_style: review-and-fix
-    spec_level: behavioral
+    prompt_style: acceptance-spec
+    spec_level: full-spec
     test_visibility: hidden
     capability_tags: [static-analysis, control-flow, ast, cross-file]
     instruction: |
-      `getter-return` and `accessor-pairs` report getters whose bodies cannot
-      reach a normal return because they always throw or otherwise terminate.
-      The shared AST utility treats some nested/abrupt control-flow shapes as if
-      execution could fall through, producing false positives.
+      Continue improving rule accuracy by making `getter-return`,
+      `accessor-pairs`, and `no-setter-return` agree on property descriptors.
+      Descriptor-like objects passed at the wrong argument position or to a
+      shadowed or disabled built-in must not trigger descriptor-specific reports.
 
-      Correct the shared return-path analysis and make both rules agree. A getter
-      with a reachable normal path still needs a value return; a getter whose
-      every path exits abruptly must be accepted. Preserve handling of nested
-      functions, loops, switches, and try/finally control flow.
+      Recognize an object literal as a descriptor only when it is the third
+      argument of the enabled global `Object.defineProperty` or
+      `Reflect.defineProperty`, or a property's value in the descriptor map
+      passed as the second argument of the enabled global `Object.create` or
+      `Object.defineProperties`. The map itself and objects used as computed
+      keys are not descriptors. Support optional chaining and existing static
+      member-name forms. Standalone objects, other receivers, and unsupported
+      methods such as `Reflect.defineProperties` are not descriptor contexts.
+
+      Respect lexical shadowing, including parameters, block bindings, and
+      hoisted declarations, as well as globals disabled through configuration
+      or comments. Expose this shared boolean contract as `isPropertyDescriptor`
+      on the AST utilities, accepting the node and its SourceCode in that order.
+      Preserve existing rule options, messages, report locations, ordinary
+      object/class accessors, getter return-path behavior, and unrelated AST
+      utility behavior.
     gold_sha: 151ba3f5834a0909e8b9b1736f4889ac694c0104
     pr_url: https://github.com/eslint/eslint/pull/21163
     test_paths:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -18,6 +19,7 @@ class CodexProvider(Provider):
         # long-run runner keeps one provider instance per sequence, which is
         # what makes the per-turn delta below possible.
         self._thread_usage: dict[str, tuple[int, int, int]] = {}
+        self._turn_number = 0
 
     def run_task(
         self,
@@ -78,12 +80,18 @@ class CodexProvider(Provider):
                 "-",
             ]
 
+        overrides = [
+            "-c",
+            f"model_context_window={os.environ['OCTOBENCH_CONTEXT_WINDOW']}",
+        ]
         # Clean-bench mode: same shared prompt as every other client. Codex has no
         # web tool unless `--search` is passed, which it never is here.
         system_prompt = shared_system_prompt()
         if system_prompt:
-            cmd[opts_at:opts_at] = ["-c", f"instructions={json.dumps(system_prompt)}"]
+            overrides.extend(["-c", f"instructions={json.dumps(system_prompt)}"])
+        cmd[opts_at:opts_at] = overrides
 
+        self._turn_number += 1
         start = time.time()
         proc = executor.run(cmd, input_text=prompt)
         elapsed_ms = int((time.time() - start) * 1000)
@@ -220,6 +228,8 @@ class CodexProvider(Provider):
         assistant_messages = assistant_messages[-12:]
         tool_intents = tool_intents[-24:]
         tool_results = tool_results[-24:]
+        if session_id is not None:
+            executor.retain_codex_rollout(session_id, self._turn_number)
 
         return ProviderRunResult(
             stdout=stdout,

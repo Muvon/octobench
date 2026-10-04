@@ -16,10 +16,10 @@
 #   client  octomind | codex | opencode | claude
 #   model   a key from configs/models.yaml (glm-5.3, claude-opus-5, gpt-5.6-sol, ...)
 #   suite   a list file in configs/suites/ (oneshot default: oneshot-50).
-#           Lines are `oneshot/<lang>/<case>` or `longrun/<lang>/<repo>`; one
-#           suite can mix both kinds (gold does — see docs/GOLD.md) and the
-#           launcher selects the lines matching MODE. Bare `<lang>/<case>`
-#           lines mean oneshot (oneshot-50.txt format).
+#           Lines are `oneshot/<lang>/<case>` or `longrun/<lang>/<repo>[:N]`;
+#           `:N` runs only turns 1..N. One suite can mix both kinds (gold does —
+#           see docs/GOLD.md) and the launcher selects the lines matching MODE.
+#           Bare `<lang>/<case>` lines mean oneshot (oneshot-50.txt format).
 #
 # Examples:
 #   scripts/bench.sh oneshot octomind glm-5.3
@@ -79,6 +79,7 @@ esac
 export OCTOBENCH_SYSTEM_PROMPT=configs/common/system_prompt.md
 export OCTOBENCH_SEAL_NETWORK=1
 export OCTOBENCH_CLEAN_WORKSPACE=1
+export OCTOBENCH_CONTEXT_WINDOW=200000
 export OCTOBENCH_JUDGE_MODELS="${OCTOBENCH_JUDGE_MODELS:-openrouter:thinkingmachines/inkling-small,openrouter:minimax/minimax-m3,openrouter:deepseek/deepseek-v4-flash-0731}"
 # octomind: the bench role from configs/octomind/octomind.toml (core+octofs+octocode).
 # Anything else resolves to the tap agent developer:general, whose capabilities
@@ -124,10 +125,49 @@ grep -q "^  $MODEL:" configs/models.yaml || { echo "FATAL: '$MODEL' is not in co
 if [ "$CLIENT" = opencode ]; then
   [ -f configs/opencode/opencode.json ] || { echo "FATAL: configs/opencode/opencode.json missing (opencode would run unconfigured)" >&2; exit 2; }
   export OPENCODE_CONFIG_JSON="${OPENCODE_CONFIG_JSON:-$REPO/configs/opencode/opencode.json}"
+  if ! .venv/bin/python - "$MODEL" "$OCTOBENCH_CONTEXT_WINDOW" "$OPENCODE_CONFIG_JSON" <<'PYEOF'
+import json
+import sys
+
+import yaml
+
+model, expected_raw, config_path = sys.argv[1:]
+expected = int(expected_raw)
+with open("configs/models.yaml", encoding="utf-8") as models_file:
+    provider_model = yaml.safe_load(models_file)["models"][model]["providers"]["opencode"]
+provider, model_name = provider_model.split("/", 1)
+with open(config_path, encoding="utf-8") as config_file:
+    configured = json.load(config_file)["provider"][provider]["models"][model_name]["limit"]["context"]
+if configured != expected:
+    raise SystemExit(
+        f"FATAL: opencode context window for {provider_model} is {configured}, expected {expected}"
+    )
+PYEOF
+  then
+    exit 2
+  fi
   # opencode is the one client not baked into the agent image; without the
   # override every case dies as "opencode: not found" and records as a run.
   [ -n "$OPENCODE_BIN" ] && [ -x "$OPENCODE_BIN" ] || {
     echo "FATAL: OPENCODE_BIN must point at an executable (opencode is not in $IMAGE)" >&2; exit 2; }
+fi
+if [ "$CLIENT" = octomind ]; then
+  if ! .venv/bin/python - "$OCTOBENCH_CONTEXT_WINDOW" configs/octomind/octomind.toml <<'PYEOF'
+import sys
+import tomllib
+
+expected_raw, config_path = sys.argv[1:]
+expected = int(expected_raw)
+with open(config_path, "rb") as config_file:
+    configured = tomllib.load(config_file)["max_session_tokens_threshold"]
+if configured != expected:
+    raise SystemExit(
+        f"FATAL: octomind max_session_tokens_threshold is {configured}, expected {expected}"
+    )
+PYEOF
+  then
+    exit 2
+  fi
 fi
 AVAIL=$(df --output=avail -BG . | tail -1 | tr -dc '0-9')
 [ "${AVAIL:-0}" -ge 15 ] || { echo "FATAL: only ${AVAIL}G free, need >=15G" >&2; exit 2; }
@@ -168,6 +208,7 @@ PYEOF
 fi
 
 # ── Case selection ──────────────────────────────────────────────────────────
+declare -A SEQUENCE_MAX_TURNS=()
 if [ "$MODE" = longrun ] && [ -z "$CASES" ] && [ -z "$SUITE" ]; then
   echo "FATAL: longrun needs --suite <list> or --cases <sequence tree>" >&2; exit 2
 fi
@@ -183,6 +224,22 @@ if [ -z "$CASES" ]; then
   WANT=0
   while read -r rel; do
     [ -n "$rel" ] || continue
+    max_turns=""
+    case "$rel" in
+      oneshot/*:*) echo "FATAL: oneshot suite entry cannot have a turn suffix: $rel" >&2; exit 2 ;;
+      longrun/*:*)
+        max_turns=${rel##*:}
+        rel=${rel%:*}
+        case "$max_turns" in
+          ''|*[!0-9]*) echo "FATAL: invalid turn prefix in suite entry: $rel:$max_turns" >&2; exit 2 ;;
+        esac
+        [ "$max_turns" -gt 0 ] || { echo "FATAL: turn prefix must be positive: $rel:$max_turns" >&2; exit 2; }
+        case "$rel" in
+          *:*) echo "FATAL: invalid turn prefix in suite entry: $rel:$max_turns" >&2; exit 2 ;;
+        esac
+        ;;
+      *:*) echo "FATAL: oneshot suite entry cannot have a turn suffix: $rel" >&2; exit 2 ;;
+    esac
     case "$rel" in
       oneshot/*|longrun/*) kind=${rel%%/*}; sub=${rel#*/} ;;
       *) kind=oneshot; sub=$rel ;;
@@ -192,6 +249,9 @@ if [ -z "$CASES" ]; then
     [ -d "$src" ] || { echo "FATAL: suite lists a missing case: $src" >&2; exit 2; }
     mkdir -p "$CASES/$(dirname "$sub")"
     cp -r "$src" "$CASES/$sub"
+    if [ -n "$max_turns" ]; then
+      SEQUENCE_MAX_TURNS["$CASES/$sub/sequence.yaml"]=$max_turns
+    fi
     WANT=$((WANT+1))
   done < "$LIST"
   [ "$WANT" -gt 0 ] || { echo "FATAL: suite $SUITE has no $MODE entries" >&2; exit 2; }
@@ -251,6 +311,10 @@ if [ "$MODE" = longrun ]; then
     done
     echo "START $sid free=${FREE}G $(date -u +%FT%TZ)"
     rc=0
+    MAX_TURNS_ARGS=()
+    if [ -n "${SEQUENCE_MAX_TURNS[$sf]:-}" ]; then
+      MAX_TURNS_ARGS=(--max-turns "${SEQUENCE_MAX_TURNS[$sf]}")
+    fi
     timeout "$SEQ_TIMEOUT" .venv/bin/python -m cli.longrun run \
       --sequence "$(dirname "$sf")" \
       --providers "$CLIENT" \
@@ -258,6 +322,7 @@ if [ "$MODE" = longrun ]; then
       --executor docker \
       --image "$IMAGE" \
       --out "$OUT" \
+      "${MAX_TURNS_ARGS[@]}" \
       --verbosity normal || rc=$?
     echo "FINISH $sid rc=$rc $(date -u +%FT%TZ)"
   done

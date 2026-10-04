@@ -605,6 +605,10 @@ def enforce_clean_bench(providers: list, verbosity: str) -> None:
             "(shared prompt; also gates claude's web-tool denial)")
     elif not Path(prompt).exists():
         missing.append(f"OCTOBENCH_SYSTEM_PROMPT points at a missing file: {prompt}")
+    if not os.environ.get("OCTOBENCH_CONTEXT_WINDOW"):
+        missing.append(
+            "OCTOBENCH_CONTEXT_WINDOW=200000 (shared client context window)"
+        )
     if "octomind" in providers and os.environ.get("OCTOMIND_AGENT") != "developer":
         missing.append(
             "OCTOMIND_AGENT=developer (without it providers/octomind.py falls back "
@@ -770,7 +774,7 @@ def main() -> None:
         """Compute and attach scoring fields to a single result record."""
         judge_score = float(r["judge"].get("score", 0))
         efficiency = compute_efficiency_score(
-            r["result"]["elapsed_ms"], r["tokens"]["total"], r.get("cost_usd"), ecfg
+            r["result"]["elapsed_ms"], r.get("cost_usd"), ecfg
         )
         validation_failed = r["scripts"]["validate"]["exit_code"] != 0
         raw_final_score = compute_final_score(judge_score, efficiency, scfg)

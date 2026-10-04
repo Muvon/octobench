@@ -52,12 +52,12 @@ turns:
     test_command: cargo test --test testsuite unremap_file
 
   - name: Keep diagnostic titles when source snippets are absent
-    difficulty: expert
+    difficulty: complex
     task_type: bug-fix
     failure_modes: [wrong-result]
     prompt_source: pr-derived
-    prompt_style: review-and-fix
-    spec_level: behavioral
+    prompt_style: acceptance-spec
+    spec_level: full-spec
     test_visibility: hidden
     capability_tags: [diagnostics, api-design, cross-file, text-processing]
     instruction: |
@@ -69,6 +69,16 @@ turns:
       Preserve labels, notes, help, warning-denial behavior, and replayed cached
       diagnostics. Titles should include the relevant package, feature, binary,
       dependency, or field name where that information is available.
+
+      For a homepage identical to the repository URL, the warning headline must
+      be exactly "`package.homepage` is redundant with `package.repository`".
+      Keep the existing warning formatting, source spans, note about the lint's
+      configured level, "consider removing `package.homepage`" help, and package
+      warning count. Both fetch and check must emit it, including a cached check.
+      With `build.warnings` set to `allow`, suppress warnings without suppressing
+      normal progress. With `deny`, retain the warning, exit with status 101, and
+      report "warnings are denied by `build.warnings` configuration". Preserve
+      normal successful exit status and progress output otherwise.
     gold_sha: c79e8f89441b3e73d6d65d125c0c745792808c74
     pr_url: https://github.com/rust-lang/cargo/pull/17304
     test_paths: [tests/testsuite/warning_override.rs]
@@ -145,7 +155,7 @@ turns:
     test_command: cargo test --test testsuite filters_too_new_versions
 
   - name: Make minimum publish age relative to publish-time
-    difficulty: expert
+    difficulty: complex
     task_type: behavior-change
     failure_modes: [wrong-result]
     prompt_source: original-issue
@@ -160,6 +170,16 @@ turns:
       reproduce resolution exactly as it would have looked at a historical or
       future instant, including multiple registries.
 
+      Calculate available-version publication-age annotations relative to the
+      same simulated time and retain them in ADDING output. For example, at
+      `2006-08-08T00:00:00Z` with a seven-day minimum, if compatible `bar` versions
+      1.0.0 and 1.1.0 were published on July 25 and August 6 respectively, select
+      1.0.0 and report "bar v1.0.0 (available: v1.1.0, published 2 days ago)".
+      Keep the LOCKING headline "1 package to highest compatible version as of
+      2006-08-08T00:00:00Z" for that resolution, the normal index-update message,
+      and the existing lockfile format, registry source, checksum, and dependency
+      entries for the selected version.
+
       Preserve ordinary current-time resolution when `--publish-time` is absent,
       registry-specific age overrides, zero-age behavior, patches, precise
       updates, and dependencies without publication timestamps.
@@ -169,7 +189,7 @@ turns:
     test_command: cargo test --test testsuite generate_lockfile_with_publish_time_and_min_publish_age
 
   - name: Explain minimum publish age in lock messages
-    difficulty: complex
+    difficulty: medium
     task_type: feature
     failure_modes: []
     prompt_source: pr-derived
@@ -179,14 +199,25 @@ turns:
     capability_tags: [resolver, diagnostics, time, configuration]
     depends_on: [6]
     instruction: |
-      Make resolver lock messages explain the cutoff used by minimum-publish-age
-      filtering. When resolving against the current clock, say the compatible
-      versions are considered as of the configured age; when `--publish-time` is
-      present, describe the age relative to that simulated timestamp.
+      Extend the publish-time work so resolver LOCKING messages explain the
+      minimum-publish-age cutoff. For a common nonzero age against the current
+      clock, append "as of {age} ago" to the existing highest-compatible-version
+      headline. In particular, locking one package with a seven-day minimum must
+      say "1 package to highest compatible version as of 7 days ago".
 
-      Handle singular/plural package counts, registry defaults and overrides,
-      zero/minimum-age placeholders, and resolutions that have no concrete age.
-      Keep the existing selected/available package details.
+      With `--publish-time`, use "as of {age} before {timestamp}". If an active
+      policy has no common concrete nonzero age, including registry overrides
+      and zero-age settings, use "as of min-publish-age" or
+      "as of min-publish-age before {timestamp}" respectively. With no enforced
+      age policy, preserve the timestamp-only suffix or no suffix as appropriate.
+      Preserve the existing singular/plural, zero-package, and Rust-version
+      headline conventions and status formatting.
+
+      Keep resolution and lockfile contents unchanged, including registry source,
+      checksums, and dependency entries. Retain index-update and selected/available
+      version details: when bar 1.0.0 meets the seven-day policy and 1.1.0 is only
+      two days old, ADDING must still say
+      "bar v1.0.0 (available: v1.1.0, published 2 days ago)".
     gold_sha: 43d5282b41266e34b2c906c9a27ecf06968e804f
     pr_url: https://github.com/rust-lang/cargo/pull/17328
     test_paths: [tests/testsuite/min_publish_age.rs]

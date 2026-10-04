@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -62,7 +63,16 @@ class ClaudeProvider(Provider):
         # ANTHROPIC_API_KEY for this call so claude uses the subscription login instead
         # of falling back to key-based API billing.
         start = time.time()
-        proc = executor.run(cmd, input_text=prompt, env_overrides={"ANTHROPIC_API_KEY": ""})
+        proc = executor.run(
+            cmd,
+            input_text=prompt,
+            env_overrides={
+                "ANTHROPIC_API_KEY": "",
+                "CLAUDE_CODE_AUTO_COMPACT_WINDOW": os.environ[
+                    "OCTOBENCH_CONTEXT_WINDOW"
+                ],
+            },
+        )
         elapsed_ms = int((time.time() - start) * 1000)
 
         result_text = ""

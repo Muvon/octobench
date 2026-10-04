@@ -10,13 +10,16 @@
       },
       "models": {
         "glm-5.2": {
-          "name": "GLM 5.2"
+          "name": "GLM 5.2",
+          "limit": {"context": 200000, "output": 32000}
         },
         "glm-5.3": {
-          "name": "GLM 5.3"
+          "name": "GLM 5.3",
+          "limit": {"context": 200000, "output": 32000}
         },
         "glm-5.3-flash": {
-          "name": "GLM 5.3 Flash"
+          "name": "GLM 5.3 Flash",
+          "limit": {"context": 200000, "output": 32000}
         }
       }
     },
@@ -30,6 +33,7 @@
       "models": {
         "deepseek-v4-flash": {
           "name": "DeepSeek V4 Flash",
+          "limit": {"context": 200000, "output": 32000},
           "reasoning": true,
           "options": {
             "reasoning_effort": "medium"
@@ -46,10 +50,12 @@
       },
       "models": {
         "glm-5.2": {
-          "name": "GLM 5.2"
+          "name": "GLM 5.2",
+          "limit": {"context": 200000, "output": 32000}
         },
         "deepseek-v4-flash-0731": {
-          "name": "DeepSeek V4 Flash (0731)"
+          "name": "DeepSeek V4 Flash (0731)",
+          "limit": {"context": 200000, "output": 32000}
         }
       }
     }
