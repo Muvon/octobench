@@ -50,6 +50,7 @@ from providers.factory import get_provider
 from runners.executor import Executor
 from scoring.aggregate import (
     TOKEN_SEMANTICS,
+    compute_aux_cost,
     compute_cost,
     compute_efficiency_score,
     compute_final_score,
@@ -416,7 +417,10 @@ def _run_sequence(
             judge_out = run_judge(judge_payload, judge_meta, str(workdir_abs))
             write_text(logs_dir / "judge.raw.log", str(judge_out.get("_judge_raw", "")))
 
-            tokens_total = provider_result.total_tokens or 0
+            aux_tokens = (provider_result.aux_input_tokens or 0) + (
+                provider_result.aux_output_tokens or 0
+            )
+            tokens_total = (provider_result.total_tokens or 0) + aux_tokens
             cost_usd = provider_result.provider_cost_usd
             if cost_usd is None:
                 cost_usd = compute_cost(
@@ -426,6 +430,13 @@ def _run_sequence(
                     pricing,
                     provider_result.reasoning_tokens,
                 )
+                if cost_usd is not None:
+                    # Compression + supervisor calls are part of the turn's bill.
+                    cost_usd += compute_aux_cost(
+                        provider_result.aux_input_tokens,
+                        provider_result.aux_output_tokens,
+                        pricing,
+                    )
 
             efficiency = compute_efficiency_score(
                 provider_result.elapsed_ms, tokens_total, cost_usd, efficiency_cfg
@@ -455,6 +466,8 @@ def _run_sequence(
                         "cached_input": provider_result.cached_input_tokens,
                         "output": provider_result.output_tokens,
                         "reasoning": provider_result.reasoning_tokens,
+                        "aux_input": provider_result.aux_input_tokens,
+                        "aux_output": provider_result.aux_output_tokens,
                         "total": tokens_total,
                     },
                     "cost_usd": cost_usd,

@@ -198,6 +198,14 @@ models:
     providers:
       octomind: zai:glm-5.3
       opencode: zai/glm-5.3
+  glm-5.3-alibaba:               # same weights as glm-5.3, served by Alibaba MaaS;
+    pricing:                     # z.ai list price reused, as for glm-5.2-alibaba.
+      input: 1.40
+      cached_input: 0.26
+      output: 4.40
+    providers:
+      octomind: alibaba:glm-5.3
+      opencode: alibaba/glm-5.3
   glm-5.3-flash:                 # z.ai list price; a launch promo halves it to
     pricing:                     # 0.075/0.015/0.25 until 2026-09-09 (not used here)
       input: 0.15

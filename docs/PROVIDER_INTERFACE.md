@@ -37,6 +37,10 @@ Token fields (optional but strongly recommended):
 - `output_tokens`: visible/non-reasoning output tokens
 - `reasoning_tokens`: reasoning tokens (if provider exposes them)
 - `total_tokens`: total tokens; should include cached+reasoning when available
+- `aux_input_tokens` / `aux_output_tokens`: tokens of the agent's own auxiliary model calls
+  (octomind: compression folds + supervisor), which the main counters exclude. Runners add them to
+  `total` and price them at the benchmark model's uncached rates (`compute_aux_cost`); `None`
+  when the client does not report them.
 
 Provider trace (optional structured data):
 - `provider_trace`: compact dict used to build judge evidence

@@ -78,6 +78,25 @@ def compute_efficiency_score(
     return round(min(100.0, max(0.0, eff)), 2)
 
 
+def compute_aux_cost(
+    aux_input_tokens: Optional[int],
+    aux_output_tokens: Optional[int],
+    pricing: Dict,
+) -> float:
+    """Cost of the agent's auxiliary model calls (compression, supervisor),
+    priced at the benchmark model's uncached input / output rates. Runs with a
+    different auxiliary model are approximated at the main model's price; the
+    token counts themselves are exact. 0.0 when the provider reports none."""
+    if not aux_input_tokens and not aux_output_tokens:
+        return 0.0
+    inp = pricing.get("input")
+    out = pricing.get("output")
+    if inp is None or out is None:
+        return 0.0
+    per = 1_000_000.0
+    return ((aux_input_tokens or 0) / per) * inp + ((aux_output_tokens or 0) / per) * out
+
+
 def compute_cost(
     input_tokens: Optional[int],
     cached_input_tokens: Optional[int],

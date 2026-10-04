@@ -40,6 +40,12 @@ class ProviderRunResult:
     output_tokens: Optional[int] = None
     reasoning_tokens: Optional[int] = None
     total_tokens: Optional[int] = None
+    # Tokens of the agent's own auxiliary model calls (octomind: compression
+    # folds + supervisor), which the main-model counters above exclude. Billed
+    # separately by the runners at the benchmark model's rate; None when the
+    # provider does not report them.
+    aux_input_tokens: Optional[int] = None
+    aux_output_tokens: Optional[int] = None
     # Provider-reported cost (authoritative when present). Claude reports
     # total_cost_usd itself, which correctly prices 1h cache WRITES at 2x input —
     # a component compute_cost() cannot see (cache_creation is folded into

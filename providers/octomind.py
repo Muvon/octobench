@@ -48,8 +48,10 @@ def _iter_jsonl_records(text: str) -> list[dict[str, Any]]:
     return records
 
 
-SessionUsage = tuple[int, int, int, int, int]
-NO_USAGE: SessionUsage = (0, 0, 0, 0, 0)
+# (input, output, cache_read, cache_write, reasoning, aux_input, aux_output) —
+# running totals already billed for a session, so a resumed turn pays its own.
+SessionUsage = tuple[int, int, int, int, int, int, int]
+NO_USAGE: SessionUsage = (0, 0, 0, 0, 0, 0, 0)
 
 
 def _extract_from_jsonl(
@@ -60,6 +62,8 @@ def _extract_from_jsonl(
     list[str],
     list[str],
     list[str],
+    Optional[int],
+    Optional[int],
     Optional[int],
     Optional[int],
     Optional[int],
@@ -77,6 +81,8 @@ def _extract_from_jsonl(
     output_tokens: Optional[int] = None
     reasoning_tokens: Optional[int] = None
     total_tokens: Optional[int] = None
+    aux_input_tokens: Optional[int] = None
+    aux_output_tokens: Optional[int] = None
     last_cost_meta: Optional[dict[str, Any]] = None
     new_baseline: SessionUsage = baseline
 
@@ -127,9 +133,15 @@ def _extract_from_jsonl(
             )
             raw_cache_write = int(last_cost_meta.get("cache_write_tokens") or 0)
             raw_reasoning = int(last_cost_meta.get("reasoning_tokens") or 0)
+            # octomind >= 0.55: compression folds + supervisor calls, which the
+            # main counters exclude (measured: duckdb session $4.48 real vs $3.41
+            # from main tokens alone). Older binaries omit the fields -> 0.
+            raw_aux_in = int(last_cost_meta.get("aux_input_tokens") or 0)
+            raw_aux_out = int(last_cost_meta.get("aux_output_tokens") or 0)
         except Exception:
             raw_in = raw_out = raw_cached = raw_cache_write = raw_reasoning = 0
-        b_in, b_out, b_cached, b_write, b_reason = baseline
+            raw_aux_in = raw_aux_out = 0
+        b_in, b_out, b_cached, b_write, b_reason, b_aux_in, b_aux_out = baseline
         # Canonical semantics, identical to claude and codex:
         #   input  = fresh input, cache WRITES included (they are billed input)
         #   cached = cache reads
@@ -140,7 +152,17 @@ def _extract_from_jsonl(
         reasoning_tokens = max(raw_reasoning - b_reason, 0)
         output_tokens = max(raw_out - b_out, 0)
         total_tokens = input_tokens + cached_tokens + output_tokens + reasoning_tokens
-        new_baseline = (raw_in, raw_out, raw_cached, raw_cache_write, raw_reasoning)
+        aux_input_tokens = max(raw_aux_in - b_aux_in, 0)
+        aux_output_tokens = max(raw_aux_out - b_aux_out, 0)
+        new_baseline = (
+            raw_in,
+            raw_out,
+            raw_cached,
+            raw_cache_write,
+            raw_reasoning,
+            raw_aux_in,
+            raw_aux_out,
+        )
 
     final_text = full_assistant[-1] if full_assistant else ""
     return (
@@ -153,6 +175,8 @@ def _extract_from_jsonl(
         output_tokens,
         reasoning_tokens,
         total_tokens,
+        aux_input_tokens,
+        aux_output_tokens,
         new_baseline,
     )
 
@@ -228,6 +252,8 @@ class OctomindProvider(Provider):
             output_tokens,
             reasoning_tokens,
             total_tokens,
+            aux_input_tokens,
+            aux_output_tokens,
             new_baseline,
         ) = _extract_from_jsonl(records, self._session_usage.get(session_name, NO_USAGE))
         self._session_usage[session_name] = new_baseline
@@ -246,6 +272,8 @@ class OctomindProvider(Provider):
             output_tokens=output_tokens,
             reasoning_tokens=reasoning_tokens,
             total_tokens=total_tokens,
+            aux_input_tokens=aux_input_tokens,
+            aux_output_tokens=aux_output_tokens,
             session_id=session_name,
             provider_trace={
                 "assistant_messages": assistant_messages,

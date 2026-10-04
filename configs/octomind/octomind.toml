@@ -7,7 +7,10 @@
 #   • Validate config: octomind config --validate
 
 # Configuration version (DO NOT MODIFY - used for automatic upgrades)
-version = 16
+version = 20
+# Requires an octomind built with `reasoning_effort = "none"` support (octolib
+# 0.40 / octomind > 0.54.1): the fold model and the judge role below use it, and
+# older binaries reject the value at config load ("unknown variant `none`").
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SYSTEM-WIDE SETTINGS
@@ -383,6 +386,10 @@ top_k = 1
 # fewer max_tokens" long before the balance was actually spent. 8192 leaves
 # 20x headroom, including for a panel model that emits reasoning.
 max_tokens = 8192
+# A verdict needs no reasoning; a thinking model left on its default spent the
+# whole 8192 budget reasoning and returned {"score":0,"reasoning":""} (empty
+# reply, finish_reason=length) on every second verdict with deepseek-v4-flash.
+reasoning_effort = "none"
 
 [roles.mcp]
 server_refs = []
@@ -530,6 +537,10 @@ verify_hash = true
 # compaction, so context overgrows past the model's window and the provider
 # rejects with 400 "prompt too long".
 name = "openrouter:deepseek/deepseek-v4-flash-0731"
+# A fold is a summary: no reasoning. Left on the model's default, deepseek-v4
+# reasoned its whole 16k budget away and returned nothing (finish_reason=length)
+# on every fold over ~70k tokens — 30% of turns in the Sept-2026 campaigns.
+reasoning_effort = "none"
 max_tokens = 16000  # Enough for decision + summary
 temperature = 0.3  # Lower temperature for consistent decisions
 top_p = 1.0
@@ -571,6 +582,44 @@ temperature = 0.0
 top_p = 1.0
 top_k = 0
 
+# ═══════════════════════════════════════════════════════════════════════
+# HUMAN TIME & ENERGY (/report)
+# /report estimates the timesheet hours a session occupied you and the energy
+# it drained, in deep-hour equivalents (1 DHE = one hour of pre-AI deep coding,
+# daily budget 4). `/report day|week|month` sums it over interactive CLI
+# sessions per day and project.
+# Reading/typing/review speeds and the flag thresholds are fixed research
+# values; only these per-person calibration knobs are exposed. The defaults are
+# starting guesses — fit them against 5-10 days of hand-logged time and
+# end-of-day fatigue. Model, sources and calibration steps:
+# doc/usage/05-sessions.md, "Human Time and Energy".
+# ═══════════════════════════════════════════════════════════════════════
+
+[timing]
+# Thinking time added to every turn's reading + typing estimate, in minutes.
+think_overhead_min = 1.5
+
+# Active time before an input is the gap since the agent finished, capped at
+# this multiple of the turn estimate (a longer gap means you were elsewhere).
+# Raise it if you deliberate longer than you read.
+deliberation_factor = 2.0
+
+# An agent run earns wait time only this long after your last input to it, in
+# minutes. A longer autonomous run costs you its launch and review, not its length.
+attention_window_min = 30.0
+
+# Energy per minute of reading code, relative to dialog, spec writing and
+# behavior checks (weight 1). Only the time left after reading the agent's text
+# and replying counts as reading code; reviewing is vigilance work and drains more.
+review_weight = 2.0
+
+# Energy per minute of waiting on an agent run you are still attending to.
+wait_weight = 0.25
+
+# Energy cost of switching between parallel sessions without a 10-minute
+# break, in DHE.
+switch_cost_dhe = 0.05
+
 [supervisor.learning]
 # Enable the learning system (lessons + orientation memory, distill + recall)
 # (v12: file backend is the only storage; the backend/model knobs are gone).
@@ -580,6 +629,21 @@ enabled = true
 # Compile grounded memories into scoped skills and guardrail candidates.
 # Keep off: cross-case skill synthesis would carry state between bench cases.
 enabled = false
+# Promotion is counterfactual: turns where a shadow artifact's trigger matched
+# (artifact not applied) are its control arm; live trial uses are the
+# treatment arm; both are scored by the verify-gate verdict and API calls.
+# Verdicts required in each arm before the arms are compared.
+min_samples = 3
+# Smoothed pass-rate gap treated as noise. Promotion must beat the control by
+# more than this; a trial that falls below the control by more retires.
+noise_margin = 0.15
+# Relative API-call increase tolerated for a negligible gain; also the saving
+# that promotes a behavior whose pass rate stays within the noise margin.
+cost_allowance = 0.10
+# Extra relative API-call increase allowed per unit of pass-rate gain.
+cost_per_gain = 2.0
+# Live uses after which an undecided trial retires as inconclusive.
+max_trial_uses = 8
 
 # Verify-gate: on self-reported `done`, run a checklist before accepting.
 # The free deterministic pre-gate and goal recitation are always on; detector
@@ -652,3 +716,14 @@ plan = false
 # verifier saw (refuted at 0.8 or above) instead of the second-verifier chat
 # pass. Unavailable or evidence over the state cap → the chat refutation.
 gate = false
+# Confirm or promote the cosine capability auto-activation: one Choice over the
+# five best-scored inactive capabilities plus none. A cosine winner the model
+# gives under 0.05 is not activated; with no cosine winner the model's choice
+# activates at 0.6 or above. Unavailable → the cosine decision.
+capabilities = false
+# Evolved-behavior trials: on each verified turn that touched a shadow or live
+# artifact, one call grades the outcome (probability the final answer fulfils
+# the request) and drops samples whose artifact does not apply to the request
+# (below 0.5). An artifact's first sample fixes its measure: graded artifacts
+# skip turns the evaluation cannot answer; ungraded ones keep the plain verdict.
+evolution = false

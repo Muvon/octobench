@@ -23,6 +23,7 @@ from providers.factory import available_providers, get_provider
 from runners.executor import DockerExecutor, Executor, HostExecutor
 from scoring.aggregate import (
     TOKEN_SEMANTICS,
+    compute_aux_cost,
     compute_cost,
     compute_efficiency_score,
     compute_final_score,
@@ -974,7 +975,13 @@ def main() -> None:
                                 "cached_input": provider_result.cached_input_tokens,
                                 "output": provider_result.output_tokens,
                                 "reasoning": provider_result.reasoning_tokens,
-                                "total": provider_result.total_tokens,
+                                "aux_input": provider_result.aux_input_tokens,
+                                "aux_output": provider_result.aux_output_tokens,
+                                "total": (provider_result.total_tokens or 0)
+                                + (provider_result.aux_input_tokens or 0)
+                                + (provider_result.aux_output_tokens or 0)
+                                if provider_result.total_tokens is not None
+                                else None,
                             },
                             "cost_usd": provider_result.provider_cost_usd,
                             "scripts": {
@@ -1067,6 +1074,13 @@ def main() -> None:
                         pricing,
                         provider_result.reasoning_tokens,
                     )
+                    if eval_cost is not None:
+                        # Compression + supervisor calls are part of the bill.
+                        eval_cost += compute_aux_cost(
+                            provider_result.aux_input_tokens,
+                            provider_result.aux_output_tokens,
+                            pricing,
+                        )
 
                 record = {
                     "case_id": case_id,
@@ -1088,7 +1102,13 @@ def main() -> None:
                         "cached_input": provider_result.cached_input_tokens,
                         "output": provider_result.output_tokens,
                         "reasoning": provider_result.reasoning_tokens,
-                        "total": provider_result.total_tokens,
+                        "aux_input": provider_result.aux_input_tokens,
+                        "aux_output": provider_result.aux_output_tokens,
+                        "total": (provider_result.total_tokens or 0)
+                        + (provider_result.aux_input_tokens or 0)
+                        + (provider_result.aux_output_tokens or 0)
+                        if provider_result.total_tokens is not None
+                        else None,
                     },
                     "cost_usd": eval_cost,
                     "scripts": {
