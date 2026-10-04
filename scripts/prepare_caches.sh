@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Prepare the shared caches every benchmark container mounts. Idempotent: run it
-# once per machine, and again after an image or tap change.
+# Prepare the shared caches every benchmark container mounts. Idempotent: rerun it
+# after any image or pinned-binary change; it only re-warms when the build changed.
 #
 # Why this exists: agents fetch a tap (github) and embedding models (huggingface,
 # 1.3G total) on first use. Neither host is on the egress allowlist, so inside a
@@ -31,8 +31,13 @@ fi
 # --- models: warm by running the agent once, unsealed ------------------------
 # A trivial prompt is enough: the embedding models load at session start, before
 # any work. Caches are bind-mounted rw so what it downloads lands on the host.
-if [ -s "$MODELS/huggingface/.warmed" ] && [ -s "$MODELS/octolib/.warmed" ]; then
-  echo "models: already warmed ($(du -sh "$MODELS" | cut -f1))"
+# The markers record which agent build warmed the cache: a new octomind or octocode
+# can need model files the old cache lacks (octomind 0.55 added octomind-embed), and
+# a sealed run cannot fetch them, so a changed image or pinned binary re-warms.
+STAMP="$(docker image inspect -f '{{.Id}}' "$IMAGE")${OCTOMIND_BIN:+ $(sha256sum "$OCTOMIND_BIN" | cut -c1-16)}"
+if [ "$(cat "$MODELS/huggingface/.warmed" 2>/dev/null)" = "$STAMP" ] \
+   && [ "$(cat "$MODELS/octolib/.warmed" 2>/dev/null)" = "$STAMP" ]; then
+  echo "models: already warmed for this build ($(du -sh "$MODELS" | cut -f1))"
 else
   echo "models: warming (downloads ~1.3G on first run)"
   docker rm -f octobench-cache-warm >/dev/null 2>&1 || true
@@ -47,8 +52,8 @@ else
     "$IMAGE" bash -lc 'echo "Reply with the single word OK and finish." | \
        octomind run developer --name cache-warm-$$ --model "${OCTOBENCH_WARM_MODEL:-openai:gpt-5.6-luna}" \
        --format=jsonl 2>&1 | tail -2'
-  date -u +%FT%TZ > "$MODELS/huggingface/.warmed"
-  date -u +%FT%TZ > "$MODELS/octolib/.warmed"
+  echo "$STAMP" > "$MODELS/huggingface/.warmed"
+  echo "$STAMP" > "$MODELS/octolib/.warmed"
 fi
 
 echo

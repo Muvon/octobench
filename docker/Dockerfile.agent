@@ -74,8 +74,8 @@ ARG OCTOMIND_VERSION=0.55.2
 ARG OCTOCODE_VERSION=0.26.4
 ARG OCTOFS_VERSION=0.16.0
 ARG OCTOBRAIN_VERSION=0.14.4
-ARG CODEX_VERSION=0.146.0
-ARG CLAUDE_VERSION=2.1.221
+ARG CODEX_VERSION=0.160.0
+ARG CLAUDE_VERSION=2.1.289
 
 # octomind + octofs + octocode + octobrain: static musl binaries from GitHub releases.
 # octofs = file/shell tools, octocode = codesearch, octobrain = memory (all referenced

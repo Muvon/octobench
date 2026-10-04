@@ -99,8 +99,8 @@ Every client works inside an emulated 200K-token window, set by
 
 | Client | Window and compaction configuration |
 |---|---|
-| Claude 2.1.221 | `CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000` in the environment. |
-| Codex 0.146.0 | `model_context_window=200000`; compacts at 90% of that window. |
+| Claude 2.1.289 | `CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000` in the environment. |
+| Codex 0.160.0 | `model_context_window=200000`; compacts at 90% of that window. |
 | OpenCode v1.18.34 | Each model's `limit.context` is 200000. Without this explicit limit, OpenCode cannot learn it on the sealed network and never compacted. |
 | Octomind | Configured for compression at 70K tokens and a session ceiling of `max_session_tokens_threshold=200000`. |
 

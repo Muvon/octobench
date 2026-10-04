@@ -20,6 +20,10 @@
         "glm-5.3-flash": {
           "name": "GLM 5.3 Flash",
           "limit": {"context": 200000, "output": 32000}
+        },
+        "glm-5.3-flashx": {
+          "name": "GLM 5.3 FlashX",
+          "limit": {"context": 200000, "output": 32000}
         }
       }
     },
