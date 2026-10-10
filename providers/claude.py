@@ -5,7 +5,12 @@ import os
 import time
 from typing import TYPE_CHECKING, Any, Optional
 
-from providers.base import Provider, ProviderRunResult, shared_system_prompt
+from providers.base import (
+    Provider,
+    ProviderRunResult,
+    append_process_timing,
+    shared_system_prompt,
+)
 
 if TYPE_CHECKING:
     from runners.executor import Executor
@@ -35,7 +40,10 @@ class ClaudeProvider(Provider):
         session_name: str,
         executor: "Executor",
         resume_session_id: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> ProviderRunResult:
+        if reasoning_effort is not None:
+            raise ValueError("claude provider has no reasoning_effort wiring")
         # stream-json (+ --verbose, required with -p) emits the full event trace:
         # assistant messages with tool_use blocks, user tool_result blocks, and a
         # final `result` event with usage/cost. `json` would give only the final text.
@@ -63,6 +71,7 @@ class ClaudeProvider(Provider):
         # ANTHROPIC_API_KEY for this call so claude uses the subscription login instead
         # of falling back to key-based API billing.
         start = time.time()
+        process_started_ms = time.time_ns() // 1_000_000
         proc = executor.run(
             cmd,
             input_text=prompt,
@@ -73,6 +82,7 @@ class ClaudeProvider(Provider):
                 ],
             },
         )
+        process_ended_ms = time.time_ns() // 1_000_000
         elapsed_ms = int((time.time() - start) * 1000)
 
         result_text = ""
@@ -169,5 +179,7 @@ class ClaudeProvider(Provider):
                 "duration_ms": duration_ms,
                 "cost_usd": cost_usd,
             },
-            raw_output=proc.stdout or "",
+            raw_output=append_process_timing(
+                proc.stdout or "", process_started_ms, process_ended_ms
+            ),
         )

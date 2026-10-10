@@ -43,7 +43,9 @@ def main() -> None:
 
     for attempt in range(1, max_retries + 1):
         data = json.loads(results_path.read_text())
-        failed = [r for r in data["results"] if infra_failed(r)]
+        # A GOLD round keeps one-shot and long-run results in one --out dir; long-run
+        # records (sequence_id) are rerun as whole sequences, never through here.
+        failed = [r for r in data["results"] if "case_id" in r and infra_failed(r)]
         if not failed:
             print("[rerun] no infra-failed records")
             return

@@ -6,7 +6,7 @@ import re
 import time
 from typing import TYPE_CHECKING, Any, Optional
 
-from providers.base import Provider, ProviderRunResult
+from providers.base import Provider, ProviderRunResult, append_process_timing
 
 if TYPE_CHECKING:
     from runners.executor import Executor
@@ -48,10 +48,11 @@ def _iter_jsonl_records(text: str) -> list[dict[str, Any]]:
     return records
 
 
-# (input, output, cache_read, cache_write, reasoning, aux_input, aux_output) —
-# running totals already billed for a session, so a resumed turn pays its own.
-SessionUsage = tuple[int, int, int, int, int, int, int]
-NO_USAGE: SessionUsage = (0, 0, 0, 0, 0, 0, 0)
+# (input, output, cache_read, cache_write, reasoning, aux_input, aux_output,
+# aux_cost) — running totals already billed for a session, so a resumed turn
+# pays its own.
+SessionUsage = tuple[int, int, int, int, int, int, int, float]
+NO_USAGE: SessionUsage = (0, 0, 0, 0, 0, 0, 0, 0.0)
 
 
 def _extract_from_jsonl(
@@ -69,6 +70,7 @@ def _extract_from_jsonl(
     Optional[int],
     Optional[int],
     Optional[int],
+    Optional[float],
     SessionUsage,
 ]:
     assistant_messages: list[str] = []  # compacted, for judge-evidence trace
@@ -83,6 +85,7 @@ def _extract_from_jsonl(
     total_tokens: Optional[int] = None
     aux_input_tokens: Optional[int] = None
     aux_output_tokens: Optional[int] = None
+    aux_cost_usd: Optional[float] = None
     last_cost_meta: Optional[dict[str, Any]] = None
     new_baseline: SessionUsage = baseline
 
@@ -138,10 +141,16 @@ def _extract_from_jsonl(
             # from main tokens alone). Older binaries omit the fields -> 0.
             raw_aux_in = int(last_cost_meta.get("aux_input_tokens") or 0)
             raw_aux_out = int(last_cost_meta.get("aux_output_tokens") or 0)
+            # Provider-reported USD of those calls; binaries that predate it
+            # leave the auxiliary cost UNKNOWN rather than repriced.
+            aux_cost_reported = "aux_cost" in last_cost_meta
+            raw_aux_cost = float(last_cost_meta.get("aux_cost") or 0.0)
         except Exception:
             raw_in = raw_out = raw_cached = raw_cache_write = raw_reasoning = 0
             raw_aux_in = raw_aux_out = 0
-        b_in, b_out, b_cached, b_write, b_reason, b_aux_in, b_aux_out = baseline
+            aux_cost_reported = False
+            raw_aux_cost = 0.0
+        b_in, b_out, b_cached, b_write, b_reason, b_aux_in, b_aux_out, b_aux_cost = baseline
         # Canonical semantics, identical to claude and codex:
         #   input  = fresh input, cache WRITES included (they are billed input)
         #   cached = cache reads
@@ -154,6 +163,7 @@ def _extract_from_jsonl(
         total_tokens = input_tokens + cached_tokens + output_tokens + reasoning_tokens
         aux_input_tokens = max(raw_aux_in - b_aux_in, 0)
         aux_output_tokens = max(raw_aux_out - b_aux_out, 0)
+        aux_cost_usd = max(raw_aux_cost - b_aux_cost, 0.0) if aux_cost_reported else None
         new_baseline = (
             raw_in,
             raw_out,
@@ -162,6 +172,7 @@ def _extract_from_jsonl(
             raw_reasoning,
             raw_aux_in,
             raw_aux_out,
+            raw_aux_cost,
         )
 
     final_text = full_assistant[-1] if full_assistant else ""
@@ -177,6 +188,7 @@ def _extract_from_jsonl(
         total_tokens,
         aux_input_tokens,
         aux_output_tokens,
+        aux_cost_usd,
         new_baseline,
     )
 
@@ -198,6 +210,7 @@ class OctomindProvider(Provider):
         session_name: str,
         executor: "Executor",
         resume_session_id: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> ProviderRunResult:
         # Run octomind's stock coding agent (`developer:general`) exactly as a real
         # user would. OCTOMIND_CONFIG_PATH (from the executor: host path or the
@@ -231,13 +244,17 @@ class OctomindProvider(Provider):
             # session name auto-resumes in octomind, but -r is explicit.
             if resume_session_id:
                 main_cmd.extend(["-r", resume_session_id])
+        if reasoning_effort:
+            main_cmd.extend(["-c", f"model.reasoning_effort={reasoning_effort}"])
 
         start = time.time()
+        process_started_ms = time.time_ns() // 1_000_000
         main = executor.run(
             main_cmd,
             env_overrides={"OCTOMIND_CONFIG_PATH": executor.octomind_config_path()},
             input_text=prompt,
         )
+        process_ended_ms = time.time_ns() // 1_000_000
         elapsed_ms = int((time.time() - start) * 1000)
 
         combined = (main.stdout or "") + "\n" + (main.stderr or "")
@@ -254,6 +271,7 @@ class OctomindProvider(Provider):
             total_tokens,
             aux_input_tokens,
             aux_output_tokens,
+            aux_cost_usd,
             new_baseline,
         ) = _extract_from_jsonl(records, self._session_usage.get(session_name, NO_USAGE))
         self._session_usage[session_name] = new_baseline
@@ -274,11 +292,14 @@ class OctomindProvider(Provider):
             total_tokens=total_tokens,
             aux_input_tokens=aux_input_tokens,
             aux_output_tokens=aux_output_tokens,
+            aux_cost_usd=aux_cost_usd,
             session_id=session_name,
             provider_trace={
                 "assistant_messages": assistant_messages,
                 "tool_intents": tool_intents,
                 "tool_results": tool_results,
             },
-            raw_output=main.stdout or "",
+            raw_output=append_process_timing(
+                main.stdout or "", process_started_ms, process_ended_ms
+            ),
         )

@@ -1,4 +1,4 @@
-# octobench GOLD v2 — 15 one-shots and 5 long-run sequences
+# octobench GOLD — 15 one-shots and 5 long-run sequences
 
 ## Purpose
 
@@ -24,33 +24,33 @@ still supports the conclusion:
 
 [configs/suites/gold.txt](../configs/suites/gold.txt) contains 20 entries:
 15 one-shots (three per language) and five long-run sequences. A `:N` suffix
-means turns 1 through N in the same persistent session. V2 runs DuckDB through
+means turns 1 through N in the same persistent session. GOLD runs DuckDB through
 13, Cargo through 7, CPython through 11, all 15 ESLint turns, and all six
 PhpSpreadsheet turns: 52 long-run turns and 67 scored tasks in total.
 
 `scripts/bench.sh <oneshot|longrun> ... --suite gold` selects the matching mode.
 The launcher support for turn caps is being added separately. Regenerate the
 GOLD-SUMMARY, GOLD-RESULTS, and GOLD-LONGRUN-RESULTS blocks in
-[BENCHMARK.md](../BENCHMARK.md) from explicit v2 run
+[BENCHMARK.md](../BENCHMARK.md) from explicit gold run
 inputs, using the existing command forms:
 
 ```bash
-scripts/update_benchmark.py --suite=gold --markers=GOLD 'label=results-gold-v2-oneshot-*/*/results.json' ...
-scripts/longrun_table.py    --suite=gold --markers=GOLD 'label=results-gold-v2-longrun-*/*/results.json' ...
+scripts/update_benchmark.py --suite=gold --markers=GOLD 'label=results-gold-oneshot-*/*/results.json' ...
+scripts/longrun_table.py    --suite=gold --markers=GOLD 'label=results-gold-longrun-*/*/results.json' ...
 ```
 
 Replace `label` and the trailing arguments with each column's result patterns.
 Before regeneration, the long-run reporting tools must support `:N` and
 aggregate only the selected turns. That tooling work is separate from this
 content revision; the former `gold_scorecard.py` is being removed separately.
-Do not mix pre-repair and v2 runs or publish full-sequence totals as
+Do not mix pre-repair and current gold runs or publish full-sequence totals as
 capped-sequence results.
 
-## V2 one-shot selection
+## One-shot selection
 
 Grounding uses the current GOLD-RESULTS block (updated 2026-09-11), supplemented
 by the main one-shot table for the three newly admitted items and the supplied
-106-cell audit. These are historical observations, not three-round v2 means.
+106-cell audit. These are historical observations, not three-round gold means.
 `tok` below excludes cache reads; time is agent runtime, excluding setup,
 validation, and judging. Short column names retain both model and client:
 Claude = Opus 5/Claude; Sol and Luna = GPT-5.6; GLM and Flash = GLM-5.3 and
@@ -74,12 +74,12 @@ GLM-5.3-Flash; OM = Octomind, OC = OpenCode.
 | `rust/ripgrep_maxdepth_ignore_skip` | Tokens, speed | 8/8 pass; 62K–152K tok, 3–22m. Sol-Codex takes 62K/4m; GLM-OC 152K/16m. |
 | `rust/chrono_iter_reverse` | Tokens, speed | 8/8 pass; 51K–237K tok, 4–24m. GLM-OM takes 237K/23m; Claude 51K/4m. |
 
-## V2 long-run selection
+## Long-run selection
 
 The GOLD-LONGRUN-RESULTS block (updated 2026-09-19) records the original full
 sequences. The prefix counts below are recomputed from the supplied historical
 per-turn results; they include defects and undetermined failures and are not
-valid v2 solve rates. Efficiency ranges are explicitly labeled as full-sequence
+valid gold solve rates. Efficiency ranges are explicitly labeled as full-sequence
 historical totals, with tokens including cache reads. Removed tails passed in
 every recorded column and add cost beyond the retained failure and context
 coverage.
@@ -120,13 +120,13 @@ tokens including repeated cache reads.
 The supplied crossing report does not measure Codex or Octomind crossings.
 Codex compaction becomes observable only with the session-log retention being
 added separately. Compression thresholds differ even with the common ceiling;
-record the configuration and actual compaction events with each v2 round.
+record the configuration and actual compaction events with each gold round.
 
 ## Audit and instruction repairs
 
 The supplied audit examined **106 failing cells: 53 legitimate model failures,
 40 case defects, 4 infrastructure failures, and 9 undetermined**. These counts
-cover the audited candidate set, including exclusions, rather than just v2.
+cover the audited candidate set, including exclusions, rather than just the gold suite.
 No flake or cascade was confirmed solely from timing or failed restoration.
 
 ESLint #12 and CPython #10 are case defects, not valid-hard turns. This corrects
@@ -163,7 +163,7 @@ the AttributeError traceback.
 
 All seven requested defect findings were supported by the selected gold tests
 and fixes. This is a content preparation revision: it does not claim new
-fail-at-base/pass-with-gold proof or client reruns. Before publishing v2 results,
+fail-at-base/pass-with-gold proof or client reruns. Before publishing gold results,
 repeat the proof and requested client/model runs under [HARNESS.md](HARNESS.md),
 keeping pre-repair observations separate.
 
@@ -182,7 +182,7 @@ keeping pre-repair observations separate.
 
 ## Methodology
 
-Run **three full rounds per model × client column** on the complete v2 suite,
+Run **three full rounds per model × client column** on the complete gold suite,
 with the same versions, sealed environment, context configuration, and selected
 turn caps. Keep all three observations and report means with min–max for cost,
 tokens, and time. A gap inside the run-to-run spread is a tie; one historical
@@ -203,10 +203,82 @@ versions and model pairings, and distinguish a model comparison from a
 same-model client comparison. Preserve raw validation and session evidence,
 including dependency restoration outcomes and compaction events.
 
+For each one-shot case and each long-run turn, `wall_ms` is that existing agent
+runtime. `model_ms` is the sum of client model-API call durations, `tool_ms` is
+the sum of tool-execution durations, and `own_job_ms` is the union of intervals
+from each agent-launched background job's launch marker (the tool result that
+returns its job id) to its actual completion delivery. A status-check injection
+is not completion. A job that never delivers completion contributes its
+launch-to-exit interval to `stuck_wait_ms`, not to busy time. Clients without an
+own-job mechanism report zero own-job and stuck-wait time.
+
+Busy time is the union of timestamped model steps, foreground tool executions,
+and completed own-job intervals. Idle time is wall time minus that union; the
+longest silent gap is the largest contiguous interval outside the busy union.
+When a client exposes only model and tool totals, busy retains the bounded sum
+fallback. Totals are never mixed with partial intervals: if the available
+evidence would require that mix, busy, idle, and longest silent gap are
+`UNKNOWN` for the record.
+
+Tail time runs from the final assistant message to a proven provider-process exit:
+captured process timing for current runs, or Octomind's final saved `SUMMARY` for
+historical runs. Without that evidence tail is `UNKNOWN`; it is never derived
+from a start timestamp plus runtime. Every timestamped interval is clamped to
+the captured process window, or to `[artifact start, artifact start + wall_ms]`
+when process timing is unavailable. Missing client evidence is `UNKNOWN`, never
+zero. A long-run `not_run` turn has no efficiency observation and is excluded
+from efficiency aggregates, while remaining an unsolved attempt for solve rate
+and cost per solve. A `killed_by_sequence_cap` turn retains the efficiency data
+present in its artifacts up to the cap.
+
+For Octomind, an assistant row ends a model step that starts at the preceding
+user, tool, or system row. A foreground tool interval runs from the assistant's
+tool-call timestamp to the matching tool-result row. `model_ms` remains the
+successful API-time delta from `SUMMARY` and is informational; it does not drive
+busy time. A killed run without a final `SUMMARY` still uses its incrementally
+saved session rows and harness wall window for interval metrics, while its
+`model_ms` is `UNKNOWN`.
+
+OpenCode model time is the union of assistant-generation intervals across the
+root session and all task-tool child sessions. Tool time is the union of real
+tool executions across that same session tree. The parent `task` span is neither
+model nor tool time itself: its child model and tool intervals supply the work
+inside it.
+
+Cost per solve is all-attempt cost divided by solved one-shots plus passed
+long-run turns. Wall time per solve uses all-attempt agent wall time over that
+same solved count. Burn rate is all-attempt cost divided by agent wall-hours.
+Active share is summed busy time divided by summed wall time, idle hours are
+summed idle time, own-job wait hours include delivered jobs only, and stuck-wait
+hours include jobs without completion. The longest-silent-gap row reports the
+per-round maximum and the number of records at or above five minutes. Waste
+share is `(repeat calls + filler calls) / tool calls`;
+a repeat has the same tool name, canonical arguments, and output as an earlier
+call in that record (a call cut off by a case or sequence cap never returned, so
+it is never a repeat; a missing output in a finished record makes the record's
+repeat count UNKNOWN), while a filler is a whole shell command consisting only of
+`true`, `:`, bare `sleep N`, or literal-only `echo`/`printf` without shell
+operators. Mean tail is the arithmetic mean of record tail seconds.
+
+Relative cost and time indexes use matched solved work only. For each matched
+item, divide a column's cost or wall time by that item's median across reported
+columns, then take the geometric mean of those ratios for the column; `1.00`
+means typical for the matched items. Zero is a known absolute value, not
+`UNKNOWN`; an item with a zero value in any compared column, or a zero
+cross-column median, is excluded from the relative index because `log(0)` is
+undefined. The report states the number of zero-valued exclusions, and an index
+is `UNKNOWN` only when no usable item remains or required client data is missing.
+
+The efficiency-only headline score is the geometric mean of a column's matched-
+work relative cost and relative time indexes. `1.00` is typical and lower is
+better. It is unchanged by the diagnostic interval rows because its wall-time
+component already includes all waiting. Solve rate remains a separate result;
+GOLD never merges solve and efficiency into one score.
+
 ## Remaining evidence gaps
 
 - Gemini rollback, aiohttp EOF, and Scrapy frame-size results exist only for
-  Claude, Sol-Codex, and Luna-Codex. The other five columns need full v2 rounds.
+  Claude, Sol-Codex, and Luna-Codex. The other five columns need full gold rounds.
 - CPython #4 has five undetermined cells, #7 one, and #11 two until verbose logs
   identify the failing assertions. Three other #4 failures are already
   legitimate; adding `-v` does not retroactively classify the missing evidence.
@@ -219,4 +291,4 @@ including dependency restoration outcomes and compaction events.
 - The excluded Ruff #6 diagnostic-label discrepancy needs its exact historical
   validation blob; LLVM's different shuffle shape still needs behavioral proof.
 - Repaired instructions need fresh proof and client runs. Turn-cap support in
-  the launcher and reporting tools must be complete before v2 regeneration.
+  the launcher and reporting tools must be complete before gold regeneration.

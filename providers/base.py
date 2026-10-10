@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -12,6 +13,18 @@ if TYPE_CHECKING:
 # Same cap for every client: a longer trace must not buy a client more judge
 # attention (favourable or otherwise) than a terser one.
 PROVIDER_EVIDENCE_FINAL_MESSAGE_CHARS = 2000
+
+
+def append_process_timing(raw_output: str, started_at_ms: int, ended_at_ms: int) -> str:
+    timing = json.dumps(
+        {
+            "type": "octobench_process_timing",
+            "started_at_ms": started_at_ms,
+            "ended_at_ms": ended_at_ms,
+        },
+        separators=(",", ":"),
+    )
+    return raw_output.rstrip("\n") + "\n" + timing + "\n"
 
 
 def shared_system_prompt() -> Optional[str]:
@@ -41,11 +54,13 @@ class ProviderRunResult:
     reasoning_tokens: Optional[int] = None
     total_tokens: Optional[int] = None
     # Tokens of the agent's own auxiliary model calls (octomind: compression
-    # folds + supervisor), which the main-model counters above exclude. Billed
-    # separately by the runners at the benchmark model's rate; None when the
+    # folds + supervisor), which the main-model counters above exclude. They run
+    # on their own models, so they are billed at the provider-reported
+    # aux_cost_usd, never repriced at the benchmark model's rate; None when the
     # provider does not report them.
     aux_input_tokens: Optional[int] = None
     aux_output_tokens: Optional[int] = None
+    aux_cost_usd: Optional[float] = None
     # Provider-reported cost (authoritative when present). Claude reports
     # total_cost_usd itself, which correctly prices 1h cache WRITES at 2x input —
     # a component compute_cost() cannot see (cache_creation is folded into
@@ -73,6 +88,9 @@ class Provider(ABC):
         session_name: str,
         executor: "Executor",
         resume_session_id: Optional[str] = None,
+        # The benchmark model's reasoning effort from configs/models.yaml, applied
+        # identically by every client; None leaves the client's own default.
+        reasoning_effort: Optional[str] = None,
     ) -> ProviderRunResult:
         raise NotImplementedError
 

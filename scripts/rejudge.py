@@ -19,7 +19,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from judges.llm_judge import run_judge  # noqa: E402
+from judges.llm_judge import _is_valid_verdict, run_judge  # noqa: E402
 from cli.main import build_task_prompt, default_judge_cfg, load_yaml  # noqa: E402
 from providers.base import PROVIDER_EVIDENCE_FINAL_MESSAGE_CHARS  # noqa: E402
 from scoring.aggregate import compute_efficiency_score, compute_final_score  # noqa: E402
@@ -58,7 +58,13 @@ def needs_rejudge(record: dict) -> bool:
     if judge.get("confidence") in (0, 0.0):
         return True
     validation_ok = record["scripts"]["validate"]["exit_code"] == 0
-    return score == 0 and validation_ok
+    if score == 0 and validation_ok:
+        return True
+    # A panel member the live run would now retry (e.g. 0 on a PASS) skews the mean.
+    return any(
+        not _is_valid_verdict({**m, "_judge_parse_error": m.get("parse_error")}, validation_ok)
+        for m in judge.get("judges") or []
+    )
 
 
 def main() -> None:

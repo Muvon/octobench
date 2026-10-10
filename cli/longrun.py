@@ -4,6 +4,12 @@ Runs a sequence of related tasks (one per commit) in a single agent session,
 mimicking continuous user turns. The agent's source changes persist across
 turns; validation checks out only the gold test files per turn.
 
+With OCTOBENCH_FRESH_SESSIONS=1 every turn is a new agent session in the same
+workspace instead, the way an autonomous agent meets one repository task after
+another: only the working tree and what the client itself persisted (octomind's
+learned memory) carry between turns. That is the setup a memory on/off
+comparison needs.
+
 Usage:
     python3 -m cli.longrun run \
         --sequence cases/dev/longrun/rust/tokio \
@@ -27,6 +33,7 @@ import yaml
 
 from cli.main import (
     clean_workspace,
+    compute_provider_result_cost,
     default_judge_cfg,
     diff_snapshots,
     enforce_clean_bench,
@@ -39,6 +46,7 @@ from cli.main import (
     make_executor,
     parse_providers,
     parse_selected_models,
+    probe_provider_health,
     resolve_provider_model,
     run_case_script,
     safe_id,
@@ -46,12 +54,11 @@ from cli.main import (
     write_text,
 )
 from judges.llm_judge import run_judge
+from providers.base import ProviderRunResult
 from providers.factory import get_provider
 from runners.executor import Executor
 from scoring.aggregate import (
     TOKEN_SEMANTICS,
-    compute_aux_cost,
-    compute_cost,
     compute_efficiency_score,
     compute_final_score,
 )
@@ -64,6 +71,14 @@ from scoring.aggregate import (
 # `timeout` inside the container: killing the `docker exec` client alone
 # leaves the test running into later turns.
 VALIDATE_TIMEOUT_S = 1800
+
+# A finished octomind session hands its transcript to a detached `octomind
+# distill` child. In fresh-session mode the next turn must not start before it
+# has stored what it learned, or the memory arm is measured without its memory.
+# Extraction is a few supervisor calls; this bound only stops a hung child from
+# stalling the sequence.
+LEARNING_SETTLE_TIMEOUT_S = 600
+LEARNING_SETTLE_POLL_S = 5
 
 
 def _utc_ts() -> str:
@@ -214,6 +229,141 @@ def _restore_dependency(
     return True
 
 
+def _settle_client_learning(executor: Executor, verbosity: str) -> Dict[str, Any]:
+    """Wait for detached learning children to exit, then count stored memories.
+
+    Returns how long the wait took, whether it timed out, and the hot learning
+    records per memory type under the client's state dir.
+    """
+    # The process pattern is assembled at runtime so this script's own command
+    # line never matches it.
+    script = (
+        "p=dist; p=\"${p}ill\"\n"
+        f"deadline=$(( $(date +%s) + {LEARNING_SETTLE_TIMEOUT_S} ))\n"
+        "start=$(date +%s); timed_out=0\n"
+        "while :; do\n"
+        "  busy=0\n"
+        "  for f in /proc/[0-9]*/cmdline; do\n"
+        "    c=$(tr '\\0' ' ' < \"$f\" 2>/dev/null) || continue\n"
+        "    case \"$c\" in *\"octomind $p\"*) busy=1; break ;; esac\n"
+        "  done\n"
+        "  [ \"$busy\" = 0 ] && break\n"
+        "  [ \"$(date +%s)\" -ge \"$deadline\" ] && { timed_out=1; break; }\n"
+        f"  sleep {LEARNING_SETTLE_POLL_S}\n"
+        "done\n"
+        "echo \"waited_s=$(( $(date +%s) - start )) timed_out=$timed_out\"\n"
+        "root=\"${OCTOMIND_DATA_DIR:-/root/.local/share/octomind}/learning\"\n"
+        "[ -d \"$root\" ] && find \"$root\" -name '*.md' -not -path '*/.archive/*' "
+        "-exec sed -n 's/^memory_type: *//p' {} + | sort | uniq -c\n"
+        "exit 0\n"
+    )
+    res = executor.run(["bash", "-c", script])
+    settled: Dict[str, Any] = {"waited_s": None, "timed_out": None, "records": {}}
+    for line in (res.stdout or "").splitlines():
+        parts = line.split()
+        if line.startswith("waited_s="):
+            fields = dict(part.split("=", 1) for part in parts)
+            settled["waited_s"] = int(fields["waited_s"])
+            settled["timed_out"] = fields["timed_out"] == "1"
+        elif len(parts) == 2 and parts[0].isdigit():
+            settled["records"][parts[1]] = int(parts[0])
+    log(
+        f"[longrun] learning settled in {settled['waited_s']}s "
+        f"timed_out={settled['timed_out']} records={settled['records']}",
+        verbosity,
+        "normal",
+    )
+    return settled
+
+
+def _synthetic_turn_result(
+    turn_number: int,
+    turn: Dict[str, Any],
+    status: str,
+    session_mode: str,
+    elapsed_ms: int,
+    provider_result: Optional[ProviderRunResult],
+    pricing: Dict,
+    efficiency_cfg: Dict,
+    scoring_cfg: Dict,
+) -> Dict[str, Any]:
+    killed = status == "killed_by_sequence_cap"
+    if provider_result is None:
+        token_count = 0
+        tokens = {
+            "semantics": TOKEN_SEMANTICS,
+            "input": token_count,
+            "cached_input": token_count,
+            "output": token_count,
+            "reasoning": token_count,
+            "aux_input": token_count,
+            "aux_output": token_count,
+            "total": token_count,
+        }
+        cost_usd: Optional[float] = 0.0
+        session_id = None
+        stdout = ""
+    else:
+        aux_tokens = (provider_result.aux_input_tokens or 0) + (
+            provider_result.aux_output_tokens or 0
+        )
+        total_tokens = (
+            provider_result.total_tokens + aux_tokens
+            if provider_result.total_tokens is not None
+            else None
+        )
+        tokens = {
+            "semantics": TOKEN_SEMANTICS,
+            "input": provider_result.input_tokens,
+            "cached_input": provider_result.cached_input_tokens,
+            "output": provider_result.output_tokens,
+            "reasoning": provider_result.reasoning_tokens,
+            "aux_input": provider_result.aux_input_tokens,
+            "aux_output": provider_result.aux_output_tokens,
+            "total": total_tokens,
+        }
+        cost_usd = compute_provider_result_cost(provider_result, pricing)
+        elapsed_ms = provider_result.elapsed_ms
+        session_id = provider_result.session_id
+        stdout = (provider_result.stdout or "")[-2000:]
+
+    if killed and provider_result is not None:
+        efficiency = compute_efficiency_score(elapsed_ms, cost_usd, efficiency_cfg)
+        raw_final_score = compute_final_score(0.0, efficiency, scoring_cfg)
+        penalty = float(scoring_cfg.get("validation_fail_penalty", 25.0))
+        final_score = round(max(0.0, raw_final_score - penalty), 2)
+    else:
+        efficiency = None
+        raw_final_score = 0
+        final_score = 0
+    return {
+        "turn": turn_number,
+        "name": turn.get("name", f"turn_{turn_number}"),
+        "instruction": turn.get("instruction", ""),
+        "status": status,
+        "restored_dependencies": [],
+        "restore_failed_dependencies": [],
+        "session_mode": session_mode,
+        "client_learning": None,
+        "provider": {
+            "exit_code": 124 if killed else None,
+            "elapsed_ms": elapsed_ms,
+            "session_id": session_id,
+            "stdout": stdout,
+        },
+        "tokens": tokens,
+        "cost_usd": cost_usd,
+        "validation": {"exit_code": None, "passed": False},
+        "judge": None,
+        "scoring": {
+            "efficiency_score": efficiency,
+            "raw_final_score": raw_final_score,
+            "final_score": final_score,
+            "validation_failed": True,
+        },
+    }
+
+
 def _run_sequence(
     sequence: Dict[str, Any],
     sequence_dir: Path,
@@ -226,6 +376,7 @@ def _run_sequence(
     scoring_cfg: Dict,
     efficiency_cfg: Dict,
     pricing: Dict,
+    reasoning_effort: Optional[str],
     verbosity: str,
 ) -> Dict[str, Any]:
     """Run one full multi-turn sequence for a single provider+model."""
@@ -254,8 +405,16 @@ def _run_sequence(
     turn_results: List[Dict[str, Any]] = []
     restored_dependency_turns = set()
     session_id: Optional[str] = None
+    fresh_sessions = os.environ.get("OCTOBENCH_FRESH_SESSIONS") == "1"
+    session_mode = "fresh" if fresh_sessions else "resumed"
+    setup_log: Optional[Dict[str, Any]] = None
+    in_flight_turn: Optional[int] = None
+    provider_started_at: Optional[float] = None
+    in_flight_provider_result: Optional[ProviderRunResult] = None
+    sequence_timed_out = False
     # Stable session name across all turns — octomind uses --name as the
-    # session identifier, so it must not change between turns.
+    # session identifier, so it must not change between turns. Fresh-session
+    # mode suffixes it per turn instead and never resumes.
     session_name = (
         f"lr-{safe_id(seq_id)[:20]}-{provider_name[:8]}-"
         f"{safe_id(benchmark_model)[:12]}-{int(time.time())}"
@@ -285,6 +444,9 @@ def _run_sequence(
 
         # Phase 2: iterate turns.
         for idx, turn in enumerate(turns):
+            in_flight_turn = idx
+            provider_started_at = None
+            in_flight_provider_result = None
             turn_name = turn.get("name", f"turn_{idx + 1}")
             instruction = turn.get("instruction", "")
             gold_sha = turn.get("gold_sha", "")
@@ -322,29 +484,66 @@ def _run_sequence(
                 else:
                     restore_failed_dependencies.append(dependency_turn)
 
-            prompt = _build_turn_prompt(system_prompt, instruction, is_first)
+            # A fresh session has not seen the sequence's system prompt yet.
+            prompt = _build_turn_prompt(
+                system_prompt, instruction, is_first or fresh_sessions
+            )
             install_guardrails(executor)
             sealed = os.environ.get("OCTOBENCH_SEAL_NETWORK") == "1"
             if sealed:
                 seal_network(executor)
             before = snapshot_files(executor.workspace_host_path())
 
-            # session_name is stable across turns (set once above).
+            turn_session = (
+                f"{session_name}-t{idx + 1}" if fresh_sessions else session_name
+            )
 
+            provider_interrupted = False
+            executor.begin_provider_call()
             try:
-                provider_result = provider_impl.run_task(
+                provider_started_at = time.monotonic()
+                in_flight_provider_result = provider_impl.run_task(
                     prompt=prompt,
                     workdir=executor.container_workspace(),
                     provider_model=provider_model,
-                    session_name=session_name,
+                    session_name=turn_session,
                     executor=executor,
-                    resume_session_id=session_id,
+                    resume_session_id=None if fresh_sessions else session_id,
+                    reasoning_effort=reasoning_effort,
                 )
             finally:
+                provider_interrupted = executor.end_provider_call()
                 # _validate_turn fetches gold tests from the same hosts.
                 if sealed:
                     unseal_network(executor)
+            provider_result = in_flight_provider_result
             session_id = provider_result.session_id or session_id
+
+            # Written before the cap check: a killed turn's partial trace is the
+            # evidence for what ran into the cap (a client stuck in a loop).
+            logs_dir = run_dir / "turns" / f"turn_{idx + 1}" / "logs"
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            write_text(logs_dir / "provider.stdout.log", provider_result.stdout or "")
+            write_text(logs_dir / "provider.stderr.log", provider_result.stderr or "")
+            write_text(logs_dir / "provider.raw.jsonl", provider_result.raw_output or "")
+
+            if provider_interrupted:
+                sequence_timed_out = True
+                turn_results.append(
+                    _synthetic_turn_result(
+                        idx + 1,
+                        turn,
+                        "killed_by_sequence_cap",
+                        session_mode,
+                        provider_result.elapsed_ms,
+                        provider_result,
+                        pricing,
+                        efficiency_cfg,
+                        scoring_cfg,
+                    )
+                )
+                in_flight_turn = None
+                break
 
             if provider_result.exit_code != 0:
                 err_tail = (provider_result.stderr or "").strip() or (
@@ -378,13 +577,12 @@ def _run_sequence(
                 test_command,
                 verbosity,
             )
+            # The distill child started when the agent exited and has run during
+            # validation; wait out the rest before the next turn recalls.
+            client_learning = (
+                _settle_client_learning(executor, verbosity) if fresh_sessions else None
+            )
 
-            # Per-turn logs.
-            logs_dir = run_dir / "turns" / f"turn_{idx + 1}" / "logs"
-            logs_dir.mkdir(parents=True, exist_ok=True)
-            write_text(logs_dir / "provider.stdout.log", provider_result.stdout or "")
-            write_text(logs_dir / "provider.stderr.log", provider_result.stderr or "")
-            write_text(logs_dir / "provider.raw.jsonl", provider_result.raw_output or "")
             write_text(logs_dir / "validate.stdout.log", validation["stdout"])
             write_text(logs_dir / "validate.stderr.log", validation["stderr"])
 
@@ -420,23 +618,12 @@ def _run_sequence(
             aux_tokens = (provider_result.aux_input_tokens or 0) + (
                 provider_result.aux_output_tokens or 0
             )
-            tokens_total = (provider_result.total_tokens or 0) + aux_tokens
-            cost_usd = provider_result.provider_cost_usd
-            if cost_usd is None:
-                cost_usd = compute_cost(
-                    provider_result.input_tokens,
-                    provider_result.cached_input_tokens,
-                    provider_result.output_tokens,
-                    pricing,
-                    provider_result.reasoning_tokens,
-                )
-                if cost_usd is not None:
-                    # Compression + supervisor calls are part of the turn's bill.
-                    cost_usd += compute_aux_cost(
-                        provider_result.aux_input_tokens,
-                        provider_result.aux_output_tokens,
-                        pricing,
-                    )
+            tokens_total = (
+                provider_result.total_tokens + aux_tokens
+                if provider_result.total_tokens is not None
+                else None
+            )
+            cost_usd = compute_provider_result_cost(provider_result, pricing)
 
             efficiency = compute_efficiency_score(
                 provider_result.elapsed_ms, cost_usd, efficiency_cfg
@@ -452,8 +639,11 @@ def _run_sequence(
                     "turn": idx + 1,
                     "name": turn_name,
                     "instruction": instruction,
+                    "status": "completed",
                     "restored_dependencies": restored_dependencies,
                     "restore_failed_dependencies": restore_failed_dependencies,
+                    "session_mode": session_mode,
+                    "client_learning": client_learning,
                     "provider": {
                         "exit_code": provider_result.exit_code,
                         "elapsed_ms": provider_result.elapsed_ms,
@@ -484,6 +674,8 @@ def _run_sequence(
                     },
                 }
             )
+            in_flight_turn = None
+            provider_started_at = None
             verdict = "PASS" if not validation_failed else "FAIL"
             log(
                 f"[longrun] turn {idx + 1} done: validate={verdict} "
@@ -492,6 +684,31 @@ def _run_sequence(
                 "normal",
             )
 
+    except SystemExit as exc:
+        if exc.code != 124:
+            raise
+        sequence_timed_out = True
+        if in_flight_turn is not None and len(turn_results) == in_flight_turn:
+            elapsed_ms = (
+                in_flight_provider_result.elapsed_ms
+                if in_flight_provider_result is not None
+                else int((time.monotonic() - provider_started_at) * 1000)
+                if provider_started_at is not None
+                else 0
+            )
+            turn_results.append(
+                _synthetic_turn_result(
+                    in_flight_turn + 1,
+                    turns[in_flight_turn],
+                    "killed_by_sequence_cap",
+                    session_mode,
+                    elapsed_ms,
+                    in_flight_provider_result,
+                    pricing,
+                    efficiency_cfg,
+                    scoring_cfg,
+                )
+            )
     finally:
         # A sequence keeps its checkout for all its turns, so it can only be
         # dropped here. Rust/C++ build trees reach tens of GB each; without this
@@ -500,23 +717,51 @@ def _run_sequence(
         clean_workspace(executor, workdir_abs, seq_id, verbosity)
         executor.close()
 
+    if sequence_timed_out:
+        for idx in range(len(turn_results), len(turns)):
+            turn_results.append(
+                _synthetic_turn_result(
+                    idx + 1,
+                    turns[idx],
+                    "not_run",
+                    session_mode,
+                    0,
+                    None,
+                    pricing,
+                    efficiency_cfg,
+                    scoring_cfg,
+                )
+            )
+
     # Aggregate sequence-level metrics.
-    total_turns = len(turn_results)
-    passed = sum(1 for t in turn_results if t["validation"]["passed"])
-    total_cost = sum(t["cost_usd"] or 0 for t in turn_results)
-    total_tokens = sum(t["tokens"]["total"] or 0 for t in turn_results)
+    total_turns = len(turns)
+    passed = sum(
+        1
+        for turn in turn_results
+        if turn["status"] == "completed" and turn["validation"]["passed"]
+    )
+    total_cost = sum(
+        turn["cost_usd"]
+        for turn in turn_results
+        if turn["cost_usd"] is not None
+    )
+    total_tokens = sum(
+        turn["tokens"]["total"]
+        for turn in turn_results
+        if turn["tokens"]["total"] is not None
+    )
     # Each turn is valued separately; the sequence's score is the SUM of its
     # turn scores (avg kept for cross-length comparability).
     sum_score = sum(t["scoring"]["final_score"] for t in turn_results)
     avg_score = sum_score / total_turns if total_turns else 0
 
-    return {
+    result = {
         "sequence_id": seq_id,
         "provider": provider_name,
         "benchmark_model": benchmark_model,
         "provider_model": provider_model,
         "setup": {
-            "exit_code": setup_log["exit_code"],
+            "exit_code": setup_log["exit_code"] if setup_log is not None else None,
         },
         "turns": turn_results,
         "aggregate": {
@@ -529,6 +774,9 @@ def _run_sequence(
             "total_tokens": total_tokens,
         },
     }
+    if sequence_timed_out:
+        result["error"] = "sequence_timeout"
+    return result
 
 
 def _diff_text(diff: Dict) -> str:
@@ -779,6 +1027,7 @@ def main() -> None:
             pricing = models_cfg.get("models", {}).get(bm, {}).get("pricing")
             if not pricing:
                 raise RuntimeError(f"Missing pricing for benchmark model: {bm}")
+            reasoning_effort = models_cfg["models"][bm].get("reasoning_effort")
 
             result = _run_sequence(
                 sequence,
@@ -792,14 +1041,49 @@ def main() -> None:
                 scoring_cfg,
                 efficiency_cfg,
                 pricing,
+                reasoning_effort,
                 verbosity,
             )
+            if result.get("error") == "sequence_timeout":
+                healthy, detail = probe_provider_health(
+                    repo_root,
+                    models_cfg,
+                    bm,
+                    run_dir / "provider-health",
+                )
+                if not healthy:
+                    result["error"] = "provider_unavailable"
+                    result["provider_unavailable"] = detail
+                    unavailable_path = run_root / "results.provider_unavailable.json"
+                    with open(unavailable_path, "w", encoding="utf-8") as f:
+                        json.dump({"results": [result]}, f, indent=2)
+                    log(
+                        f"[longrun] PROVIDER-UNAVAILABLE sequence={seq_id} detail={detail}",
+                        verbosity,
+                        "normal",
+                    )
+                    raise SystemExit(124)
+
             all_results.append(result)
 
             # Flush after every sequence: a multi-day run must not lose
             # completed records to a late crash, and partial tables read this.
             with open(run_root / "results.json", "w", encoding="utf-8") as f:
                 json.dump({"results": all_results}, f, indent=2)
+
+            if result.get("error") == "sequence_timeout":
+                completed = sum(
+                    turn.get("status") == "completed"
+                    for turn in result["turns"]
+                )
+                planned = result["aggregate"]["total_turns"]
+                log(
+                    f"[longrun] SEQUENCE-CAP sequence={seq_id} "
+                    f"completed={completed}/{planned}",
+                    verbosity,
+                    "normal",
+                )
+                raise SystemExit(124)
 
             agg = result.get("aggregate", {})
             log(

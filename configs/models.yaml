@@ -11,18 +11,22 @@ models:
       input: 10.00
       cached_input: 1.00
       output: 50.00
+    # Explicit for every client: codex's own default for this model, so the
+    # published codex runs (made at that default) stay comparable.
+    reasoning_effort: medium
     providers:
       codex: gpt-6-astra
-      octomind: openai:gpt-6-astra
+      octomind: chatgpt:gpt-6-astra   # ChatGPT sign-in, same plan as the codex login
 
   gpt-6.1-sol:
     pricing:                     # official, developers.openai.com/api/docs/pricing 2026-10-04
       input: 2.00
       cached_input: 0.10
       output: 10.00
+    reasoning_effort: low          # codex's default for this model (models_cache)
     providers:
       codex: gpt-6.1-sol
-      octomind: openai:gpt-6.1-sol
+      octomind: chatgpt:gpt-6.1-sol   # ChatGPT sign-in, same plan as the codex login
 
   gpt-6-sol:
     pricing:                     # official, developers.openai.com/api/docs/pricing 2026-10-04
@@ -280,6 +284,13 @@ models:
     providers:
       octomind: alibaba:glm-5.3
       opencode: alibaba/glm-5.3
+  glm-5.3-ollama:                # same weights as glm-5.3, served by Ollama Cloud;
+    pricing:                     # z.ai list price reused so $ stays comparable.
+      input: 1.40
+      cached_input: 0.26
+      output: 4.40
+    providers:
+      octomind: ollama:glm-5.3
   glm-5.3-flash:                 # z.ai list price; a launch promo halves it to
     pricing:                     # 0.075/0.015/0.25 until 2026-09-09 (not used here)
       input: 0.15
@@ -288,6 +299,13 @@ models:
     providers:
       octomind: zai:glm-5.3-flash
       opencode: zai/glm-5.3-flash
+  glm-5.3-flash-ollama:          # same weights as glm-5.3-flash, served by Ollama Cloud;
+    pricing:                     # z.ai list price reused so $ stays comparable.
+      input: 0.15
+      cached_input: 0.03
+      output: 0.50
+    providers:
+      octomind: ollama:glm-5.3-flash
   glm-5.3-flashx:
     pricing:                     # z.ai list price 2026-10-04
       input: 0.37

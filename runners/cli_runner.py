@@ -83,6 +83,7 @@ def run_cli(prompt: str, workdir: str, meta: Dict) -> RunResult:
             text=True,
             input=prompt if stdin_prompt else None,
             env=env,
+            timeout=meta.get("timeout_s"),
         )
         proc_stdout = proc.stdout or ""
         proc_stderr = proc.stderr or ""

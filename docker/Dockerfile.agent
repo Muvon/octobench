@@ -70,12 +70,12 @@ RUN curl --retry 5 --retry-all-errors --retry-delay 3 --connect-timeout 30 -fsSL
 
 # ── Pinned agent CLIs (prebuilt, no source builds) ───────────────────────────
 ARG TARGETARCH
-ARG OCTOMIND_VERSION=0.55.2
-ARG OCTOCODE_VERSION=0.26.4
-ARG OCTOFS_VERSION=0.16.0
-ARG OCTOBRAIN_VERSION=0.14.4
-ARG CODEX_VERSION=0.160.0
-ARG CLAUDE_VERSION=2.1.289
+ARG OCTOMIND_VERSION=0.58.0
+ARG OCTOCODE_VERSION=0.26.7
+ARG OCTOFS_VERSION=0.17.0
+ARG OCTOBRAIN_VERSION=0.14.7
+ARG CODEX_VERSION=0.162.1
+ARG CLAUDE_VERSION=2.1.296
 
 # octomind + octofs + octocode + octobrain: static musl binaries from GitHub releases.
 # octofs = file/shell tools, octocode = codesearch, octobrain = memory (all referenced

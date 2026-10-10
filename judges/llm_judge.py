@@ -65,16 +65,19 @@ def _escape_control_chars_in_json_strings(s: str) -> str:
 def _extract_json(text: str) -> Dict:
     text = _strip_terminal_noise(text)
 
-    # Preferred: explicit tagged payload. Greedy {.*} (not {.*?}) so a `}` inside a
-    # string value (judge reasoning often quotes code) doesn't truncate the JSON —
-    # the closing </results> tag bounds the match.
-    tagged = re.search(r"<results>\s*(\{.*\})\s*</results>", text, re.DOTALL)
-    if tagged:
+    # Preferred: explicit tagged payload, first block that parses. Each block ends at
+    # its own `}</results>`, so a `}` inside a string value (judge reasoning often
+    # quotes code) cannot truncate it, and a judge that repeats its verdict does not
+    # merge two blocks into one invalid payload.
+    for tagged in re.finditer(r"<results>\s*(\{.*?\})\s*</results>", text, re.DOTALL):
         payload = tagged.group(1)
         try:
             return json.loads(payload)
         except Exception:
-            return json.loads(_escape_control_chars_in_json_strings(payload))
+            try:
+                return json.loads(_escape_control_chars_in_json_strings(payload))
+            except Exception:
+                continue
 
     # Fallback: parse first valid JSON object from any text
     decoder = json.JSONDecoder()
@@ -154,13 +157,20 @@ JUDGE_PANEL_ATTEMPTS = 3
 JUDGE_RETRY_BACKOFF_S = 10
 
 
-def _is_valid_verdict(v: Dict) -> bool:
+def _is_valid_verdict(v: Dict, validation_passed: bool) -> bool:
     """A verdict that may enter the panel mean.
 
     Empty-zero verdicts (score 0 with no reasoning) are failed judgments that
-    happened to parse — a genuine 0 has to say why.
+    happened to parse — a genuine 0 has to say why. So is a non-numeric
+    confidence (a judge answering "high"): the schema asks for a number. And a
+    0 on a validation PASS: the rubric puts PASS at 50+ unless a cited defect
+    lowers it, so 0 means the judge misread the verdict it was given.
     """
     if v.get("_judge_parse_error") or not isinstance(v.get("score"), (int, float)):
+        return False
+    if v.get("confidence") is not None and not isinstance(v["confidence"], (int, float)):
+        return False
+    if validation_passed and float(v["score"]) == 0:
         return False
     return not (float(v["score"]) == 0 and not str(v.get("reasoning") or "").strip())
 
@@ -227,12 +237,12 @@ def run_judge(prompt_payload: Dict, judge_cfg: Dict, workdir: str) -> Dict:
         with ThreadPoolExecutor(max_workers=len(pending)) as pool:
             for v in pool.map(_judge_one, pending):
                 by_model[v["_judge_model"]] = v
-        pending = [m for m in models if not _is_valid_verdict(by_model[m])]
+        pending = [m for m in models if not _is_valid_verdict(by_model[m], exit_code == 0)]
         if not pending:
             break
 
     verdicts = [by_model[m] for m in models]
-    valid = [v for v in verdicts if _is_valid_verdict(v)]
+    valid = [v for v in verdicts if _is_valid_verdict(v, exit_code == 0)]
     if pending:
         print(f"[judge] INCOMPLETE PANEL — {len(valid)}/{len(models)} verdicts after "
               f"{JUDGE_PANEL_ATTEMPTS} attempts; missing {pending}",
@@ -285,12 +295,21 @@ if __name__ == "__main__":
         'log noise <results>{"score": 7, "reasoning": "used dict {k: v}"}</results> tail'
     )
     assert out["score"] == 7 and out["reasoning"].endswith("}"), out
+    # a judge that repeats its verdict yields the first block, not a merged payload
+    out = _extract_json(
+        '<results>{"score": 45, "reasoning": "a"}</results>\n\n'
+        '<results>{"score": 45, "reasoning": "b"}</results>'
+    )
+    assert out == {"score": 45, "reasoning": "a"}, out
 
     # panel self-check: a judge that fails once is retried and its verdict counts;
     # a judge that never answers leaves the record unjudged, not low-scored.
-    assert _is_valid_verdict({"score": 90, "reasoning": "ok"})
-    assert not _is_valid_verdict({"score": 0, "reasoning": ""})
-    assert not _is_valid_verdict({"score": 90, "_judge_parse_error": True})
+    assert _is_valid_verdict({"score": 90, "reasoning": "ok"}, True)
+    assert not _is_valid_verdict({"score": 0, "reasoning": ""}, False)
+    assert not _is_valid_verdict({"score": 90, "_judge_parse_error": True}, True)
+    assert not _is_valid_verdict({"score": 90, "reasoning": "ok", "confidence": "high"}, True)
+    assert not _is_valid_verdict({"score": 0, "reasoning": "verdict is FAIL"}, True)
+    assert _is_valid_verdict({"score": 0, "reasoning": "no production change"}, False)
 
     JUDGE_RETRY_BACKOFF_S = 0
     calls: Dict[str, int] = {}

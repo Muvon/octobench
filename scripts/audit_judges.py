@@ -87,6 +87,10 @@ def main() -> None:
         except Exception:
             continue
         for r in data.get("results", []):
+            # Timed-out and infra records are never sent to the judge: their judge
+            # block is a placeholder (cli/main.py), not a short panel.
+            if r.get("timed_out") or r.get("infra_failed"):
+                continue
             base = f"{f}::{r.get('case_id') or r.get('sequence_id')}"
             for t in r.get("turns") or []:
                 if t.get("judge"):

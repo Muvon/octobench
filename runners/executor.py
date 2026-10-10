@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import os
+import signal
 import shutil
 import subprocess
 import threading
@@ -36,6 +37,8 @@ AUTH_ENV_KEYS = [
     "OCTOHUB_API_URL",
     "OLLAMA_API_KEY",
     "OLLAMA_API_URL",
+    # octomind's [decision] model (typesafe:jev-*).
+    "TYPESAFE_API_KEY",
     # Not auth: forwarded so an instrumented run can surface the agent's debug
     # tracing in provider.stderr.log. Absent from the host env in normal runs.
     "RUST_LOG",
@@ -45,6 +48,19 @@ AUTH_ENV_KEYS = [
     "ALIBABA_API_KEY",
     "ALIBABA_API_URL",
 ]
+
+# Appended to the stderr of an agent run stopped by `case_timeout_s`; the
+# orchestrator keys on it to record the run as a timeout instead of an infra
+# failure.
+CASE_TIMEOUT_MARKER = "octobench: case timeout after"
+PROVIDER_TERMINATION_GRACE_S = 1.0
+
+
+def _kill_process_group(proc: subprocess.Popen) -> None:
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
 
 
 @dataclass
@@ -65,8 +81,8 @@ class Executor(ABC):
     # Per-case wall-clock budget for `run()` calls (the agent invocation), set by
     # the orchestrator from the case's `timeout_minutes`. Enforcing it INSIDE the
     # run (instead of an external `timeout` on the whole harness) means a timeout
-    # still writes an infra-marked record and the container still gets torn down —
-    # an external kill leaves neither.
+    # still writes a record with the agent's spend and the container still gets
+    # torn down — an external kill leaves neither.
     case_timeout_s: Optional[int] = None
 
     @abstractmethod
@@ -124,9 +140,56 @@ class Executor(ABC):
             return Path.home() / ".codex" / "sessions"
         return Path(codex_home).expanduser() / "sessions"
 
+    def opencode_state_host_path(self) -> Path:
+        return Path.home() / ".local" / "share" / "opencode"
+
+    def begin_provider_call(self) -> None:
+        if getattr(self, "_provider_call_active", False):
+            raise RuntimeError("provider call is already active")
+        self._provider_call_active = True
+        self._provider_call_interrupted = False
+        self._provider_process = None
+        self._provider_process_started = False
+        self._provider_kill_timer = None
+        self._provider_output_capture = None
+        self._previous_sigterm_handler = signal.getsignal(signal.SIGTERM)
+
+        def handle_sigterm(_signum, _frame) -> None:
+            self._provider_call_interrupted = True
+            process = self._provider_process
+            capture = self._provider_output_capture
+            if capture is not None:
+                capture.clear()
+            if process is None and not self._provider_process_started:
+                raise SystemExit(124)
+            if process is not None and process.poll() is None:
+                try:
+                    process.terminate()
+                except ProcessLookupError:
+                    pass
+                timer = threading.Timer(
+                    PROVIDER_TERMINATION_GRACE_S, _kill_process_group, args=(process,)
+                )
+                timer.daemon = True
+                self._provider_kill_timer = timer
+                timer.start()
+
+        signal.signal(signal.SIGTERM, handle_sigterm)
+
+    def end_provider_call(self) -> bool:
+        if not getattr(self, "_provider_call_active", False):
+            raise RuntimeError("provider call is not active")
+        signal.signal(signal.SIGTERM, self._previous_sigterm_handler)
+        timer = self._provider_kill_timer
+        if timer is not None:
+            timer.cancel()
+        interrupted = self._provider_call_interrupted
+        self._provider_call_active = False
+        self._provider_process = None
+        self._provider_output_capture = None
+        return interrupted
+
     def retain_codex_rollout(self, session_id: str, turn_number: int) -> None:
-        if not (self._case_dir / "sequence.yaml").is_file():
-            return
         sessions_dir = self.codex_sessions_host_path()
         matches = [
             path
@@ -137,13 +200,13 @@ class Executor(ABC):
             raise RuntimeError(
                 f"expected one Codex rollout for session {session_id}, found {len(matches)}"
             )
-        destination = (
-            self.workspace_host_path().parent
-            / "turns"
-            / f"turn_{turn_number}"
-            / "logs"
-            / "codex.rollout.jsonl"
-        )
+        run_dir = self.workspace_host_path().parent
+        if (self._case_dir / "sequence.yaml").is_file():
+            destination = (
+                run_dir / "turns" / f"turn_{turn_number}" / "logs" / "codex.rollout.jsonl"
+            )
+        else:
+            destination = run_dir / "logs" / "codex.rollout.jsonl"
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(matches[0], destination)
 
@@ -174,9 +237,104 @@ def _stream(proc: subprocess.Popen, name: str, verbosity: str, log_fn) -> Dict:
     return {"exit_code": code, "stdout": "".join(stdout_lines), "stderr": "".join(stderr_lines)}
 
 
-def _decode_output(data) -> str:
-    # TimeoutExpired output is bytes even in text mode.
-    return data if isinstance(data, str) else (data or b"").decode(errors="replace")
+def _run_captured(
+    executor: Executor,
+    argv: List[str],
+    cwd: Optional[str],
+    env: Optional[Dict[str, str]],
+    input_text: Optional[str],
+) -> ExecResult:
+    if getattr(executor, "_provider_call_active", False):
+        executor._provider_process_started = True
+    proc = subprocess.Popen(
+        argv,
+        cwd=cwd,
+        stdin=subprocess.PIPE if input_text is not None else None,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+        start_new_session=True,
+    )
+    capture_output = threading.Event()
+    capture_output.set()
+    if getattr(executor, "_provider_call_active", False):
+        executor._provider_process = proc
+        executor._provider_output_capture = capture_output
+        if executor._provider_call_interrupted:
+            capture_output.clear()
+            proc.terminate()
+            timer = threading.Timer(
+                PROVIDER_TERMINATION_GRACE_S, _kill_process_group, args=(proc,)
+            )
+            timer.daemon = True
+            executor._provider_kill_timer = timer
+            timer.start()
+    stdout_chunks: List[bytes] = []
+    stderr_chunks: List[bytes] = []
+
+    def pump(stream, target: List[bytes]) -> None:
+        while True:
+            chunk = os.read(stream.fileno(), 65_536)
+            if not chunk:
+                break
+            if capture_output.is_set():
+                target.append(chunk)
+        stream.close()
+
+    t_out = threading.Thread(target=pump, args=(proc.stdout, stdout_chunks), daemon=True)
+    t_err = threading.Thread(target=pump, args=(proc.stderr, stderr_chunks), daemon=True)
+    t_out.start()
+    t_err.start()
+    if proc.stdin is not None:
+        try:
+            proc.stdin.write(input_text or "")
+            proc.stdin.close()
+        except BrokenPipeError:
+            pass
+    timed_out = False
+    timeout_kill_timer: Optional[threading.Timer] = None
+    try:
+        try:
+            proc.wait(timeout=executor.case_timeout_s)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            capture_output.clear()
+            proc.terminate()
+            timeout_kill_timer = threading.Timer(
+                PROVIDER_TERMINATION_GRACE_S, _kill_process_group, args=(proc,)
+            )
+            timeout_kill_timer.daemon = True
+            timeout_kill_timer.start()
+            proc.wait()
+        t_out.join()
+        t_err.join()
+    finally:
+        if timeout_kill_timer is not None:
+            timeout_kill_timer.cancel()
+        if getattr(executor, "_provider_process", None) is proc:
+            executor._provider_process = None
+            executor._provider_output_capture = None
+
+    encoding = proc.stdout.encoding or "utf-8"
+    stdout = b"".join(stdout_chunks).decode(encoding, errors="replace")
+    encoding = proc.stderr.encoding or "utf-8"
+    stderr = b"".join(stderr_chunks).decode(encoding, errors="replace")
+
+    if timed_out:
+        return ExecResult(
+            stdout or "",
+            (stderr or "") + f"\n{CASE_TIMEOUT_MARKER} {executor.case_timeout_s}s",
+            124,
+        )
+    if getattr(executor, "_provider_call_interrupted", False):
+        return ExecResult(
+            stdout or "",
+            (stderr or "") + "\noctobench: interrupted by sequence cap",
+            124,
+        )
+    return ExecResult(stdout or "", stderr or "", proc.returncode)
+
 
 class HostExecutor(Executor):
     def __init__(self, workspace: Path, case_dir: Path, octomind_config: Path):
@@ -188,25 +346,7 @@ class HostExecutor(Executor):
         env = os.environ.copy()
         if env_overrides:
             env.update({k: str(v) for k, v in env_overrides.items()})
-        try:
-            proc = subprocess.run(
-                argv,
-                cwd=str(self._ws),
-                capture_output=True,
-                text=True,
-                input=input_text,
-                env=env,
-                timeout=self.case_timeout_s,
-            )
-        except subprocess.TimeoutExpired as e:
-            stdout = _decode_output(e.stdout)
-            stderr = _decode_output(e.stderr)
-            return ExecResult(
-                stdout,
-                stderr + f"\noctobench: case timeout after {self.case_timeout_s}s",
-                124,
-            )
-        return ExecResult(proc.stdout or "", proc.stderr or "", proc.returncode)
+        return _run_captured(self, argv, str(self._ws), env, input_text)
 
     def bash_script(self, name, verbosity, log_fn, extra_env=None) -> Dict:
         script_path = self._case_dir / name
@@ -393,7 +533,10 @@ class DockerExecutor(Executor):
             mounts += ["-v", f"{self._case_dir}:{self.CASE}:ro"]
         # Tool login credentials (NOT API keys), mounted read-WRITE: codex ->
         # ~/.codex/auth.json; claude -> ~/.claude/.credentials.json (Linux; on macOS
-        # claude uses the Keychain, so nothing to mount there).
+        # claude uses the Keychain, so nothing to mount there); octomind's `chatgpt:`
+        # provider -> ~/.config/octolib/chatgpt (the whole directory: octolib replaces
+        # auth.json atomically and serializes refreshes through a lock file beside it,
+        # neither of which works through a single-file mount).
         #
         # MUST be writable. These are OAuth logins: the agent refreshes the short-lived
         # access token mid-run, and the provider ROTATES the refresh token on use
@@ -408,6 +551,9 @@ class DockerExecutor(Executor):
         claude_creds = Path.home() / ".claude" / ".credentials.json"
         if claude_creds.exists():
             mounts += ["-v", f"{claude_creds}:/root/.claude/.credentials.json:rw"]
+        octolib_chatgpt = Path.home() / ".config" / "octolib" / "chatgpt"
+        if (octolib_chatgpt / "auth.json").exists():
+            mounts += ["-v", f"{octolib_chatgpt}:/root/.config/octolib/chatgpt:rw"]
 
         platform_args = ["--platform", self._platform] if self._platform else []
         # NET_ADMIN lets cli.main seal the container's egress for the agent phase
@@ -443,22 +589,7 @@ class DockerExecutor(Executor):
             for k, v in env_overrides.items():
                 exec_cmd += ["-e", f"{k}={v}"]
         exec_cmd += [self.name, *argv]
-        try:
-            proc = subprocess.run(
-                exec_cmd, capture_output=True, text=True, input=input_text,
-                timeout=self.case_timeout_s,
-            )
-        except subprocess.TimeoutExpired as e:
-            # The killed `docker exec` client does not stop the process inside
-            # the container; close() (docker rm -f) reaps it with the container.
-            stdout = _decode_output(e.stdout)
-            stderr = _decode_output(e.stderr)
-            return ExecResult(
-                stdout,
-                stderr + f"\noctobench: case timeout after {self.case_timeout_s}s",
-                124,
-            )
-        return ExecResult(proc.stdout or "", proc.stderr or "", proc.returncode)
+        return _run_captured(self, exec_cmd, None, None, input_text)
 
     def bash_script(self, name, verbosity, log_fn, extra_env=None) -> Dict:
         self._ensure()
@@ -495,6 +626,9 @@ class DockerExecutor(Executor):
 
     def codex_sessions_host_path(self) -> Path:
         return self._ws.parent / "state" / "codex"
+
+    def opencode_state_host_path(self) -> Path:
+        return self._ws.parent / "state" / "opencode"
 
     def octomind_config_path(self) -> str:
         return self.CFG

@@ -19,15 +19,41 @@ from typing import Any, Dict, List
 import yaml
 
 from judges.llm_judge import run_judge
+from providers.base import ProviderRunResult
 from providers.factory import available_providers, get_provider
-from runners.executor import DockerExecutor, Executor, HostExecutor
+from runners.cli_runner import run_cli
+from runners.executor import CASE_TIMEOUT_MARKER, DockerExecutor, Executor, HostExecutor
 from scoring.aggregate import (
     TOKEN_SEMANTICS,
-    compute_aux_cost,
     compute_cost,
     compute_efficiency_score,
     compute_final_score,
 )
+
+
+def compute_provider_result_cost(
+    provider_result: ProviderRunResult, pricing: Dict
+) -> float | None:
+    cost_usd = provider_result.provider_cost_usd
+    if cost_usd is not None:
+        return cost_usd
+    cost_usd = compute_cost(
+        provider_result.input_tokens,
+        provider_result.cached_input_tokens,
+        provider_result.output_tokens,
+        pricing,
+        provider_result.reasoning_tokens,
+    )
+    if cost_usd is None:
+        return None
+    if not (provider_result.aux_input_tokens or provider_result.aux_output_tokens):
+        return cost_usd
+    # Auxiliary calls run on their own models: their provider-reported USD is
+    # the cost; repricing their tokens at the benchmark model's rate inflated
+    # it ~10x. Tokens without a reported cost leave the record's cost UNKNOWN.
+    if provider_result.aux_cost_usd is None:
+        return None
+    return cost_usd + provider_result.aux_cost_usd
 
 
 def _load_gitignore_rules(workdir: Path) -> list[tuple[Path, str, bool, bool]]:
@@ -355,7 +381,9 @@ SEALED_HOSTS = f"{UPSTREAM_HOSTS} {SEARCH_HOSTS}"
 # not need egress here. Override for a narrowly scoped one-provider campaign.
 DEFAULT_ALLOW_HOSTS = (
     "api.deepseek.com token-plan.ap-southeast-1.maas.aliyuncs.com api.z.ai "
-    "api.anthropic.com chatgpt.com auth.openai.com api.openai.com openrouter.ai ollama.com"
+    "api.anthropic.com chatgpt.com auth.openai.com api.openai.com openrouter.ai ollama.com "
+    # octomind's [decision] model (TypeSafe Jev).
+    "api.typesafe.ai"
 )
 
 
@@ -563,8 +591,12 @@ def default_judge_cfg(repo_root: Path) -> Dict:
     # be able to load it: a config newer than the host binary's schema fails every
     # panel model and silently scores the run at 0 (seen with config v5 against a
     # v4 binary). OCTOMIND_BIN, which already overrides the agent's binary, applies
-    # here too so both sides stay on one build.
-    judge_bin = os.environ.get("OCTOMIND_BIN") or "octomind"
+    # here too so both sides stay on one build — unless OCTOBENCH_JUDGE_BIN pins the
+    # judge separately, for an agent build whose config schema is newer than the
+    # frozen bench config the judge loads (a newer binary would upgrade it in place).
+    judge_bin = (
+        os.environ.get("OCTOBENCH_JUDGE_BIN") or os.environ.get("OCTOMIND_BIN") or "octomind"
+    )
     return {
         "name": "octomind_judge",
         "runner": "cli",
@@ -578,6 +610,53 @@ def default_judge_cfg(repo_root: Path) -> Dict:
         },
         "response_format": "json",
     }
+
+
+def probe_provider_health(
+    repo_root: Path,
+    models_cfg: Dict,
+    benchmark_model: str,
+    io_dir: Path,
+) -> tuple[bool, str]:
+    octomind_model = resolve_provider_model(models_cfg, benchmark_model, "octomind")
+    probe_cfg = default_judge_cfg(repo_root)
+    # The `probe` role, not `judge`: the judge pins reasoning_effort="none", which
+    # some agent models reject outright (gpt-6 family), so a reachable provider
+    # would read as down. `probe` inherits the main [model] profile like the agent.
+    command = [probe_cfg["command"][0], "run", "probe", "-m", octomind_model, "--format=jsonl"]
+    probe_cfg.update(
+        {
+            "command": command,
+            "model": octomind_model,
+            "models": [octomind_model],
+            "io_dir": str(io_dir),
+            "repo_root": str(repo_root),
+            "timeout_s": 120,
+        }
+    )
+    try:
+        result = run_cli(
+            "Reply with the single word OK.",
+            str(repo_root),
+            probe_cfg,
+        )
+    except subprocess.TimeoutExpired as exc:
+        error = exc.stderr or exc.stdout or "provider health probe timed out after 120s"
+        if isinstance(error, bytes):
+            error = error.decode(errors="replace")
+        return False, " ".join(error.strip().split())[-500:]
+
+    answer = result.stdout.strip()
+    if result.exit_code == 0 and answer:
+        return True, ""
+    error = result.stderr.strip() or result.stdout.strip()
+    if not error:
+        error = (
+            "provider health probe returned an empty answer"
+            if result.exit_code == 0
+            else f"provider health probe exited with code {result.exit_code}"
+        )
+    return False, " ".join(error.split())[-500:]
 
 
 # Clean-bench invariants. Every campaign that silently violated one of these
@@ -808,6 +887,10 @@ def main() -> None:
             benchmark_model = target["benchmark_model"]
             provider_model = target["provider_model"]
             provider_impl = provider_impls[provider_name]
+            pricing = models_cfg.get("models", {}).get(benchmark_model, {}).get("pricing")
+            if not pricing:
+                raise RuntimeError(f"Missing pricing for benchmark model: {benchmark_model}")
+            reasoning_effort = models_cfg["models"][benchmark_model].get("reasoning_effort")
 
             setup_key = benchmark_model
             setup_base = f"{provider_name}__{safe_id(setup_key)}"
@@ -914,9 +997,11 @@ def main() -> None:
                 before = snapshot_files(executor.workspace_host_path())
 
                 # Per-case wall budget for the agent run: `timeout_minutes` from
-                # case.yaml, default 30. Enforced inside Executor.run so a timeout
-                # still yields an infra-marked record and container teardown.
-                timeout_minutes = int(case.get("timeout_minutes") or 30)
+                # case.yaml, default 45. Enforced inside Executor.run so a timeout
+                # still yields an infra-marked record and container teardown. The
+                # budget must only stop hangs: 30 cut off glm-5.3 via Alibaba
+                # mid-work on scrapy (151 steps, still testing) at 2026-10-04.
+                timeout_minutes = int(case.get("timeout_minutes") or 45)
                 executor.case_timeout_s = timeout_minutes * 60
 
                 session_name = (
@@ -930,6 +1015,7 @@ def main() -> None:
                         provider_model=provider_model,
                         session_name=session_name,
                         executor=executor,
+                        reasoning_effort=reasoning_effort,
                     )
                 finally:
                     # Validation is a different phase with different rules: it must
@@ -942,22 +1028,39 @@ def main() -> None:
                     ).strip()
                     if err_tail:
                         err_tail = err_tail[-1200:]
-                    # Contain the failure to this case: record it and move on so
-                    # one provider blip (network, auth refresh, OOM kill) cannot
-                    # abort every remaining case in the invocation. The record is
-                    # marked infra-failed for scripts/rerun_failed.py to retry.
+                    timed_out = CASE_TIMEOUT_MARKER in (provider_result.stderr or "")
+                    provider_unavailable = None
+                    if timed_out:
+                        healthy, detail = probe_provider_health(
+                            repo_root,
+                            models_cfg,
+                            benchmark_model,
+                            logs_dir,
+                        )
+                        if not healthy:
+                            timed_out = False
+                            provider_unavailable = detail
+                    if provider_unavailable is not None:
+                        status = "PROVIDER-UNAVAILABLE"
+                    elif timed_out:
+                        status = "CASE-TIMEOUT"
+                    else:
+                        status = "PROVIDER-FAILED"
                     log(
-                        f"[octobench] PROVIDER-FAILED case={case_id} "
-                        f"provider={provider_name} exit={provider_result.exit_code}"
-                        + (f" details={err_tail[:200]}" if err_tail else ""),
+                        f"[octobench] {status} "
+                        f"case={case_id} provider={provider_name} exit={provider_result.exit_code}"
+                        + (
+                            f" detail={provider_unavailable}"
+                            if provider_unavailable is not None
+                            else (f" details={err_tail[:200]}" if err_tail else "")
+                        ),
                         verbosity,
                         "normal",
                     )
                     write_text(logs_dir / "provider.stdout.log", provider_result.stdout or "")
                     write_text(logs_dir / "provider.stderr.log", provider_result.stderr or "")
                     write_text(logs_dir / "provider.raw.jsonl", provider_result.raw_output or "")
-                    records.append(
-                        {
+                    record = {
                             "case_id": case_id,
                             "setup": setup_name,
                             "provider": provider_name,
@@ -965,7 +1068,8 @@ def main() -> None:
                             "provider_model": provider_model,
                             "runner": "provider",
                             "executor": args.executor,
-                            "infra_failed": True,
+                            "infra_failed": not timed_out,
+                            "timed_out": timed_out,
                             "result": {
                                 "stdout": "",
                                 "stderr": f"provider failed (exit={provider_result.exit_code})"
@@ -987,7 +1091,9 @@ def main() -> None:
                                 if provider_result.total_tokens is not None
                                 else None,
                             },
-                            "cost_usd": provider_result.provider_cost_usd,
+                            "cost_usd": compute_provider_result_cost(
+                                provider_result, pricing
+                            ),
                             "scripts": {
                                 "setup": setup_log,
                                 "quality": {
@@ -1009,13 +1115,23 @@ def main() -> None:
                             "workdir": str(workdir_abs),
                             "judge": {
                                 "score": 0,
-                                "reasoning": "provider infra failure",
+                                "reasoning": (
+                                    "provider unavailable"
+                                    if provider_unavailable is not None
+                                    else (
+                                        "case timeout"
+                                        if timed_out
+                                        else "provider infra failure"
+                                    )
+                                ),
                                 "issues": [],
                                 "confidence": 0.0,
                             },
                             "scoring": {},
                         }
-                    )
+                    if provider_unavailable is not None:
+                        record["provider_unavailable"] = provider_unavailable
+                    records.append(record)
                     continue
 
                 after = snapshot_files(executor.workspace_host_path())
@@ -1062,29 +1178,10 @@ def main() -> None:
                 judge_out = run_judge(judge_payload, judge_meta, str(workdir_abs))
                 write_text(logs_dir / "judge.raw.log", str(judge_out.get("_judge_raw", "")))
 
-                pricing = models_cfg.get("models", {}).get(benchmark_model, {}).get("pricing")
-                if not pricing:
-                    raise RuntimeError(f"Missing pricing for benchmark model: {benchmark_model}")
-
                 # Provider-reported cost wins when present (claude's total_cost_usd
                 # prices 1h cache writes correctly); token-based compute is the
                 # fallback for providers that don't self-report (octomind/codex).
-                eval_cost = provider_result.provider_cost_usd
-                if eval_cost is None:
-                    eval_cost = compute_cost(
-                        provider_result.input_tokens,
-                        provider_result.cached_input_tokens,
-                        provider_result.output_tokens,
-                        pricing,
-                        provider_result.reasoning_tokens,
-                    )
-                    if eval_cost is not None:
-                        # Compression + supervisor calls are part of the bill.
-                        eval_cost += compute_aux_cost(
-                            provider_result.aux_input_tokens,
-                            provider_result.aux_output_tokens,
-                            pricing,
-                        )
+                eval_cost = compute_provider_result_cost(provider_result, pricing)
 
                 record = {
                     "case_id": case_id,

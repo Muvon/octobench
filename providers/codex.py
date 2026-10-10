@@ -5,7 +5,12 @@ import os
 import time
 from typing import TYPE_CHECKING, Any, Optional
 
-from providers.base import Provider, ProviderRunResult, shared_system_prompt
+from providers.base import (
+    Provider,
+    ProviderRunResult,
+    append_process_timing,
+    shared_system_prompt,
+)
 
 if TYPE_CHECKING:
     from runners.executor import Executor
@@ -29,6 +34,7 @@ class CodexProvider(Provider):
         session_name: str,
         executor: "Executor",
         resume_session_id: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> ProviderRunResult:
         # Paths must be valid inside the executor's environment (host cwd or the
         # container's /workspace); the result file is read back via the host mount.
@@ -89,11 +95,15 @@ class CodexProvider(Provider):
         system_prompt = shared_system_prompt()
         if system_prompt:
             overrides.extend(["-c", f"instructions={json.dumps(system_prompt)}"])
+        if reasoning_effort:
+            overrides.extend(["-c", f"model_reasoning_effort={json.dumps(reasoning_effort)}"])
         cmd[opts_at:opts_at] = overrides
 
         self._turn_number += 1
         start = time.time()
+        process_started_ms = time.time_ns() // 1_000_000
         proc = executor.run(cmd, input_text=prompt)
+        process_ended_ms = time.time_ns() // 1_000_000
         elapsed_ms = int((time.time() - start) * 1000)
 
         stdout = ""
@@ -247,5 +257,7 @@ class CodexProvider(Provider):
                 "tool_intents": tool_intents,
                 "tool_results": tool_results,
             },
-            raw_output=proc.stdout or "",
+            raw_output=append_process_timing(
+                proc.stdout or "", process_started_ms, process_ended_ms
+            ),
         )

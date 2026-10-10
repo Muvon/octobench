@@ -1,19 +1,19 @@
-"""Generate the GOLD v2 solve-rate and efficiency report from stored results.
+"""Generate the GOLD solve-rate and efficiency report from stored results.
 
 Usage:
   .venv/bin/python scripts/gold_scorecard.py [--suite=gold] [--markers=GOLD] \
-      'claude=results-gold2-claude-r*/*/results.json' \
-      'codex=results-gold2-codex-r*/*/results.json'
+      'claude=results-gold-claude-r*/*/results.json' \
+      'codex=results-gold-codex-r*/*/results.json'
 
 Each column keeps the existing ``label=<glob> [<glob>...]`` shape. Put every
 one-shot and long-run result for a round under one ``--out`` directory, named
 with an ``-rN`` or ``-roundN`` suffix, for example
-``results-gold2-claude-r1``, ``-r2``, and ``-r3``. The top result directory is
+``results-gold-claude-r1``, ``-r2``, and ``-r3``. The top result directory is
 the round boundary. Legacy directories without a round suffix are combined as
-round 1, which keeps the published GOLD v1 result layout readable.
+round 1, which keeps the earlier published GOLD result layout readable.
 
 The report prints one Markdown table. ``--markers=GOLD`` also writes that table
-between the GOLD-V2 markers in BENCHMARK.md, creating the block immediately
+between the GOLD markers in BENCHMARK.md, creating the block immediately
 after the GOLD section introduction when it is absent.
 """
 from __future__ import annotations
@@ -31,6 +31,12 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
 from scoring.aggregate import normalize_token_counts  # noqa: E402
+from scoring.efficiency import (  # noqa: E402
+    EfficiencyMetrics,
+    extract_efficiency,
+    geometric_mean,
+    relative_indexes,
+)
 
 
 @dataclass(frozen=True)
@@ -52,6 +58,7 @@ class Item:
     output: int
     reasoning: int
     elapsed_ms: int
+    efficiency: Optional[EfficiencyMetrics]
 
 
 @dataclass(frozen=True)
@@ -164,15 +171,18 @@ def _tokens(block: object) -> Tuple[int, int, int, int]:
     return normalize_token_counts(block)
 
 
-def _oneshot_item(record: dict, suite: Optional[Suite]) -> Optional[Item]:
+def _oneshot_item(record: dict, suite: Optional[Suite], results_path: Path) -> Optional[Item]:
     case_id = str(record["case_id"])
-    if suite and not any(case_id.endswith(suffix) for suffix in suite.oneshot_suffixes):
+    # Suffixes start with "_"; unprefixed ids ("js_gemini_...") equal the suffix minus it.
+    if suite and not any(f"_{case_id}".endswith(suffix) for suffix in suite.oneshot_suffixes):
         return None
     scoring = record.get("scoring") or {}
     validate = (record.get("scripts") or {}).get("validate") or {}
     passed = not scoring.get("validation_failed", validate.get("exit_code", 1) != 0)
     fresh, cache, output, reasoning = _tokens(record.get("tokens"))
     cost = record.get("cost_usd")
+    elapsed_ms = _elapsed_ms((record.get("result") or {}).get("elapsed_ms"), case_id)
+    record_dir = results_path.parent / case_id / str(record["setup"])
     return Item(
         key=f"oneshot:{case_id}",
         kind="oneshot",
@@ -184,11 +194,25 @@ def _oneshot_item(record: dict, suite: Optional[Suite]) -> Optional[Item]:
         cache_read=cache,
         output=output,
         reasoning=reasoning,
-        elapsed_ms=_elapsed_ms((record.get("result") or {}).get("elapsed_ms"), case_id),
+        elapsed_ms=elapsed_ms,
+        efficiency=extract_efficiency(
+            str(record["provider"]),
+            record_dir,
+            elapsed_ms,
+            status=(
+                "killed_by_case_cap" if record.get("timed_out") is True else None
+            ),
+        ),
     )
 
 
-def _longrun_items(record: dict, suite: Optional[Suite]) -> Iterable[Item]:
+def _safe_id(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", value)
+
+
+def _longrun_items(
+    record: dict, suite: Optional[Suite], results_path: Path
+) -> Iterable[Item]:
     sequence_id = str(record["sequence_id"])
     limit = None
     if suite:
@@ -208,21 +232,49 @@ def _longrun_items(record: dict, suite: Optional[Suite]) -> Iterable[Item]:
             continue
         fresh, cache, output, reasoning = _tokens(turn.get("tokens"))
         cost = turn.get("cost_usd")
+        provider_block = turn.get("provider") or {}
+        elapsed_ms = _elapsed_ms(
+            provider_block.get("elapsed_ms"),
+            f"{sequence_id} turn {turn_no}",
+        )
+        run_name = (
+            f"{record['provider']}__{_safe_id(str(record['benchmark_model']))}"
+        )
+        record_dir = (
+            results_path.parent
+            / sequence_id
+            / run_name
+            / "turns"
+            / f"turn_{turn_no}"
+        )
+        status = turn.get("status")
+        efficiency = None
+        if status != "not_run":
+            efficiency = extract_efficiency(
+                str(record["provider"]),
+                record_dir,
+                elapsed_ms,
+                provider_block.get("session_id"),
+                1 if turn.get("session_mode") == "fresh" else None,
+                str(status) if status is not None else None,
+            )
         yield Item(
             key=f"longrun:{sequence_id}:{turn_no}",
             kind="longrun",
             sequence_id=sequence_id,
-            passed=bool((turn.get("validation") or {}).get("passed")),
+            passed=(
+                False
+                if status == "not_run"
+                else bool((turn.get("validation") or {}).get("passed"))
+            ),
             judge=(turn.get("judge") or {}).get("score"),
             cost=float(cost) if cost is not None else None,
             fresh_input=fresh,
             cache_read=cache,
             output=output,
             reasoning=reasoning,
-            elapsed_ms=_elapsed_ms(
-                (turn.get("provider") or {}).get("elapsed_ms"),
-                f"{sequence_id} turn {turn_no}",
-            ),
+            elapsed_ms=elapsed_ms,
+            efficiency=efficiency,
         )
 
 
@@ -233,11 +285,11 @@ def load_column(pattern: str, suite: Optional[Suite]) -> Dict[str, Dict[str, Ite
         items = rounds.setdefault(_round_id(path), {})
         for record in _read_results(path):
             if "case_id" in record:
-                item = _oneshot_item(record, suite)
+                item = _oneshot_item(record, suite, path)
                 if item is not None:
                     items[item.key] = item
             elif "sequence_id" in record:
-                for item in _longrun_items(record, suite):
+                for item in _longrun_items(record, suite, path):
                     items[item.key] = item
     return rounds
 
@@ -311,6 +363,170 @@ def _tokens_count(value: float) -> str:
 
 def _hours(value: float) -> str:
     return f"{value / 3_600_000:.1f}h"
+
+
+def _precise_hours(value: float) -> str:
+    return f"{value / 3_600_000:.2f}h"
+
+
+def _seconds(value: float) -> str:
+    return f"{value / 1000:.1f}s"
+
+
+def _dollars(value: float) -> str:
+    return f"${value:.2f}"
+
+
+def _dollars_per_hour(value: float) -> str:
+    return f"${value:.2f}/h"
+
+
+def _index(value: float) -> str:
+    return f"{value:.2f}"
+
+
+def _optional_summary(values: Iterable[Optional[float]], formatter) -> str:
+    materialized = list(values)
+    if not materialized:
+        return "-"
+    known = [value for value in materialized if value is not None]
+    if not known:
+        return "**UNKNOWN**"
+    summary = _mean_range(known, formatter)
+    unknown = len(materialized) - len(known)
+    if unknown:
+        noun = "round" if unknown == 1 else "rounds"
+        summary += f" · **UNKNOWN: {unknown} {noun}**"
+    return summary
+
+
+def _known_cost(items: List[Item]) -> Optional[float]:
+    if any(item.cost is None for item in items):
+        return None
+    return sum(item.cost for item in items if item.cost is not None)
+
+
+def _cost_per_solve(items: List[Item]) -> Optional[float]:
+    solved = sum(item.passed for item in items)
+    cost = _known_cost(items)
+    return cost / solved if cost is not None and solved else None
+
+
+def _wall_time_per_solve(items: List[Item]) -> Optional[float]:
+    solved = sum(item.passed for item in items)
+    return sum(item.elapsed_ms for item in items) / solved if solved else None
+
+
+def _burn_rate(items: List[Item]) -> Optional[float]:
+    cost = _known_cost(items)
+    wall_ms = sum(item.elapsed_ms for item in items)
+    return cost * 3_600_000 / wall_ms if cost is not None and wall_ms else None
+
+
+def _active_share(items: List[Item]) -> Optional[float]:
+    measured = [item.efficiency for item in items if item.efficiency is not None]
+    if not measured or any(efficiency.busy_ms is None for efficiency in measured):
+        return None
+    wall_ms = sum(efficiency.wall_ms for efficiency in measured)
+    if not wall_ms:
+        return None
+    return sum(efficiency.busy_ms or 0 for efficiency in measured) / wall_ms
+
+
+def _idle_ms(items: List[Item]) -> Optional[float]:
+    measured = [item.efficiency for item in items if item.efficiency is not None]
+    if not measured or any(efficiency.idle_ms is None for efficiency in measured):
+        return None
+    return float(sum(efficiency.idle_ms or 0 for efficiency in measured))
+
+
+def _own_job_ms(items: List[Item]) -> Optional[float]:
+    measured = [item.efficiency for item in items if item.efficiency is not None]
+    if not measured or any(efficiency.own_job_ms is None for efficiency in measured):
+        return None
+    return float(sum(efficiency.own_job_ms or 0 for efficiency in measured))
+
+
+def _stuck_wait_ms(items: List[Item]) -> Optional[float]:
+    measured = [item.efficiency for item in items if item.efficiency is not None]
+    if not measured or any(efficiency.stuck_wait_ms is None for efficiency in measured):
+        return None
+    return float(sum(efficiency.stuck_wait_ms or 0 for efficiency in measured))
+
+
+_SILENT_GAP_THRESHOLD_MS = 5 * 60 * 1000
+
+
+def _silent_gap_stats(items: List[Item]) -> Optional[Tuple[int, int]]:
+    measured = [item.efficiency for item in items if item.efficiency is not None]
+    if not measured or any(
+        efficiency.longest_silent_gap_ms is None for efficiency in measured
+    ):
+        return None
+    gaps = [
+        efficiency.longest_silent_gap_ms
+        for efficiency in measured
+        if efficiency.longest_silent_gap_ms is not None
+    ]
+    return max(gaps), sum(gap >= _SILENT_GAP_THRESHOLD_MS for gap in gaps)
+
+
+def _silent_gap_summary(rounds: Iterable[List[Item]]) -> str:
+    materialized = list(rounds)
+    if not materialized:
+        return "-"
+    stats = [_silent_gap_stats(items) for items in materialized]
+    known = [stat for stat in stats if stat is not None]
+    if not known:
+        return "**UNKNOWN**"
+    gap_summary = _mean_range((stat[0] for stat in known), _seconds)
+    count_summary = _mean_range((stat[1] for stat in known), lambda value: f"{value:.1f}")
+    summary = f"{gap_summary} · ≥5m: {count_summary} records"
+    unknown = len(stats) - len(known)
+    if unknown:
+        noun = "round" if unknown == 1 else "rounds"
+        summary += f" · **UNKNOWN: {unknown} {noun}**"
+    return summary
+
+
+def _headline_index(
+    cost_index: Optional[float], time_index: Optional[float]
+) -> Optional[float]:
+    if cost_index is None or time_index is None:
+        return None
+    return geometric_mean([cost_index, time_index])
+
+
+def _waste_share(items: List[Item]) -> Optional[float]:
+    measured = [item.efficiency for item in items if item.efficiency is not None]
+    if not measured:
+        return None
+    if any(
+        efficiency.tool_calls is None
+        or efficiency.repeat_calls is None
+        or efficiency.filler_calls is None
+        for efficiency in measured
+    ):
+        return None
+    calls = sum(efficiency.tool_calls or 0 for efficiency in measured)
+    if not calls:
+        return None
+    waste = sum(
+        (efficiency.repeat_calls or 0) + (efficiency.filler_calls or 0)
+        for efficiency in measured
+    )
+    return waste / calls
+
+
+def _mean_tail_ms(items: List[Item]) -> Optional[float]:
+    measured = [item.efficiency for item in items if item.efficiency is not None]
+    if not measured or any(efficiency.tail_ms is None for efficiency in measured):
+        return None
+    return statistics.mean(
+        efficiency.tail_ms
+        for efficiency in measured
+        if efficiency.tail_ms is not None
+    )
 
 
 def _cost_summary(totals: Iterable[Totals]) -> str:
@@ -392,8 +608,12 @@ def _metric_rows(
     matched = _matched_keys(columns)
     rows: List[Tuple[str, List[str]]] = []
     all_stats: Dict[str, List[RoundStats]] = {}
+    all_items: Dict[str, List[List[Item]]] = {}
     matched_totals: Dict[str, List[Totals]] = {}
     for label, rounds in columns:
+        all_items[label] = [
+            list(items.values()) for _round, items in sorted(rounds.items())
+        ]
         all_stats[label] = [
             _round_stats(items.values()) for _round, items in sorted(rounds.items())
         ]
@@ -402,6 +622,39 @@ def _metric_rows(
             for round_id, keys in sorted(matched.items())
             if round_id in rounds
         ]
+
+    relative_cost: Dict[str, List[Optional[float]]] = {
+        label: [] for label, _rounds in columns
+    }
+    relative_time: Dict[str, List[Optional[float]]] = {
+        label: [] for label, _rounds in columns
+    }
+    relative_cost_excluded: Dict[str, List[int]] = {
+        label: [] for label, _rounds in columns
+    }
+    relative_time_excluded: Dict[str, List[int]] = {
+        label: [] for label, _rounds in columns
+    }
+    for round_id, keys in sorted(matched.items()):
+        cost_indexes, cost_excluded = relative_indexes(
+            {
+                label: {key: rounds[round_id][key].cost for key in keys}
+                for label, rounds in columns
+            }
+        )
+        time_indexes, time_excluded = relative_indexes(
+            {
+                label: {
+                    key: float(rounds[round_id][key].elapsed_ms) for key in keys
+                }
+                for label, rounds in columns
+            }
+        )
+        for label, _rounds in columns:
+            relative_cost[label].append(cost_indexes[label])
+            relative_time[label].append(time_indexes[label])
+            relative_cost_excluded[label].append(cost_excluded)
+            relative_time_excluded[label].append(time_excluded)
 
     rows.append(("rounds", [str(len(rounds)) if rounds else "-" for _label, rounds in columns]))
     rows.append((
@@ -423,6 +676,49 @@ def _metric_rows(
                 (stat.judge_mean for stat in all_stats[label] if stat.judge_mean is not None),
                 _number,
             )
+            for label, _rounds in columns
+        ],
+    ))
+    rows.append((
+        "efficiency-only headline — matched work cost/time index",
+        [
+            _optional_summary(
+                (
+                    _headline_index(cost_index, time_index)
+                    for cost_index, time_index in zip(
+                        relative_cost[label], relative_time[label]
+                    )
+                ),
+                _index,
+            )
+            for label, _rounds in columns
+        ],
+    ))
+    all_attempt_metrics = [
+        ("cost per solve", _cost_per_solve, _dollars),
+        ("wall time per solve", _wall_time_per_solve, _precise_hours),
+        ("burn rate", _burn_rate, _dollars_per_hour),
+        ("active share", _active_share, _percent),
+        ("idle time", _idle_ms, _hours),
+        ("own-job wait", _own_job_ms, _precise_hours),
+        ("stuck wait", _stuck_wait_ms, _precise_hours),
+        ("waste share", _waste_share, _percent),
+        ("mean tail after final answer", _mean_tail_ms, _seconds),
+    ]
+    for name, calculate, formatter in all_attempt_metrics:
+        rows.append((
+            f"efficiency — all attempts — {name}",
+            [
+                _optional_summary(
+                    (calculate(items) for items in all_items[label]), formatter
+                )
+                for label, _rounds in columns
+            ],
+        ))
+    rows.append((
+        "efficiency — all attempts — longest silent gap",
+        [
+            _silent_gap_summary(all_items[label])
             for label, _rounds in columns
         ],
     ))
@@ -462,6 +758,35 @@ def _metric_rows(
                 else:
                     cells.append(summarize(getattr(total, attribute) for total in totals))
             rows.append((f"efficiency — {scope} — {name}", cells))
+
+    rows.append((
+        "efficiency — matched work — relative cost index",
+        [
+            _optional_summary(relative_cost[label], _index)
+            for label, _rounds in columns
+        ],
+    ))
+    rows.append((
+        "efficiency — matched work — zero-cost items excluded from relative index",
+        [
+            _mean_range(relative_cost_excluded[label], lambda value: f"{value:.0f}")
+            for label, _rounds in columns
+        ],
+    ))
+    rows.append((
+        "efficiency — matched work — relative time index",
+        [
+            _optional_summary(relative_time[label], _index)
+            for label, _rounds in columns
+        ],
+    ))
+    rows.append((
+        "efficiency — matched work — zero-time items excluded from relative index",
+        [
+            _mean_range(relative_time_excluded[label], lambda value: f"{value:.0f}")
+            for label, _rounds in columns
+        ],
+    ))
     return rows
 
 
@@ -479,14 +804,25 @@ def render(columns: List[Tuple[str, Dict[str, Dict[str, Item]]]]) -> str:
         "_Values are per-round means (min–max). Long-run solve rate gives every sequence "
         "equal weight; turn counts are shown separately. Matched work contains only one-shot "
         "cases and long-run turns solved by every reported column in the same round. Agent "
-        "time excludes setup, validation, and judging. Judge mean is diagnostic only; GOLD "
-        "does not combine solve and efficiency into a ranking score._",
+        "time excludes setup, validation, and judging. Cost, wall time per solve, and burn rate "
+        "include all attempts. Active share is the union of model, tool, and completed own-job "
+        "intervals divided by wall time; idle time is the remainder. Own-job wait counts only "
+        "delivered jobs; stuck-job wait reports launched jobs without a completion. Longest "
+        "silent gap is the largest contiguous idle interval and includes the count of records "
+        "at or above five minutes. Waste counts repeat plus filler calls over all tool calls. "
+        "Tail is provider exit minus the final assistant message. Relative indexes divide each "
+        "matched item by its across-column median, then take the per-column geometric mean "
+        "(1.00 is typical); zero-valued items are excluded because log(0) is undefined, with "
+        "exclusion counts reported in the table. The efficiency-only headline is the geometric "
+        "mean of matched-work relative cost and wall-time indexes; lower is better, and wall "
+        "time already carries all waiting. Missing client evidence is UNKNOWN, "
+        "never zero. Judge mean is diagnostic only; GOLD never merges solve and efficiency._",
     ])
     return "\n".join(lines)
 
 
 def _write_marker_block(marker: str, report: str) -> None:
-    marker_name = f"{marker}-V2"
+    marker_name = marker
     begin = (
         f"<!-- {marker_name}:BEGIN — regenerated by scripts/gold_scorecard.py "
         f"--markers={marker}; do not hand-edit -->"

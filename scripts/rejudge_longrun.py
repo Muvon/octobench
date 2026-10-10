@@ -31,7 +31,9 @@ from judges.llm_judge import (  # noqa: E402
 from scoring.aggregate import compute_efficiency_score, compute_final_score  # noqa: E402
 
 
-def _judge_exact_prompt(prompt: str, judge_cfg: Dict, workdir: str) -> Dict:
+def _judge_exact_prompt(
+    prompt: str, judge_cfg: Dict, workdir: str, validation_passed: bool
+) -> Dict:
     models = judge_cfg.get("models") or [judge_cfg.get("model")]
 
     def one(model: str) -> Dict:
@@ -47,12 +49,15 @@ def _judge_exact_prompt(prompt: str, judge_cfg: Dict, workdir: str) -> Dict:
         with ThreadPoolExecutor(max_workers=len(pending)) as pool:
             for verdict in pool.map(one, pending):
                 by_model[verdict["_judge_model"]] = verdict
-        pending = [model for model in models if not _is_valid_verdict(by_model[model])]
+        pending = [
+            model for model in models
+            if not _is_valid_verdict(by_model[model], validation_passed)
+        ]
         if not pending:
             break
 
     verdicts = [by_model[model] for model in models]
-    valid = [verdict for verdict in verdicts if _is_valid_verdict(verdict)]
+    valid = [verdict for verdict in verdicts if _is_valid_verdict(verdict, validation_passed)]
     if pending:
         data: Dict = {
             "score": 0,
@@ -107,11 +112,15 @@ def _judge_exact_prompt(prompt: str, judge_cfg: Dict, workdir: str) -> Dict:
 
 def _needs_rejudge(turn: Dict) -> bool:
     judge = turn.get("judge") or {}
+    passed = bool(turn["validation"]["passed"])
     return bool(
         judge.get("_judge_incomplete")
         or judge.get("_judge_parse_error")
         or judge.get("score") is None
         or judge.get("confidence") in (0, 0.0)
+        or any(not _is_valid_verdict(
+            {**member, "_judge_parse_error": member.get("parse_error")}, passed)
+            for member in judge.get("judges") or [])
     )
 
 
@@ -149,7 +158,9 @@ def rejudge_file(
             print(
                 f"[rejudge-longrun] {sequence['sequence_id']} turn={turn['turn']} old={old_score}"
             )
-            judge_out = _judge_exact_prompt(prompts[0].read_text(), meta, str(Path.cwd()))
+            judge_out = _judge_exact_prompt(
+                prompts[0].read_text(), meta, str(Path.cwd()), bool(turn["validation"]["passed"])
+            )
             if judge_out.get("_judge_incomplete"):
                 raise RuntimeError(
                     f"panel still incomplete for {sequence['sequence_id']} turn {turn['turn']}"

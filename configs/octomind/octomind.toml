@@ -7,7 +7,7 @@
 #   • Validate config: octomind config --validate
 
 # Configuration version (DO NOT MODIFY - used for automatic upgrades)
-version = 20
+version = 22
 # Requires an octomind built with `reasoning_effort = "none"` support (octolib
 # 0.40 / octomind > 0.54.1): the fold model and the judge role below use it, and
 # older binaries reject the value at config load ("unknown variant `none`").
@@ -325,17 +325,18 @@ top_k = 10
 #   codesearch-structural → octocode:structural_search, view_signatures
 # `runtime` is deliberately ABSENT: it grants MCP server management and
 # capability activation, i.e. the agent could switch websearch back on.
-# `orchestration` is referenced for ONE tool. `monitor` runs a long command and
-# streams its output into the session inbox, which is how a build or test suite
-# reports completion without being asked. Without it the only way to run
-# something slow is `shell background:true`, which discards output and gives no
-# completion signal — so the agent sleeps and tails a log, and each check is a
-# full model round-trip that re-sends the whole conversation. Measured on the
-# glm-5.3 campaign that pattern was 20-25% of all tool calls (62 of 250 on
-# cpp/ada, 102 of 504 on cpp/cli11) while opencode, whose shell simply blocks,
-# spent zero. The server's other tools stay out: `tap` delegates to registry
-# specialists and would reach outside the seal, and `schedule` injects deferred
-# messages. Neither is listed, so neither is reachable.
+# `orchestration` is referenced for ONE tool. `monitor` runs a long-lived command
+# that watches an external source and streams new events into the session inbox.
+# Builds and tests do not need it: octofs `shell` moves a command still running
+# after its `wait` (default 10s) to a background job, and because octomind
+# declares that it delivers job exits (io.muvon/watch-resource-links), octofs
+# (after 0.16.1) tells the agent the result comes back as a message and that,
+# with nothing else to do, ending its turn is a free wait: a non-interactive run
+# stays alive, with no model calls, until pending jobs report. Without that
+# wording the agent probed running jobs with variants: 50 test runs against
+# opencode's 11 on guzzle (2026-10-07). The server's other tools stay out: `tap`
+# delegates to registry specialists and would reach outside the seal, and
+# `schedule` injects deferred messages. Neither is listed, so neither is reachable.
 [roles.mcp]
 server_refs = ["core", "octofs", "octocode", "orchestration"]
 allowed_tools = [
@@ -390,6 +391,21 @@ max_tokens = 8192
 # whole 8192 budget reasoning and returned {"score":0,"reasoning":""} (empty
 # reply, finish_reason=length) on every second verdict with deepseek-v4-flash.
 reasoning_effort = "none"
+
+[roles.mcp]
+server_refs = []
+allowed_tools = []
+
+# octobench: provider health probe (cli/main.py probe_provider_health). No tools
+# and no model overrides, so the request carries the main [model] profile the
+# agent runs with; the judge role's reasoning_effort="none" is rejected by some
+# agent models and would misreport a reachable provider as down.
+[[roles]]
+name = "probe"
+system = """
+Answer in one word.
+"""
+welcome = ""
 
 [roles.mcp]
 server_refs = []
@@ -536,7 +552,7 @@ verify_hash = true
 # makes octomind log "compression failed, continuing session" and skip
 # compaction, so context overgrows past the model's window and the provider
 # rejects with 400 "prompt too long".
-name = "openrouter:deepseek/deepseek-v4-flash-0731"
+name = "openrouter:deepseek/deepseek-v4.1-flash"
 # A fold is a summary: no reasoning. Left on the model's default, deepseek-v4
 # reasoned its whole 16k budget away and returned nothing (finish_reason=length)
 # on every fold over ~70k tokens — 30% of turns in the Sept-2026 campaigns.
@@ -556,6 +572,26 @@ retry_timeout = 10
 # Storage: learning/{project}/{role}/ — project-scoped, role-filtered.
 # ═══════════════════════════════════════════════════════════════════════
 
+# Calibrated decisions: one attempt, 5 s timeout, no retries.
+# Missing or empty model disables routing. Supervisor decisions fail closed
+# on unavailable answers; writing remains on the supervisor model.
+# Keys: CLOUDFLARE_API_KEY + CLOUDFLARE_ACCOUNT_ID, TYPESAFE_API_KEY,
+# or OCTOHUB_API_KEY (+ OCTOHUB_API_URL), according to the provider.
+[decision]
+# Direct TypeSafe API: same Jev model and price as the Cloudflare gateway route,
+# measured 0.29-0.33s vs 0.56-1.45s per decision (2026-10-14).
+model = "typesafe:jev-latest"
+# Filter recalled scoped lessons for relevance. Unavailable keeps candidates.
+recall = true
+# Choose an inactive skill when rules abstain. Unavailable activates none.
+skills = true
+# Confirm or promote capability selection. Unavailable keeps the cosine result.
+capabilities = true
+# Demote unneeded summarize packets before a fold. Unavailable keeps lanes.
+compression = true
+# Route supervisor decisions and evolution grading through this model.
+supervisor = true
+
 [supervisor]
 # Master switch for the whole control plane
 enabled = true
@@ -569,11 +605,20 @@ enabled = true
 # openrouter:qwen/qwen3.8-flash returning the full gate protocol 2/2 and
 # flagging missed conditions, while minimax dropped mandated rules and the
 # ollama-served deepseek emitted ZERO protocol lines (every verdict parsed
-# Indeterminate; ollama cloud also ignores the schema parameter). The old
-# deepseek-v4-flash seat only served plan/condense narrowing, which qwen
-# handles. Transport must stay openrouter: it honours schema enforcement.
+# Indeterminate; ollama cloud also ignores the schema parameter).
+# 2026-10-14 replay of 43 logged gate inputs + a 31K-token condense round:
+# gemini-3.1-flash-lite returned 43/43 complete verdicts at p50 2.5s / max 3.3s
+# with no false alarms and condensed in ~1.5s; deepseek-v4.1-flash at low
+# reasoning left 19/43 verdicts incomplete and took up to 104s. `:nitro` routes
+# by throughput: OpenRouter's default price-first routing picked 4-16 tok/s
+# providers and condense calls outlived their 60s deadline.
+# Transport must stay openrouter: it honours schema enforcement.
 [supervisor.model]
-name = "openrouter:deepseek/deepseek-v4-flash-0731"
+name = "openrouter:google/gemini-3.1-flash-lite:nitro"
+# Pinned: an unset effort inherits [model], so a high-effort agent ran every
+# verify-gate verdict at high reasoning too — minutes per `done` after the
+# final answer, before the run could exit. Measured above without reasoning.
+reasoning_effort = "none"
 # The gate's checklist + evidence protocol needs room (was gate max_tokens
 # 24000 pre-v12). qwen flash is cheap; the OpenRouter max_tokens-reservation
 # issue only bit the high-volume judge panel.
@@ -629,13 +674,16 @@ enabled = true
 # Compile grounded memories into scoped skills and guardrail candidates.
 # Keep off: cross-case skill synthesis would carry state between bench cases.
 enabled = false
-# Promotion is counterfactual: turns where a shadow artifact's trigger matched
-# (artifact not applied) are its control arm; live trial uses are the
-# treatment arm; both are scored by the verify-gate verdict and API calls.
+# Promotion is counterfactual: a trial randomizes each session into control
+# (trigger observed, artifact not applied) or treatment (artifact applied), so
+# both arms run concurrently on the same population; both are scored by the
+# execution-verified verify-gate verdict and API calls. A decision needs a
+# posterior difference beyond 2.5 standard deviations; with these defaults a
+# behavior with no real effect is promoted in under 5% of trials.
 # Verdicts required in each arm before the arms are compared.
-min_samples = 3
-# Smoothed pass-rate gap treated as noise. Promotion must beat the control by
-# more than this; a trial that falls below the control by more retires.
+min_samples = 10
+# Smallest pass-rate gain worth promoting; also the non-inferiority bound a
+# cheaper behavior must hold.
 noise_margin = 0.15
 # Relative API-call increase tolerated for a negligible gain; also the saving
 # that promotes a behavior whose pass rate stays within the noise margin.
@@ -643,7 +691,7 @@ cost_allowance = 0.10
 # Extra relative API-call increase allowed per unit of pass-rate gain.
 cost_per_gain = 2.0
 # Live uses after which an undecided trial retires as inconclusive.
-max_trial_uses = 8
+max_trial_uses = 40
 
 # Verify-gate: on self-reported `done`, run a checklist before accepting.
 # The free deterministic pre-gate and goal recitation are always on; detector
@@ -666,7 +714,7 @@ enabled = true
 enabled = true
 # Learn a bounded per-session trigger from realized condenser savings.
 # Off: a fixed threshold keeps runs comparable across cases.
-adaptive = false
+adaptive = true
 # Per-result trigger (estimated tokens). 0 = off. Keep well below
 # mcp_response_tokens_threshold: that cap is the ceiling, this is the smart
 # path under it.
@@ -678,52 +726,14 @@ tokens_threshold = 4000
 [supervisor.authorizer]
 enabled = false
 
-# Evaluation gates: a calibrated evaluation model (TypeSafe Jev) answers one
-# bounded question at each of eight supervisor seams in place of a chat-model
-# judgment. Each seam is one switch, off by
-# default. One attempt per call, 5 s timeout, no retries; any failure keeps the
-# pre-change behavior for that turn. Thresholds are fixed constants. Keys come
-# from the environment: CLOUDFLARE_API_KEY + CLOUDFLARE_ACCOUNT_ID for
-# "cloudflare:typesafe/jev", TYPESAFE_API_KEY for "typesafe:jev-latest",
-# OCTOHUB_API_KEY (+ OCTOHUB_API_URL) for "octohub:auto".
-[supervisor.evaluate]
-model = "cloudflare:typesafe/jev"
-# Drop recalled scoped lessons the model judges unrelated to the request.
-recall = false
-# Choose a skill from the domain pool when rules abstained (rule-less skills included).
-skills = false
-# Skip the two-judge supervisor authorization when nothing in the batch is flagged.
-authorizer = false
-# Score oversized tool results chunk by chunk instead of asking the supervisor
-# model for line ranges; the model condenser still runs when this is off or the
-# evaluation is unavailable. Candidate selection (tokens_threshold, adaptive)
-# is unchanged.
-condense = false
-# Before a compression fold, demote summarize-lane tool packets the model judges
-# no longer needed to archive_reference so the fold model reads a one-line
-# descriptor instead of their content. Unavailable → the evidence set as allocated.
-compression = false
-# Ground extracted lessons (one question per candidate over the same transcript
-# excerpt) instead of the supervisor-model verifier; candidates below 0.5 are
-# rejected. Unavailable → the supervisor-model verifier runs, fail-closed.
-distill = false
-# Before the external planner is called on a `request` or `phase_complete`
-# signal, ask whether a plan is needed / the phase outcome is evidenced; below
-# 0.2 the signal is declined or held without a planner call. `reassess` and
-# every deterministic skip are unchanged; unavailable → the planner call.
-plan = false
-# On a GAPS verdict, refute each charged finding against the same evidence the
-# verifier saw (refuted at 0.8 or above) instead of the second-verifier chat
-# pass. Unavailable or evidence over the state cap → the chat refutation.
-gate = false
-# Confirm or promote the cosine capability auto-activation: one Choice over the
-# five best-scored inactive capabilities plus none. A cosine winner the model
-# gives under 0.05 is not activated; with no cosine winner the model's choice
-# activates at 0.6 or above. Unavailable → the cosine decision.
-capabilities = false
-# Evolved-behavior trials: on each verified turn that touched a shadow or live
-# artifact, one call grades the outcome (probability the final answer fulfils
-# the request) and drops samples whose artifact does not apply to the request
-# (below 0.5). An artifact's first sample fixes its measure: graded artifacts
-# skip turns the evaluation cannot answer; ungraded ones keep the plain verdict.
-evolution = false
+# hindsight: a local, calibrated verifier (octolib::hindsight, ONNX on CPU)
+# that reads the turn's event trace when the agent hands back and predicts
+# whether the user's next turn will be a correction, and of which class
+# (not_done, unrequested, rule_violation, ...). Observe-only: the scores are
+# logged, shown as a supervisor notice, tallied in /info and appended to
+# hindsight.jsonl in the data directory next to the verify-gate verdict.
+# `model` is a Hugging Face repo (files under onnx/; HF_TOKEN for a private
+# one) or a local directory holding the export.
+[supervisor.hindsight]
+enabled = false
+model = "muvon/hindsight"
