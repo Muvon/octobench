@@ -1,0 +1,79 @@
+id: js_vue_vapor_select_sync
+name: Synchronize Vapor select values after option updates
+category: dev
+difficulty: complex
+timeout_minutes: 90
+meta:
+  repo: https://github.com/vuejs/core
+  pr_url: https://github.com/vuejs/core/pull/15827
+  pr: 15827
+  task_type: bug-fix
+  failure_modes: [wrong-result]
+  prompt_source: composite
+  prompt_style: acceptance-spec
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [debugging, cross-file, lifecycle, state-management, compatibility]
+  target_branch: minor
+  merged_at: 2026-10-10T01:34:01Z
+  provenance_note: >-
+    Owner-supplied squash-merge lineage and human-provenance review; no
+    AI-authorship disclosure. Not independently re-fetched during construction.
+  base_sha: 7d5e39e4935431ba43d77ced3101fc0fc414707d
+  gold_sha: db5ab78a1a38db409bce31b7e3596b44878bf268
+  verified: true # fail-to-pass proven 3x 2026-10-15 (scripts/verify_case.sh, VERIFY_REPEAT=3)
+  test_paths:
+    - packages/compiler-vapor/__tests__/transforms/__snapshots__/vBind.spec.ts.snap
+    - packages/compiler-vapor/__tests__/transforms/vBind.spec.ts
+    - packages/runtime-vapor/__tests__/directives/vModel.spec.ts
+    - packages/runtime-vapor/__tests__/dom/prop.spec.ts
+    - packages/runtime-vapor/__tests__/hydration/basic.spec.ts
+    - packages/runtime-vapor/__tests__/renderEffect.spec.ts
+    - packages/runtime-vapor/__tests__/vdomInterop.spec.ts
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Vapor selects can lose selection when options render or update despite an unchanged
+  selected value. Component-provided options, hydration, and removal during queued
+  updates also behave inconsistently with VDOM.
+
+  S1. Match equivalent VDOM select behavior on mount and updates: bound values must
+  take effect after option values are ready, including keyed or reused options,
+  slot-provided options, and options supplied by child components. Preserve VDOM's
+  distinction between an owner update and a child-only option change: a plain value
+  binding must not force a new selection on a child-only change when VDOM leaves the
+  browser's selection intact. An unchanged v-model must be reapplied when its child
+  component's options update.
+
+  S2. Support ordinary and property-forced value bindings, object v-bind, dynamic
+  keys, and bindings introduced, removed, set to null, or restored during an update.
+  Preserve VDOM's constant-binding semantics: a standalone literal value initializes
+  once, whereas a constant value participating in dynamic props is reapplied when
+  appropriate. Evaluate each bound value expression exactly once during
+  initialization, and do not reevaluate an unchanged value expression solely because
+  its options changed.
+
+  S3. A select's v-model takes precedence over a competing value binding both
+  initially and after updates, including selects introduced conditionally. When owner
+  and child inputs update together, settle selection before updated hooks and read the
+  model only once for that update.
+
+  S4. Initialize multiple before selected option bindings take effect. Unrelated
+  updates must preserve a user's additional selection in a multiple select, including
+  when its bound value is a number, string, or string-convertible object. Function
+  directives and function refs must observe the initialized selection, including
+  selects inside keyed rows.
+
+  S5. Stop pending selection work when its select is removed: do not read the removed
+  model or later change the detached select's value. This includes removal while a
+  VDOM host updates and a newly created select whose host is removed in the same
+  flush. A subsequently recreated select must initialize normally.
+
+  S6. Preserve selection after hydration and later option changes. A property-forced
+  value must win over an ordinary value after hydrated option values are ready.
+  Preserve the existing warning containing "Hydration attribute mismatch" when the
+  server's option attributes differ from the client bindings.
+
+  S7. These behaviors must also hold when a Vapor select is rendered in a Vapor slot
+  inside a VDOM host and its options come from VDOM components.

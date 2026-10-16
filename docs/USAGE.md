@@ -85,6 +85,20 @@ three-phase:
    unrelated first-run plugin installer from entering the sealed phase.
 3. The harness unseals before validation fetches hidden gold tests.
 
+With `OCTOBENCH_GIT_MIRRORS` set to the bare mirrors built by
+`scripts/build_git_mirrors.sh`, `scripts/bench.sh` starts a read-only Git daemon
+on the host's private Docker bridge gateway, port 9418, and verifies access from
+the selected container image. Direct CLI users must first run
+`scripts/git_mirror_daemon.sh start [image]`; `status [image]` repeats the check.
+Each executor also checks reachability before setup and fails if it cannot fetch
+from the daemon. Per-repository `insteadOf` rewrites and GitHub auth are passed
+only in harness exec environments via `GIT_CONFIG_COUNT`; neither mirrors nor a
+gitconfig are mounted. The agent seal rejects port 9418 before established
+connections and refuses non-public allowlist addresses when mirrors are enabled.
+One-shot validation and every long-run turn unseal before harness fetches.
+`scripts/audit_tools.py` flags mirror URLs/ports and firewall-tool references,
+including attempts by a root agent with `NET_ADMIN` to undo the seal.
+
 For comparable GOLD campaigns, use `scripts/bench.sh`; it owns the clean-bench
 switches, including `OCTOBENCH_CONTEXT_WINDOW=200000`. Claude maps the value to
 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, Codex to `model_context_window`, OpenCode to

@@ -54,25 +54,36 @@ def main() -> None:
     # Aggregate table.
     header = (
         f"{'sequence':36}{'provider':9}{'model':18}"
-        f"{'turns':6}{'pass':6}{'rate':7}"
+        f"{'turns':6}{'unsc':6}{'pass':6}{'rate':7}"
         f"{'sum':7}{'avg':6}{'cost$':9}{'tokens':>10}"
     )
     print(header)
     print("-" * len(header))
 
     for r in sorted(rows, key=lambda x: (x.get("sequence_id", ""), x.get("provider", ""))):
-        agg = r.get("aggregate", {})
+        turns = r.get("turns") or []
+        scored = [turn for turn in turns if turn.get("status") != "unscored"]
+        unscored = len(turns) - len(scored)
+        passed = sum(bool(turn["validation"]["passed"]) for turn in scored)
+        score = sum(turn["scoring"]["final_score"] for turn in scored)
+        costs = [turn.get("cost_usd") for turn in scored]
+        token_counts = [(turn.get("tokens") or {}).get("total") for turn in scored]
+        cost = None if any(value is None for value in costs) else sum(costs)
+        tokens = None if any(value is None for value in token_counts) else sum(token_counts)
+        rate = passed / len(scored) if scored else 0
+        average = score / len(scored) if scored else 0
         line = (
             f"{r.get('sequence_id', '')[:35]:36}"
             f"{r.get('provider', '')[:8]:9}"
             f"{str(r.get('benchmark_model', ''))[:17]:18}"
-            f"{agg.get('total_turns', 0):6}"
-            f"{agg.get('passed', 0):6}"
-            f"{_fmt(agg.get('pass_rate'), 2):7}"
-            f"{_fmt(agg.get('sum_final_score'), 1):7}"
-            f"{_fmt(agg.get('avg_final_score'), 1):6}"
-            f"{_fmt(agg.get('total_cost_usd'), 4):9}"
-            f"{_fmt(agg.get('total_tokens'), 0):>10}"
+            f"{len(scored):6}"
+            f"{unscored:6}"
+            f"{passed:6}"
+            f"{_fmt(rate, 2):7}"
+            f"{_fmt(score, 1):7}"
+            f"{_fmt(average, 1):6}"
+            f"{_fmt(cost, 4):9}"
+            f"{_fmt(tokens, 0):>10}"
         )
         print(line)
 
@@ -86,18 +97,22 @@ def main() -> None:
         print(f"\n{'':=<80}")
         print(f"{seq_id}  [{provider}]")
         print(f"{'':=<80}")
-        th = f"  {'turn':5}{'name':40}{'valid':7}{'judge':6}{'final':7}{'cost$':9}{'tokens':>10}"
+        th = f"  {'turn':5}{'name':40}{'valid':9}{'judge':6}{'final':7}{'cost$':9}{'tokens':>10}"
         print(th)
         print("  " + "-" * (len(th) - 2))
         for t in r.get("turns", []):
             sc = t.get("scoring", {})
             val = t.get("validation", {})
             tok = t.get("tokens", {})
+            status = t.get("status")
+            validity = "UNSCORED" if status == "unscored" else (
+                "PASS" if val.get("passed") else "FAIL"
+            )
             print(
                 f"  {t.get('turn', 0):5}"
                 f"{t.get('name', '')[:39]:40}"
-                f"{('PASS' if val.get('passed') else 'FAIL'):7}"
-                f"{_fmt(t.get('judge', {}).get('score'), 0):6}"
+                f"{validity:9}"
+                f"{_fmt((t.get('judge') or {}).get('score'), 0):6}"
                 f"{_fmt(sc.get('final_score'), 1):7}"
                 f"{_fmt(t.get('cost_usd'), 4):9}"
                 f"{_fmt(tok.get('total'), 0):>10}"

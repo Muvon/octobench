@@ -37,7 +37,13 @@ turns:
     gold_sha: 8859bafb018e2b23b5110d52e491b69b94ad890a
     pr_url: https://github.com/eslint/eslint/pull/21047
     test_paths: [tests/lib/rules/prefer-numeric-literals.js]
-    test_command: npx mocha tests/lib/rules/prefer-numeric-literals.js
+    test_command: |
+      set -euo pipefail
+      harness_paths=(package.json)
+      # Reset the Mocha package config to the committed tree so agent edits cannot bypass the tests.
+      git checkout -q HEAD -- "${harness_paths[@]}"
+      git -c safe.directory='*' clean -fq -- .mocharc.js .mocharc.cjs .mocharc.json .mocharc.yaml .mocharc.yml
+      npx mocha tests/lib/rules/prefer-numeric-literals.js
 
   - name: Ignore shadowed RegExp in no-control-regex
     difficulty: medium
@@ -59,7 +65,13 @@ turns:
     gold_sha: a3172b69c7db63ea0321355543e3f527c7d8b76a
     pr_url: https://github.com/eslint/eslint/pull/21050
     test_paths: [tests/lib/rules/no-control-regex.js]
-    test_command: npx mocha tests/lib/rules/no-control-regex.js
+    test_command: |
+      set -euo pipefail
+      harness_paths=(package.json)
+      # Reset the Mocha package config to the committed tree so agent edits cannot bypass the tests.
+      git checkout -q HEAD -- "${harness_paths[@]}"
+      git -c safe.directory='*' clean -fq -- .mocharc.js .mocharc.cjs .mocharc.json .mocharc.yaml .mocharc.yml
+      npx mocha tests/lib/rules/no-control-regex.js
 
   - name: Ignore shadowed RegExp in no-invalid-regexp
     difficulty: medium
@@ -81,7 +93,13 @@ turns:
     gold_sha: e35b05f1961dcd691611bd68b6ff8a87072d6f76
     pr_url: https://github.com/eslint/eslint/pull/21051
     test_paths: [tests/lib/rules/no-invalid-regexp.js]
-    test_command: npx mocha tests/lib/rules/no-invalid-regexp.js
+    test_command: |
+      set -euo pipefail
+      harness_paths=(package.json)
+      # Reset the Mocha package config to the committed tree so agent edits cannot bypass the tests.
+      git checkout -q HEAD -- "${harness_paths[@]}"
+      git -c safe.directory='*' clean -fq -- .mocharc.js .mocharc.cjs .mocharc.json .mocharc.yaml .mocharc.yml
+      npx mocha tests/lib/rules/no-invalid-regexp.js
 
   - name: Restrict eqeqeq null-never logic to equality operators
     difficulty: medium
@@ -104,7 +122,13 @@ turns:
     gold_sha: b717a22e2408389a2ad40af66543e46390669eb6
     pr_url: https://github.com/eslint/eslint/pull/21057
     test_paths: [tests/lib/rules/eqeqeq.js]
-    test_command: npx mocha tests/lib/rules/eqeqeq.js
+    test_command: |
+      set -euo pipefail
+      harness_paths=(package.json)
+      # Reset the Mocha package config to the committed tree so agent edits cannot bypass the tests.
+      git checkout -q HEAD -- "${harness_paths[@]}"
+      git -c safe.directory='*' clean -fq -- .mocharc.js .mocharc.cjs .mocharc.json .mocharc.yaml .mocharc.yml
+      npx mocha tests/lib/rules/eqeqeq.js
 
   - name: Treat static templates as literals in eqeqeq smart mode
     difficulty: medium
@@ -128,7 +152,13 @@ turns:
     gold_sha: 75ec753226010867270787b412f3dae412e421e6
     pr_url: https://github.com/eslint/eslint/pull/21058
     test_paths: [tests/lib/rules/eqeqeq.js]
-    test_command: npx mocha tests/lib/rules/eqeqeq.js
+    test_command: |
+      set -euo pipefail
+      harness_paths=(package.json)
+      # Reset the Mocha package config to the committed tree so agent edits cannot bypass the tests.
+      git checkout -q HEAD -- "${harness_paths[@]}"
+      git -c safe.directory='*' clean -fq -- .mocharc.js .mocharc.cjs .mocharc.json .mocharc.yaml .mocharc.yml
+      npx mocha tests/lib/rules/eqeqeq.js
 
   - name: Apply implements ignores to class expressions
     difficulty: medium
@@ -151,7 +181,13 @@ turns:
     gold_sha: 3e7bf15e69e6d3a2c8832356bcc2e9903cc4eede
     pr_url: https://github.com/eslint/eslint/pull/21069
     test_paths: [tests/lib/rules/class-methods-use-this.js]
-    test_command: npx mocha tests/lib/rules/class-methods-use-this.js
+    test_command: |
+      set -euo pipefail
+      harness_paths=(package.json)
+      # Reset the Mocha package config to the committed tree so agent edits cannot bypass the tests.
+      git checkout -q HEAD -- "${harness_paths[@]}"
+      git -c safe.directory='*' clean -fq -- .mocharc.js .mocharc.cjs .mocharc.json .mocharc.yaml .mocharc.yml
+      npx mocha tests/lib/rules/class-methods-use-this.js
 
   - name: Apply class method ignore names to computed keys
     difficulty: complex
@@ -163,6 +199,12 @@ turns:
     test_visibility: hidden
     capability_tags: [static-analysis, ast, configuration]
     depends_on: [6]
+    unscored: true
+    unscored_reason: >-
+      The upstream tests for this change exercise the override/implements
+      exemptions, not the computed-key name matching the task is about, so a
+      fix missing the core would pass. Gold is applied to keep the session
+      continuous; the turn is not scored.
     instruction: |
       `class-methods-use-this` ignore-name configuration is applied to ordinary
       method keys but not to equivalent computed literal keys. For example,
@@ -199,7 +241,13 @@ turns:
     gold_sha: 20b5ad052360a443786a202e94624a3f81846511
     pr_url: https://github.com/eslint/eslint/pull/21096
     test_paths: [tests/lib/rules/prefer-template.js]
-    test_command: timeout 60 npx mocha tests/lib/rules/prefer-template.js
+    test_command: |
+      set -euo pipefail
+      harness_paths=(package.json)
+      # Reset the Mocha package config to the committed tree so agent edits cannot bypass the tests.
+      git checkout -q HEAD -- "${harness_paths[@]}"
+      git -c safe.directory='*' clean -fq -- .mocharc.js .mocharc.cjs .mocharc.json .mocharc.yaml .mocharc.yml
+      timeout 60 npx mocha tests/lib/rules/prefer-template.js
 
   - name: Preserve ASI when prefer-object-spread adds parentheses
     difficulty: complex
@@ -222,7 +270,13 @@ turns:
     gold_sha: e23fafe8d4b15355adef6cdebef414c3a2019454
     pr_url: https://github.com/eslint/eslint/pull/21081
     test_paths: [tests/lib/rules/prefer-object-spread.js]
-    test_command: npx mocha tests/lib/rules/prefer-object-spread.js
+    test_command: |
+      set -euo pipefail
+      harness_paths=(package.json)
+      # Reset the Mocha package config to the committed tree so agent edits cannot bypass the tests.
+      git checkout -q HEAD -- "${harness_paths[@]}"
+      git -c safe.directory='*' clean -fq -- .mocharc.js .mocharc.cjs .mocharc.json .mocharc.yaml .mocharc.yml
+      npx mocha tests/lib/rules/prefer-object-spread.js
 
   - name: Ignore MetaProperty names in id-match
     difficulty: medium
@@ -245,7 +299,13 @@ turns:
     gold_sha: 4d7db6628e2badf0857cb88734fe641c3874bce9
     pr_url: https://github.com/eslint/eslint/pull/21167
     test_paths: [tests/lib/rules/id-match.js]
-    test_command: npx mocha tests/lib/rules/id-match.js
+    test_command: |
+      set -euo pipefail
+      harness_paths=(package.json)
+      # Reset the Mocha package config to the committed tree so agent edits cannot bypass the tests.
+      git checkout -q HEAD -- "${harness_paths[@]}"
+      git -c safe.directory='*' clean -fq -- .mocharc.js .mocharc.cjs .mocharc.json .mocharc.yaml .mocharc.yml
+      npx mocha tests/lib/rules/id-match.js
 
   - name: Ignore MetaProperty names in id-denylist
     difficulty: medium
@@ -268,7 +328,13 @@ turns:
     gold_sha: 6898df9364639ee64b9448a4cb6b08a30c16bd37
     pr_url: https://github.com/eslint/eslint/pull/21166
     test_paths: [tests/lib/rules/id-denylist.js]
-    test_command: npx mocha tests/lib/rules/id-denylist.js
+    test_command: |
+      set -euo pipefail
+      harness_paths=(package.json)
+      # Reset the Mocha package config to the committed tree so agent edits cannot bypass the tests.
+      git checkout -q HEAD -- "${harness_paths[@]}"
+      git -c safe.directory='*' clean -fq -- .mocharc.js .mocharc.cjs .mocharc.json .mocharc.yaml .mocharc.yml
+      npx mocha tests/lib/rules/id-denylist.js
 
   - name: Recognize descriptors only in calls to enabled global built-ins
     difficulty: complex
@@ -296,18 +362,22 @@ turns:
 
       Respect lexical shadowing, including parameters, block bindings, and
       hoisted declarations, as well as globals disabled through configuration
-      or comments. Expose this shared boolean contract as `isPropertyDescriptor`
-      on the AST utilities, accepting the node and its SourceCode in that order.
-      Preserve existing rule options, messages, report locations, ordinary
-      object/class accessors, getter return-path behavior, and unrelated AST
-      utility behavior.
+      or comments. Preserve existing rule options, messages, report locations,
+      ordinary object/class accessors, getter return-path behavior, and
+      unrelated AST utility behavior.
     gold_sha: 151ba3f5834a0909e8b9b1736f4889ac694c0104
     pr_url: https://github.com/eslint/eslint/pull/21163
     test_paths:
       - tests/lib/rules/accessor-pairs.js
       - tests/lib/rules/getter-return.js
       - tests/lib/rules/utils/ast-utils.js
-    test_command: npx mocha tests/lib/rules/accessor-pairs.js tests/lib/rules/getter-return.js tests/lib/rules/utils/ast-utils.js
+    test_command: |
+      set -euo pipefail
+      harness_paths=(package.json)
+      # Reset the Mocha package config to the committed tree so agent edits cannot bypass the tests.
+      git checkout -q HEAD -- "${harness_paths[@]}"
+      git -c safe.directory='*' clean -fq -- .mocharc.js .mocharc.cjs .mocharc.json .mocharc.yaml .mocharc.yml
+      npx mocha tests/lib/rules/accessor-pairs.js tests/lib/rules/getter-return.js
 
   - name: Prevent ASI hazards in no-unused-labels autofix
     difficulty: expert
@@ -330,7 +400,13 @@ turns:
     gold_sha: 18eb0a7e787b9fac3049ef3dad0e845d2bd940a4
     pr_url: https://github.com/eslint/eslint/pull/21173
     test_paths: [tests/lib/rules/no-unused-labels.js]
-    test_command: npx mocha tests/lib/rules/no-unused-labels.js
+    test_command: |
+      set -euo pipefail
+      harness_paths=(package.json)
+      # Reset the Mocha package config to the committed tree so agent edits cannot bypass the tests.
+      git checkout -q HEAD -- "${harness_paths[@]}"
+      git -c safe.directory='*' clean -fq -- .mocharc.js .mocharc.cjs .mocharc.json .mocharc.yaml .mocharc.yml
+      npx mocha tests/lib/rules/no-unused-labels.js
 
   - name: Check conditional-expression branches in loop conditions
     difficulty: complex
@@ -354,7 +430,13 @@ turns:
     gold_sha: 55db4791120ae591d88089c43127b7b0e16866d4
     pr_url: https://github.com/eslint/eslint/pull/21175
     test_paths: [tests/lib/rules/no-unmodified-loop-condition.js]
-    test_command: npx mocha tests/lib/rules/no-unmodified-loop-condition.js
+    test_command: |
+      set -euo pipefail
+      harness_paths=(package.json)
+      # Reset the Mocha package config to the committed tree so agent edits cannot bypass the tests.
+      git checkout -q HEAD -- "${harness_paths[@]}"
+      git -c safe.directory='*' clean -fq -- .mocharc.js .mocharc.cjs .mocharc.json .mocharc.yaml .mocharc.yml
+      npx mocha tests/lib/rules/no-unmodified-loop-condition.js
 
   - name: Keep prefer-template fixes from becoming tagged templates
     difficulty: expert
@@ -379,4 +461,10 @@ turns:
     gold_sha: 684b57972e1ddf25e076fb36189c60bbcacee635
     pr_url: https://github.com/eslint/eslint/pull/21207
     test_paths: [tests/lib/rules/prefer-template.js]
-    test_command: npx mocha tests/lib/rules/prefer-template.js
+    test_command: |
+      set -euo pipefail
+      harness_paths=(package.json)
+      # Reset the Mocha package config to the committed tree so agent edits cannot bypass the tests.
+      git checkout -q HEAD -- "${harness_paths[@]}"
+      git -c safe.directory='*' clean -fq -- .mocharc.js .mocharc.cjs .mocharc.json .mocharc.yaml .mocharc.yml
+      npx mocha tests/lib/rules/prefer-template.js

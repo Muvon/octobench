@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
-# Bare mirrors of the repos benchmark cases fetch, plus the container-side
-# gitconfig that reroutes those fetches to file:///git-cache (mounted by the
-# executor when OCTOBENCH_GIT_MIRRORS is set). Idempotent: existing mirrors
-# are fetch-updated. Rewrites are PER-REPO, so an unmirrored repo still goes
-# to the network instead of hitting a missing local path.
+# Bare mirrors served by scripts/git_mirror_daemon.sh. The executor generates
+# per-repo git:// rewrites for harness execs only; no mirror is mounted in the
+# container. Idempotent: existing mirrors are fetch-updated.
 #
 # Usage: scripts/build_git_mirrors.sh [dest]   (default ~/.cache/octobench/git-mirrors)
-set -eo pipefail
+set -euo pipefail
 DEST=${1:-$HOME/.cache/octobench/git-mirrors}
 mkdir -p "$DEST"
 
@@ -37,11 +35,5 @@ for r in $repos; do
   echo "done $r"
 done
 
-CFG="$DEST/gitconfig"
-{
-  printf '[safe]\n\tdirectory = *\n'
-  for r in $repos; do
-    printf '[url "file:///git-cache/%s"]\n\tinsteadOf = https://github.com/%s\n' "$r" "$r"
-  done
-} > "$CFG"
-echo "MIRRORS-READY $(du -sh "$DEST" | cut -f1) ($(grep -c insteadOf "$CFG") repos rewired)"
+echo "MIRRORS-READY $(du -sh "$DEST" | cut -f1)"
+echo "Start serving: OCTOBENCH_GIT_MIRRORS='$DEST' scripts/git_mirror_daemon.sh start"

@@ -50,11 +50,16 @@ if ! step /case/setup.sh > "${WS}/.setup.log" 2>&1; then
   echo "[verify:${CASE_ID}] SETUP FAILED"; tail -30 "${WS}/.setup.log"; exit 1
 fi
 
-echo "[verify:${CASE_ID}] validate at BASE (expect FAIL)"
-if step /case/validate.sh > "${WS}/.val-base.log" 2>&1; then
-  echo "[verify:${CASE_ID}] BAD: tests already pass at BASE (not fail-to-pass)"
-  tail -30 "${WS}/.val-base.log"; exit 1
-fi
+# VERIFY_REPEAT=N (default 1) repeats each validation leg N times in the same
+# setup: the GOLD determinism gate needs FAIL N/N at base and PASS N/N with gold.
+REPEAT="${VERIFY_REPEAT:-1}"
+for ((rep = 1; rep <= REPEAT; rep++)); do
+  echo "[verify:${CASE_ID}] validate at BASE (expect FAIL) ${rep}/${REPEAT}"
+  if step /case/validate.sh > "${WS}/.val-base.log" 2>&1; then
+    echo "[verify:${CASE_ID}] BAD: tests already pass at BASE (not fail-to-pass) on run ${rep}"
+    tail -30 "${WS}/.val-base.log"; exit 1
+  fi
+done
 
 echo "[verify:${CASE_ID}] apply gold source paths"
 GOLD_APPLY="$(cat <<EOS
@@ -74,10 +79,12 @@ if ! step -c "${GOLD_APPLY}" > "${WS}/.gold.log" 2>&1; then
   echo "[verify:${CASE_ID}] GOLD APPLY FAILED"; tail -30 "${WS}/.gold.log"; exit 1
 fi
 
-echo "[verify:${CASE_ID}] validate with gold (expect PASS)"
-if ! step /case/validate.sh > "${WS}/.val-gold.log" 2>&1; then
-  echo "[verify:${CASE_ID}] BAD: tests fail even with gold source"
-  tail -40 "${WS}/.val-gold.log"; exit 1
-fi
+for ((rep = 1; rep <= REPEAT; rep++)); do
+  echo "[verify:${CASE_ID}] validate with gold (expect PASS) ${rep}/${REPEAT}"
+  if ! step /case/validate.sh > "${WS}/.val-gold.log" 2>&1; then
+    echo "[verify:${CASE_ID}] BAD: tests fail with gold source on run ${rep}"
+    tail -40 "${WS}/.val-gold.log"; exit 1
+  fi
+done
 
-echo "[verify:${CASE_ID}] OK: fail-to-pass proven"
+echo "[verify:${CASE_ID}] OK: fail-to-pass proven (${REPEAT}x each leg)"

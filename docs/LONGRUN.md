@@ -123,6 +123,21 @@ fixed first. Prerequisites that passed remain the agent's own implementation.
 Restoration happens before the turn's evidence snapshot, so the injected source
 is not attributed to the agent.
 
+### Unscored turns
+
+A turn that cannot be judged fairly but whose source change is required by later
+turns may set `unscored: true` and a non-empty `unscored_reason`. The runner does
+not call the agent, validate, or judge that turn. It applies the turn's gold
+source through the same dependency-restoration path, then continues without
+describing the skipped change to the agent. Results record the turn separately
+with status `unscored`; it contributes no turn count, score, cost, tokens, or
+time. A sequence may have at most two unscored turns and at most
+`floor(number of turns / 5)`. See [GOLD Protocol: Gate V](gold/PROTOCOL.md#gate-v--validity-every-candidate-no-model-calls)
+for the policy governing when a turn may be dropped this way.
+
+`scripts/verify_longrun.sh` applies an unscored turn's gold source cumulatively
+but skips its fail-before and pass-after test legs.
+
 Each turn is scored separately (validation + judge + efficiency); the
 sequence's headline score is the SUM of its turn scores
 (`aggregate.sum_final_score`), with `avg_final_score` kept for comparing

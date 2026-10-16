@@ -36,4 +36,5 @@ instruction: |
   the entire request: restore chat history and token accounting to the state
   from before the original user prompt, not merely to the state before the
   latest function response. Completed requests and non-cancellation API error
-  handling must retain their existing behavior.
+  handling must retain their existing behavior. A cancelled continuation must
+  still reject with its cancellation error.

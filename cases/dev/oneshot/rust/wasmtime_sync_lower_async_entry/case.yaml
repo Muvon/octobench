@@ -1,0 +1,61 @@
+id: rust_wasmtime_sync_lower_async_entry
+name: Respect async component entry rules through synchronous calls
+category: dev
+difficulty: expert
+timeout_minutes: 90
+meta:
+  repo: https://github.com/bytecodealliance/wasmtime
+  pr_url: https://github.com/bytecodealliance/wasmtime/pull/14574
+  pr: 14574
+  task_type: bug-fix
+  failure_modes: [wrong-result, accepted-invalid-input]
+  prompt_source: composite
+  prompt_style: issue-form
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [debugging, cross-file, concurrency, lifecycle, state-management]
+  target_branch: main
+  merged_at: 2026-10-07T15:22:21Z
+  provenance_note: >-
+    Squash merge by human author alexcrichton, per supplied harvest metadata.
+    The cached PR body links the AI policy in its template without declaring
+    AI authorship. Review history and commit co-authorship are not cached.
+  base_sha: 720a547aa18e4661f47fdbd182e13b40db49fb30
+  gold_sha: 65abe37529a6bca836efcac1dcb920d5c7890580
+  verified: true # fail-to-pass proven 3x 2026-10-15 (scripts/verify_case.sh, VERIFY_REPEAT=3)
+  test_paths:
+    - tests/misc_testsuite/component-model/async/sync-lower-async-typed-entry-checks.wast
+    - tests/misc_testsuite/component-model/thread-transparency/reentrancy.wast
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Current behavior
+
+  Synchronously lifted and lowered calls with an async-typed intermediate
+  function can execute incorrectly or fail with internal errors. A callee can
+  start despite backpressure or another active call preventing entry, including
+  calls that leave and re-enter an instance.
+
+  Expected behavior
+
+  An async-typed callee must obey its instance's backpressure and exclusive-entry
+  rules even when both its lift and the caller's lower are synchronous. It must
+  wait until both allow entry, while the synchronously lowered caller waits for
+  its result. If another eligible task releases backpressure, the call must
+  resume, execute only after that release, and return the callee's value unchanged.
+
+  If backpressure is never released and no task can make progress, the trap
+  should be "deadlock detected". The same applies when a callback holds
+  exclusive entry while synchronously calling through an async-typed
+  intermediary back into its own instance and cannot release that entry.
+  If the intermediary is instead sync-typed and must block before returning,
+  with no other eligible thread in its own instance, the trap should be
+  "cannot block a synchronous task before returning".
+
+  An async lowering to the async-typed intermediary should report a started
+  but not yet returned subtask (status 1) while the callback holds exclusive
+  entry. Once the callback yields by waiting on that subtask, deferred
+  re-entry should proceed. The callback should receive EVENT_SUBTASK (1),
+  STATUS_RETURNED (2), and the callee's unchanged result; the subtask handle
+  and waitable set must remain usable for normal cleanup.

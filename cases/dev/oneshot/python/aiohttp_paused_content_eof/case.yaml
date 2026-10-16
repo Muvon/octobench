@@ -40,3 +40,5 @@ instruction: |
   pending output must still be drained incrementally rather than expanded all
   at once. A genuinely truncated fixed-length body must continue to raise
   `ContentLengthError` with the correct received and expected counts.
+
+  With the default response-parser limits, receiving a complete deflate-compressed body followed by EOF before the application consumes it must leave at most 2 MiB of decoded body data buffered for the reader; subsequent reads must return the complete body.

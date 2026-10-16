@@ -1,0 +1,75 @@
+id: cpp_duckdb_sql_export_sources
+name: Export resolved SQL plans with typed subtree replacements
+category: dev
+difficulty: expert
+timeout_minutes: 90
+meta:
+  repo: https://github.com/duckdb/duckdb
+  pr_url: https://github.com/duckdb/duckdb/pull/26843
+  pr: 26843
+  task_type: feature
+  failure_modes: []
+  prompt_source: composite
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [cross-file, api-design, serialization, compatibility]
+  target_branch: v2.0-cyanoptera
+  merged_at: 2026-10-11T23:27:41Z
+  provenance_note: >-
+    Non-bot PR author per cached harvest metadata; the cached PR body contains
+    no declared AI use. Review history and commit co-authorship are not cached.
+  base_sha: bca7bac6d47317699d533754d3563cc06803564d
+  gold_sha: 6252031c70849a7ef8758a14012e2146762ddc25
+  verified: true # fail-to-pass proven 3x 2026-10-15 (scripts/verify_case.sh, VERIFY_REPEAT=3)
+  test_paths:
+    - test/sql_export/sql_export_plan_sources.cpp
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Allow SQL export to substitute a caller-supplied SQL relation for a subtree
+  of an already resolved logical plan, preserving bindings and caller-owned objects.
+
+  D1. Expose `LogicalPlanSQLExportReplacement`, pairing an operator reference
+  `op` with a typed SQL `relation`, and
+  `LogicalPlanSQLExporter::ExportWithSources(context, root, replacements,
+  options)`, with optional export options. Return an owned export relation using
+  the existing result and diagnostic interfaces.
+
+  D2. Preserve the original plan, operator ownership, bind data, output types
+  and bindings, and replacement ASTs on success and failure; callers must be
+  able to export repeatedly. An empty replacement list on an already resolved,
+  ordinarily exportable plan must produce the same SQL as `Export`. Keep
+  `Export`'s existing resolving behavior.
+
+  D3. Expose `LogicalPlanVerifier::VerifyResolvedBindings(op)` to check an
+  already resolved plan without inferring or repairing its output metadata.
+  Reject incomplete metadata. Replacements must identify distinct, reachable,
+  non-overlapping subtrees and supply complete positional fields matching their
+  bindings and types; invalid boundaries or field metadata report
+  `INTERNAL_INVARIANT` at the root plan path (an empty
+  `LogicalPlanVerificationPath`), not at the offending subtree. A null child
+  also reports `INTERNAL_INVARIANT`, with a
+  diagnostic containing `is null`. An unreplaced opaque source remains
+  `UNSUPPORTED_SOURCE`.
+
+  D4. Execute the supplied relation in place of the entire selected subtree,
+  including a root replacement, an identity-projection producer, or a
+  recursive/materialized CTE producer. Dependent expressions and aggregates
+  must use replacement values and preserve result types. Replacements must
+  remain usable when an original source cannot itself be exported.
+
+  D5. Preserve replacement boundaries through ordinality and scalar LIMIT
+  handling. Ordinality must describe the replacement rows, and emitted SQL must
+  not retain the replaced original source. A scalar LIMIT source independent of
+  the row stream may be replaced. If a replacement makes the LIMIT depend on
+  the replaced row stream, return `UNSUPPORTED_EXPORT_FEATURE`, with construct
+  `ExportFeature("limit_binding")` and a logical-plan path identifying that
+  row-stream boundary.
+
+  D6. Preserve the meaning of explicit relation references inside supplied
+  ASTs, including case-insensitive names, scalar subqueries, UNION branches,
+  local CTEs and SUMMARIZE queries; generated names must not capture them.
+  Accept API-built SELECT ASTs without a FROM node, without changing the
+  supplied AST.

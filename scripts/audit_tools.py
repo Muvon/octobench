@@ -16,6 +16,7 @@ Exit 1 if any forbidden tool call is found.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -73,7 +74,7 @@ def main() -> None:
     traces = 0
     for root in roots:
         # _stream_*.jsonl covers claude, which has no provider.raw.jsonl events
-        # in the shapes tools_in() parses — the /git-cache check still applies.
+        # in the shapes tools_in() parses — the raw trace checks still apply.
         for trace in sorted(set(root.rglob("provider.raw.jsonl"))
                             | set(root.rglob("_stream_*.jsonl"))):
             traces += 1
@@ -81,11 +82,17 @@ def main() -> None:
             case = trace.parts[-4] if len(trace.parts) >= 4 else trace.name
             bad = {k: v for k, v in found.items()
                    if k in FORBIDDEN or k.startswith("codex:")}
-            # The git-mirror mount (runners/executor.py) is harness-only
-            # territory: it holds the upstream repos' FULL history, including
-            # the gold commits. An agent that touches it read the answer key.
-            if "/git-cache" in trace.read_text(errors="replace"):
+            # Mirrors hold the gold history. NET_ADMIN is needed by the harness,
+            # but also lets a root agent undo the seal; audit both access paths.
+            raw = trace.read_text(errors="replace")
+            if "/git-cache" in raw:
                 bad["git-cache-access"] = 1
+            if re.search(r"\b(?:iptables|ip6tables|nft)\b", raw):
+                bad["network-seal-tampering"] = 1
+            # Port 9418 only after a host (`172.17.0.1:9418`); a bare number also
+            # appears in JSON timing fields such as `"api_ms":9418`.
+            if "git://" in raw or re.search(r"[\w\].-]:9418\b", raw):
+                bad["git-mirror-access"] = 1
             odd = {k: v for k, v in found.items() if k in SUSPECT}
             if bad:
                 violations.append((str(root), case, bad))

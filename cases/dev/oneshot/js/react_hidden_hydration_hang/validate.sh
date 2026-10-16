@@ -8,5 +8,8 @@ TEST_TWO="packages/react-dom/src/__tests__/ReactDOMServerPartialHydrationActivit
 git remote add origin https://github.com/facebook/react 2>/dev/null || true
 git fetch -q --depth 1 origin "${GOLD_SHA}"
 git checkout -q "${GOLD_SHA}" -- "${TEST_ONE}" "${TEST_TWO}"
+# Restore the upstream Jest entrypoint so agent edits cannot bypass the tests.
+git checkout -q "${GOLD_SHA}" -- package.json scripts/jest
+git -c safe.directory='*' clean -fdq -- scripts/jest
 yarn test ReactDOMServerPartialHydration-test.internal --runInBand
 yarn test ReactDOMServerPartialHydrationActivity-test.internal --runInBand

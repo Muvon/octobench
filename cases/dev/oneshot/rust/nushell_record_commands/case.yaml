@@ -1,0 +1,93 @@
+id: rust_nushell_record_commands
+name: Transform and filter records in streaming pipelines
+category: dev
+difficulty: complex
+timeout_minutes: 90
+meta:
+  repo: https://github.com/nushell/nushell
+  pr_url: https://github.com/nushell/nushell/pull/19190
+  issue_url: https://github.com/nushell/nushell/issues/19061
+  pr: 19190
+  task_type: feature
+  failure_modes: []
+  prompt_source: composite
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [cross-file, api-design, parser, state-management]
+  target_branch: main
+  merged_at: 2026-10-08T23:49:22Z
+  provenance_note: >-
+    Non-bot PR author per cached harvest metadata; the cached PR body contains
+    no declared AI use. Review history and commit co-authorship are not cached.
+  base_sha: 145a0609c6050802bda2a6ae786fa912bc7bcc07
+  gold_sha: 67edfb6eca0ac5b4c69d614d8e290b7134213b38
+  verified: true # fail-to-pass proven 3x 2026-10-15 (scripts/verify_case.sh, VERIFY_REPEAT=3)
+  test_paths:
+    - crates/nu-command/tests/commands/mod.rs
+    - crates/nu-command/tests/commands/record/mod.rs
+    - crates/nu-command/tests/commands/record/apply.rs
+    - crates/nu-command/tests/commands/record/each.rs
+    - crates/nu-command/tests/commands/record/walk.rs
+    - crates/nu-command/tests/commands/record/where_.rs
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Add `record apply`, `record each`, `record walk` and `record where` to work
+  directly on records and streaming tables without conversions through tables
+  or key/value pairs.
+
+  N1. Each command accepts a single record or a table, preserving pipeline
+  metadata and processing table rows on demand, including infinite input
+  followed by `first`. A failed table row becomes an error in that position
+  while later rows remain processable. Reject non-record input/rows and byte
+  streams with `nu::shell::only_supports_this_input_type`; reject byte streams
+  without consuming them.
+
+  N2. `record apply` takes a reusable record of transformations. A closure
+  receives the field value both as its argument and pipeline input; a nested
+  transformation record applies recursively to a record-valued field. Leave
+  other fields unchanged and skip missing fields at every level unless
+  `--strict` is set, which reports `nu::shell::column_not_found`.
+
+  N3. Every transformation must be a closure or another transformation record.
+  Validate the complete transformation specification before invoking any
+  closure, including transformations for missing fields; invalid transformations
+  and nested record transformations applied to non-record values report
+  `nu::shell::type_mismatch`. When a transformation (closure or nested record)
+  is applied to a field that already holds an error value, or a closure raises
+  an error, the command fails with that error, keeping its original message.
+
+  N4. `record each` calls its closure with key and value arguments and empty
+  pipeline input. Each result may be a record contributing all its fields, a
+  two-element `[key value]` list whose key is converted to a string, or null to
+  omit the field; an empty record also contributes nothing. Process fields in
+  input order; duplicate output keys retain their first position and last value.
+  Empty input remains empty. Wrong-length lists report
+  `nu::shell::incorrect_value`; other result types report
+  `nu::shell::type_mismatch`.
+
+  N5. `record walk` transforms nested leaves with a closure receiving
+  `(value, path)`, with the value also available as pipeline input. Paths are
+  real cell paths that address the original leaf correctly, including list
+  indices and keys containing dots or spaces. Preserve empty containers by
+  default. `--containers` also visits nested records and lists, including empty
+  ones, after their children have been transformed, but does not visit the root
+  record. `--no-lists` treats each list as a whole value.
+
+  N6. `record where` retains fields, in input order, only when its condition
+  returns boolean true. Accept either a row condition on `key` and `value`, with
+  the `{key, value}` row available as `$it` and `$in`, or an explicit/stored
+  closure receiving key and value arguments with empty pipeline input. A
+  one-parameter closure receives the key even if its parameter is named `it`;
+  typed closure parameters remain supported.
+
+  N7. For `record where`, `--keys` or `--values`, placed before the condition,
+  supplies only the selected key or value as the closure argument and pipeline
+  input, or as the row-condition input. Combining the flags reports
+  `nu::shell::incompatible_parameters`.
+
+  N8. Closure and field errors retain their messages. A failed row must not
+  affect later rows' closure arguments or cell paths. Missing required closure
+  arguments report `nu::shell::missing_parameter` on each affected row.

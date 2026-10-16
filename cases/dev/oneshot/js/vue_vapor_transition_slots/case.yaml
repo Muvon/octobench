@@ -1,0 +1,75 @@
+id: js_vue_vapor_transition_slots
+name: Transition Vapor slots and component roots inside VDOM
+category: dev
+difficulty: complex
+timeout_minutes: 90
+meta:
+  repo: https://github.com/vuejs/core
+  pr_url: https://github.com/vuejs/core/pull/15758
+  pr: 15758
+  task_type: feature
+  failure_modes: []
+  prompt_source: composite
+  prompt_style: issue-form
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [cross-file, lifecycle, state-management, compatibility]
+  target_branch: minor
+  merged_at: 2026-10-08T00:52:59Z
+  provenance_note: >-
+    Owner-supplied squash-merge lineage and human-provenance review; no
+    AI-authorship disclosure. Not independently re-fetched during construction.
+  base_sha: 829a53368a6cb9d45aaf388b62bde6d01213f794
+  gold_sha: e656425ebff4724776a93c66c0113a902e91c200
+  verified: true # fail-to-pass proven 3x 2026-10-15 (scripts/verify_case.sh, VERIFY_REPEAT=3)
+  test_paths:
+    - packages/runtime-vapor/__tests__/components/Transition.spec.ts
+    - packages/runtime-vapor/__tests__/hydration/interopTransition.spec.ts
+    - packages/runtime-vapor/__tests__/vdomInteropTransition.spec.ts
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Transition Vapor slot content inside a VDOM Transition
+
+  Current behavior
+
+  Vapor slot content rendered by a VDOM wrapper's Transition does not reliably
+  participate in transitions. Conditional content, fallbacks, and component roots can
+  disappear too early or miss their hooks.
+
+  Expected behavior
+
+  Make Vapor slot content and Vapor components used as a VDOM Transition's child
+  behave like the equivalent all-VDOM tree. Match its rendered DOM and public
+  transition-hook order for conditional branches, keyed elements, dynamic components,
+  and slots that the wrapper creates or removes later. Replacing transition props must
+  affect subsequent transitions.
+
+  Keep leaving elements present until their leave callback completes. Match VDOM's
+  default, out-in, and in-out ordering, including switches between a slot and a VDOM
+  sibling. An empty slot or a component with no element must not hold up an out-in
+  switch.
+
+  Match VDOM when enter or appear is interrupted by leave, or content is reopened
+  before a pending leave or sibling enter completes: fire the appropriate
+  completion/cancellation hooks without duplicate content. For v-show, keep the same
+  element, cancel interrupted phases, and hide it only when leave completes. Preserve
+  VDOM's style behavior.
+
+  Treat active slot fallbacks as transition content. They must enter and leave
+  when real content disappears or returns, including an initially active fallback,
+  fallbacks that change their own root, mode-dependent switches to siblings, and
+  reopening during a pending sibling enter. Preserve this behavior for an ordinary
+  Vapor Transition around a slot as well.
+
+  Handle changes initiated inside a child component, including initially empty
+  roots, v-show roots, and KeepAlive roots. Match VDOM's early completion/removal of a
+  replaced component root, including under out-in, rather than leaving stale DOM
+  behind.
+
+  Preserve these semantics after server rendering and hydration. Hydration without
+  appear must not run initial enter hooks; appear must run its public hooks on
+  hydrated content. Content initially absent on the server must subsequently enter
+  normally, and appearing content at the end of its parent must hydrate without
+  leftover wrapper DOM.

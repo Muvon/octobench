@@ -1,0 +1,68 @@
+id: rust_cargo_locked_prerelease
+name: Preserve explicitly pinned prerelease dependencies
+category: dev
+difficulty: complex
+timeout_minutes: 90
+meta:
+  repo: https://github.com/rust-lang/cargo
+  pr_url: https://github.com/rust-lang/cargo/pull/17464
+  issue_url: https://github.com/rust-lang/cargo/issues/13290
+  pr: 17464
+  task_type: bug-fix
+  failure_modes: [rejected-valid-input, wrong-result]
+  prompt_source: composite
+  prompt_style: issue-form
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [debugging, cross-file, compatibility, state-management]
+  target_branch: master
+  merged_at: 2026-09-20T02:42:51Z
+  provenance_note: >-
+    Non-bot PR author; the PR discloses LLM-assisted edge-case discovery and
+    explicitly states that the code was handwritten; substantive review
+    remains unverified.
+  base_sha: 8814ead110e36ed8fdcf1fdd4009baf82bd78523
+  gold_sha: d83eabda2d0d8c17ea7bdc62136c020257f992c7
+  verified: true # fail-to-pass proven 3x 2026-10-15 (scripts/verify_case.sh, VERIFY_REPEAT=3)
+  test_paths:
+    - tests/testsuite/precise_pre_release.rs
+    - tests/testsuite/cargo/z_help/stdout.term.svg
+    - crates/resolver-tests/src/lib.rs
+    - crates/resolver-tests/src/sat.rs
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Current behavior
+
+  The initial prerelease support handles `cargo update --precise <prerelease>`,
+  but later Cargo commands can discard or reject the pinned version in the
+  lockfile.
+
+  Expected behavior
+
+  Introduce the nightly `-Zprerelease` flag, replacing `-Zunstable-options`
+  gating for this capability. Subsequent commands must also receive
+  `-Zprerelease` to use extended prerelease matching.
+
+  With the flag, an explicitly selected compatible prerelease should remain
+  locked during independent dependency updates, `check`, and `check --locked`,
+  including registry transitive dependencies, dependencies of a path-patched
+  package, and a package shared by direct and transitive requirements.
+  A later explicit update to a compatible stable version should replace it normally.
+
+  The flag must not select an unrequested prerelease or relax numeric version
+  bounds: a requirement starting at `0.1.2` excludes `0.1.2-pre.0`, and an
+  excluded upper bound stays excluded.
+
+  Without the flag, ordinary resolution should remain unchanged: a locked
+  prerelease that does not satisfy the ordinary requirement requires a lockfile
+  update, an unlocked check may choose the compatible stable version, and
+  incompatible shared direct/transitive requirements report their normal resolver
+  conflict without rewriting the lockfile.
+
+  Keep Cargo's existing update, download, check, and resolver diagnostic formats.
+  A prohibited lockfile update must exit 101 with
+  `cannot update the lock file <path> because --locked was passed to prevent this`
+  and the help text
+  `to generate the lock file without accessing the network, remove the --locked flag and use --offline instead.`

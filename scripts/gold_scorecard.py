@@ -82,6 +82,7 @@ class RoundStats:
     longrun_sequences: int
     longrun_turns_passed: int
     longrun_turns_total: int
+    longrun_turns_unscored: int
     judge_mean: Optional[float]
     totals: Totals
 
@@ -230,6 +231,23 @@ def _longrun_items(
         turn_no = int(turn["turn"])
         if limit is not None and turn_no > limit:
             continue
+        status = turn.get("status")
+        if status == "unscored":
+            yield Item(
+                key=f"unscored:{sequence_id}:{turn_no}",
+                kind="unscored",
+                sequence_id=sequence_id,
+                passed=False,
+                judge=None,
+                cost=None,
+                fresh_input=0,
+                cache_read=0,
+                output=0,
+                reasoning=0,
+                elapsed_ms=0,
+                efficiency=None,
+            )
+            continue
         fresh, cache, output, reasoning = _tokens(turn.get("tokens"))
         cost = turn.get("cost_usd")
         provider_block = turn.get("provider") or {}
@@ -247,7 +265,6 @@ def _longrun_items(
             / "turns"
             / f"turn_{turn_no}"
         )
-        status = turn.get("status")
         efficiency = None
         if status != "not_run":
             efficiency = extract_efficiency(
@@ -313,6 +330,7 @@ def _round_stats(items: Iterable[Item]) -> RoundStats:
     materialized = list(items)
     oneshot = [item for item in materialized if item.kind == "oneshot"]
     longrun = [item for item in materialized if item.kind == "longrun"]
+    unscored = [item for item in materialized if item.kind == "unscored"]
     by_sequence: Dict[str, List[Item]] = {}
     for item in longrun:
         if item.sequence_id is None:
@@ -330,8 +348,9 @@ def _round_stats(items: Iterable[Item]) -> RoundStats:
         longrun_sequences=len(sequence_rates),
         longrun_turns_passed=sum(item.passed for item in longrun),
         longrun_turns_total=len(longrun),
+        longrun_turns_unscored=len(unscored),
         judge_mean=statistics.mean(judges) if judges else None,
-        totals=_totals(materialized),
+        totals=_totals(oneshot + longrun),
     )
 
 
@@ -564,6 +583,20 @@ def _turn_summary(stats: Iterable[RoundStats]) -> str:
     )
 
 
+def _unscored_summary(stats: Iterable[RoundStats]) -> str:
+    materialized = [
+        stat
+        for stat in stats
+        if stat.longrun_turns_total or stat.longrun_turns_unscored
+    ]
+    if not materialized:
+        return "-"
+    return _mean_range(
+        (stat.longrun_turns_unscored for stat in materialized),
+        lambda value: f"{value:.1f}",
+    )
+
+
 def _oneshot_summary(stats: Iterable[RoundStats]) -> str:
     materialized = [stat for stat in stats if stat.oneshot_total]
     if not materialized:
@@ -612,7 +645,8 @@ def _metric_rows(
     matched_totals: Dict[str, List[Totals]] = {}
     for label, rounds in columns:
         all_items[label] = [
-            list(items.values()) for _round, items in sorted(rounds.items())
+            [item for item in items.values() if item.kind != "unscored"]
+            for _round, items in sorted(rounds.items())
         ]
         all_stats[label] = [
             _round_stats(items.values()) for _round, items in sorted(rounds.items())
@@ -668,6 +702,10 @@ def _metric_rows(
     rows.append((
         "solve — long-run turns passed/total",
         [_turn_summary(all_stats[label]) for label, _rounds in columns],
+    ))
+    rows.append((
+        "not scored — long-run turns",
+        [_unscored_summary(all_stats[label]) for label, _rounds in columns],
     ))
     rows.append((
         "diagnostic only — judge mean",
@@ -815,7 +853,9 @@ def render(columns: List[Tuple[str, Dict[str, Dict[str, Item]]]]) -> str:
         "(1.00 is typical); zero-valued items are excluded because log(0) is undefined, with "
         "exclusion counts reported in the table. The efficiency-only headline is the geometric "
         "mean of matched-work relative cost and wall-time indexes; lower is better, and wall "
-        "time already carries all waiting. Missing client evidence is UNKNOWN, "
+        "time already carries all waiting. Unscored long-run turns are listed separately and "
+        "excluded from solve, judge, efficiency, and matched-work metrics. Missing client "
+        "evidence is UNKNOWN, "
         "never zero. Judge mean is diagnostic only; GOLD never merges solve and efficiency._",
     ])
     return "\n".join(lines)

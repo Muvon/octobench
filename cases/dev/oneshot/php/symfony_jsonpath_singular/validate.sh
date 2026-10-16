@@ -8,5 +8,9 @@ TEST_PATHS=(src/Symfony/Component/JsonPath/Tests/JsonCrawlerTest.php)
 git remote add origin "${REPO_URL}" 2>/dev/null || true
 git fetch -q --depth 1 origin "${GOLD_SHA}"
 git checkout -q "${GOLD_SHA}" -- "${TEST_PATHS[@]}"
+# Restore the upstream PHPUnit launcher and config so agent edits cannot bypass the test.
+git checkout -q "${GOLD_SHA}" -- phpunit phpunit.xml.dist
+git -c safe.directory='*' clean -fdq -- src/Symfony/Component/JsonPath/Tests
+rm -f phpunit.xml
 
 SYMFONY_PHPUNIT_VERSION=11.5 php ./phpunit "${TEST_PATHS[@]}"

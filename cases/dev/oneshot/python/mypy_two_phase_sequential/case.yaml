@@ -1,0 +1,88 @@
+id: python_mypy_two_phase_sequential
+name: Align sequential and parallel partial-type inference
+category: dev
+difficulty: complex
+timeout_minutes: 90
+meta:
+  repo: https://github.com/python/mypy
+  pr_url: https://github.com/python/mypy/pull/21973
+  issue_url: https://github.com/python/mypy/issues/21348
+  pr: 21973
+  task_type: behavior-change
+  failure_modes: [wrong-result, accepted-invalid-input]
+  prompt_source: composite
+  prompt_style: issue-form
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [debugging, cross-file, type-system, static-analysis, state-management]
+  target_branch: master
+  merged_at: 2026-09-22T10:44:16Z
+  provenance_note: >-
+    Cached metadata identifies non-bot author ilevkivskyi (Ivan Levkivskyi).
+    The cached PR description explains the semantic change and parallel -c
+    defect without declaring AI use. Review history and first-parent lineage
+    remain unverified.
+  base_sha: 5a06937f4607a03c4f2201f3aa9b7da99ec32402
+  gold_sha: b645e069c1e7f907205e6cc0eabea5d2b5beeefc
+  verified: true # fail-to-pass proven 3x 2026-10-15 (scripts/verify_case.sh, VERIFY_REPEAT=3)
+  test_paths:
+    - mypy/test/testcmdline.py
+    - test-data/unit/check-bound.test
+    - test-data/unit/check-classes.test
+    - test-data/unit/check-columns.test
+    - test-data/unit/check-custom-plugin.test
+    - test-data/unit/check-errorcodes.test
+    - test-data/unit/check-functions.test
+    - test-data/unit/check-generics.test
+    - test-data/unit/check-incremental.test
+    - test-data/unit/check-inference.test
+    - test-data/unit/check-plugin-attrs.test
+    - test-data/unit/check-protocols.test
+    - test-data/unit/check-redefine2.test
+    - test-data/unit/check-selftype.test
+    - test-data/unit/cmdline.test
+    - test-data/unit/exportjson.test
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Current behavior
+
+  Sequential checking can disagree with parallel checking about inferred
+  types. For example, a function can see a global as only None even though
+  a later module-level assignment establishes its non-None type. Cached
+  results can also hide diagnostics when switching checking modes, and
+  parallel checking of code passed with -c can miss function-body errors.
+
+  Expected behavior
+
+  Unless local partial types are disabled, sequential and parallel checking
+  should have identical semantics for inferred types and diagnostics.
+  Function bodies must see the completed inferred type of module globals,
+  including assignments later in the module, while module-level expressions
+  remain flow-sensitive.
+  Respect strict-optional and no-strict-optional semantics.
+
+  Preserve inference for globals and class attributes initially set to
+  None and subsequently assigned in functions, instance methods, or class
+  methods. Typed assignments retain their inferred type together with None;
+  assignments in unchecked bodies retain the existing Any behavior. Local
+  variables must not change a same-named global. Underconstrained partial
+  types must produce the existing annotation diagnostics, and invalid uses
+  must produce ordinary type errors rather than crashes.
+
+  Sequential checking must still honor --no-local-partial-types and the
+  per-file no-local-partial-types directive. Preserve legacy inference of
+  empty containers from function bodies and generic lambda callbacks,
+  including incremental rechecking after source edits.
+
+  Switching from sequential to parallel checking must not reuse cached
+  results that hide incompatible per-file options. In parallel mode, a
+  per-file opt-out must report
+  "--local-partial-types must be enabled in parallel mode" at line 1 and
+  still check the module with local partial types enabled, reporting the
+  usual missing-annotation diagnostics and unresolved item types.
+
+  Parallel -c checking must report errors inside typed function bodies,
+  using the existing diagnostic text, source locations, and exit-status
+  conventions.

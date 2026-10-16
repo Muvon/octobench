@@ -30,6 +30,7 @@ instruction: |
 
   Requirements:
   - `powershell` is a registered built-in shell name, selectable via `_FOO_BAR_COMPLETE=powershell_source` (script generation) and `powershell_complete` (runtime completion), following the same env-var convention as bash, zsh, and fish.
+  - Expose the built-in completer as `click.shell_completion.PowerShellComplete`, supporting the existing `ShellComplete` constructor contract and its `format_completion()` interface.
   - The generated completion script uses PowerShell's native argument-completion mechanism (`Register-ArgumentCompleter -Native`).
   - At completion time, the full command text is forwarded to the Python side via `COMP_WORDS` and the cursor/word index via `COMP_CWORD`, reusing the existing shared argument-splitting logic rather than reimplementing it per shell.
   - Completion items are emitted as three newline-separated fields per item — type, value, help — and the PowerShell script maps the plain, dir, and file item types to appropriate PowerShell completion results.

@@ -8,6 +8,9 @@ TEST_PATHS=(test/test.cc)
 git remote add origin "${REPO_URL}" 2>/dev/null || true
 git fetch -q --depth 1 origin "${GOLD_SHA}"
 git checkout -q "${GOLD_SHA}" -- "${TEST_PATHS[@]}"
+# Restore the upstream CMake harness so agent edits cannot replace the test target.
+git checkout -q "${GOLD_SHA}" -- CMakeLists.txt test/CMakeLists.txt
+git -c safe.directory='*' clean -fdq -- test
 
 cmake --build build --target httplib-test -j"$(nproc)"
 

@@ -8,6 +8,7 @@ import json
 import threading
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -404,18 +405,33 @@ def seal_network(executor: Executor) -> None:
     validate.sh fetches its gold tests from the same hosts.
     """
     allow = os.environ.get("OCTOBENCH_ALLOW_HOSTS", DEFAULT_ALLOW_HOSTS).split()
+    mirror_guard = ""
+    mirror_rule = ""
+    if "OCTOBENCH_GIT_MIRRORS" in os.environ:
+        mirror_guard = (
+            "python3 - $ALLOW_IPS <<'PY'\n"
+            "import ipaddress, sys\n"
+            "blocked = [ip for ip in sys.argv[1:] if not ipaddress.ip_address(ip).is_global]\n"
+            "if blocked:\n"
+            "    sys.exit('Non-public model allowlist addresses: ' + ', '.join(blocked))\n"
+            "PY\n"
+        )
+        # Reject before conntrack so even a connection opened during setup is sealed.
+        mirror_rule = "iptables -A OUTPUT -p tcp --dport 9418 -j REJECT\n"
     script = (
         "set -e\n"
         "command -v iptables >/dev/null 2>&1 || { echo NO_IPTABLES; exit 1; }\n"
         "[ -f /etc/hosts.octobench-preseal ] || cp /etc/hosts /etc/hosts.octobench-preseal\n"
         # Resolve the model allowlist before the deny rule lands.
         "ALLOW_IPS=\"\"\n"
-        "for h in " + " ".join(allow) + "; do\n"
+        "for h in " + " ".join(shlex.quote(host) for host in allow) + "; do\n"
         "  ips=$(getent ahostsv4 \"$h\" 2>/dev/null | awk '{print $1}' | sort -u)\n"
         "  ALLOW_IPS=\"$ALLOW_IPS $ips\"\n"
         "done\n"
+        + mirror_guard +
         "iptables -F OUTPUT\n"
         "iptables -A OUTPUT -o lo -j ACCEPT\n"
+        + mirror_rule +
         "iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT\n"
         "iptables -A OUTPUT -p udp --dport 53 -j ACCEPT\n"
         "iptables -A OUTPUT -p tcp --dport 53 -j ACCEPT\n"

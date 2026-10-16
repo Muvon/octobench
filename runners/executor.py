@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import ipaddress
+import json
 import os
 import signal
 import shutil
@@ -54,6 +56,32 @@ AUTH_ENV_KEYS = [
 # failure.
 CASE_TIMEOUT_MARKER = "octobench: case timeout after"
 PROVIDER_TERMINATION_GRACE_S = 1.0
+GIT_MIRROR_PROBE_TIMEOUT_S = 20
+
+
+def git_mirror_urls(mirrors: Path) -> Dict[str, str]:
+    if not mirrors.is_dir():
+        raise RuntimeError(f"OCTOBENCH_GIT_MIRRORS is not a directory: {mirrors}")
+    repos = sorted(
+        head.parent.relative_to(mirrors).as_posix()
+        for head in mirrors.glob("*/*/HEAD")
+        if not head.parent.is_symlink()
+    )
+    if not repos:
+        raise RuntimeError(f"OCTOBENCH_GIT_MIRRORS contains no bare mirrors: {mirrors}")
+    network = subprocess.run(
+        ["docker", "network", "inspect", "bridge"],
+        capture_output=True, text=True, check=True,
+    )
+    gateways = [
+        ipaddress.ip_address(config["Gateway"])
+        for config in json.loads(network.stdout)[0]["IPAM"]["Config"]
+        if "Gateway" in config
+    ]
+    ipv4 = [address for address in gateways if address.version == 4]
+    if len(ipv4) != 1 or not ipv4[0].is_private or ipv4[0].is_loopback:
+        raise RuntimeError(f"Docker bridge must have one private IPv4 gateway: {gateways}")
+    return {f"https://github.com/{repo}": f"git://{ipv4[0]}:9418/{repo}" for repo in repos}
 
 
 def _kill_process_group(proc: subprocess.Popen) -> None:
@@ -413,10 +441,16 @@ class DockerExecutor(Executor):
         self._mount_workspace = mount_workspace
         self._mount_case = mount_case
         self._started = False
+        self._mirror_urls: Dict[str, str] = {}
 
     def _ensure(self) -> None:
         if self._started:
             return
+        mirrors = os.environ.get("OCTOBENCH_GIT_MIRRORS")
+        if mirrors is not None:
+            if not mirrors:
+                raise RuntimeError("OCTOBENCH_GIT_MIRRORS must name a mirror directory")
+            self._mirror_urls = git_mirror_urls(Path(mirrors).expanduser())
         env_args: List[str] = []
         for k in AUTH_ENV_KEYS:
             if os.environ.get(k) is not None:
@@ -433,17 +467,6 @@ class DockerExecutor(Executor):
             env_args += ["-e", f"{k}={v}"]
 
         mounts = ["-v", f"{self._octomind_config}:{self.CFG}:ro"]
-
-        # GitHub's anonymous rate limit poisoned two campaigns (2026-09-02):
-        # setups died in 0.3s and turn validations recorded fetch failures as
-        # model failures. With OCTOBENCH_GIT_MIRRORS set, the container fetches
-        # pinned SHAs from local bare mirrors (scripts/build_git_mirrors.sh)
-        # through per-repo insteadOf rewrites — zero github traffic in-run.
-        # Mount only: the rewrite env comes from harness_git_env() on harness
-        # execs, so the agent phase never sees the mirrors' post-base history.
-        _gm = os.environ.get("OCTOBENCH_GIT_MIRRORS")
-        if _gm and Path(_gm).is_dir():
-            mounts += ["-v", f"{Path(_gm).resolve()}:/git-cache:ro"]
 
         # octobench: client session state, kept on the HOST beside the workspace.
         # Agents write their sessions inside the container, which is fine while a
@@ -575,6 +598,19 @@ class DockerExecutor(Executor):
         if proc.returncode != 0:
             raise RuntimeError(f"docker run failed for {self.name}: {proc.stderr.strip()}")
         self._started = True
+        if self._mirror_urls:
+            probe = subprocess.run(
+                ["docker", "exec", self.name, "timeout", str(GIT_MIRROR_PROBE_TIMEOUT_S),
+                 "git", "ls-remote",
+                 next(iter(self._mirror_urls.values()))],
+                capture_output=True, text=True,
+            )
+            if probe.returncode != 0:
+                self.close()
+                raise RuntimeError(
+                    "OCTOBENCH_GIT_MIRRORS daemon is unreachable from the container; "
+                    f"run scripts/git_mirror_daemon.sh start: {probe.stderr.strip()}"
+                )
 
     def run(self, argv, env_overrides=None, input_text=None) -> ExecResult:
         self._ensure()
@@ -614,8 +650,16 @@ class DockerExecutor(Executor):
 
     def harness_git_env(self) -> Dict[str, str]:
         env = super().harness_git_env()
-        if os.environ.get("OCTOBENCH_GIT_MIRRORS"):
-            env["GIT_CONFIG_SYSTEM"] = "/git-cache/gitconfig"
+        if "OCTOBENCH_GIT_MIRRORS" in os.environ:
+            self._ensure()
+            count = int(env["GIT_CONFIG_COUNT"]) if "GIT_CONFIG_COUNT" in env else 0
+            config = {"safe.directory": "*"}
+            config.update({f"url.{url}.insteadOf": repo for repo, url in self._mirror_urls.items()})
+            for key, value in config.items():
+                env[f"GIT_CONFIG_KEY_{count}"] = key
+                env[f"GIT_CONFIG_VALUE_{count}"] = value
+                count += 1
+            env["GIT_CONFIG_COUNT"] = str(count)
         return env
 
     def container_workspace(self) -> str:

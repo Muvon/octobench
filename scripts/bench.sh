@@ -65,7 +65,7 @@ esac
 
 # ── Credentials: presence only, never the value ─────────────────────────────
 need_env() {
-  [ -n "${!1}" ] || { echo "FATAL: $1 is not set" >&2; exit 2; }
+  [ -n "${!1:-}" ] || { echo "FATAL: $1 is not set" >&2; exit 2; }
 }
 need_env OPENROUTER_API_KEY   # judge panel
 case "$CLIENT" in
@@ -90,8 +90,11 @@ if [ "$CLIENT" = octomind ]; then export OCTOMIND_AGENT=developer; fi
 # Local git mirrors (scripts/build_git_mirrors.sh): containers fetch pinned
 # SHAs from bare mirrors instead of github — the anonymous rate limit poisoned
 # two campaigns before this existed.
-if [ -d "$HOME/.cache/octobench/git-mirrors" ]; then
+if [ "${OCTOBENCH_GIT_MIRRORS+x}" != x ] && [ -d "$HOME/.cache/octobench/git-mirrors" ]; then
   export OCTOBENCH_GIT_MIRRORS="$HOME/.cache/octobench/git-mirrors"
+fi
+if [ "${OCTOBENCH_GIT_MIRRORS+x}" = x ]; then
+  scripts/git_mirror_daemon.sh start "$IMAGE"
   echo "git mirrors: $OCTOBENCH_GIT_MIRRORS"
 fi
 # Authenticated github fetches for HARNESS phases (runners/executor.py
@@ -148,7 +151,7 @@ PYEOF
   fi
   # opencode is the one client not baked into the agent image; without the
   # override every case dies as "opencode: not found" and records as a run.
-  [ -n "$OPENCODE_BIN" ] && [ -x "$OPENCODE_BIN" ] || {
+  [ -n "${OPENCODE_BIN:-}" ] && [ -x "$OPENCODE_BIN" ] || {
     echo "FATAL: OPENCODE_BIN must point at an executable (opencode is not in $IMAGE)" >&2; exit 2; }
 fi
 if [ "$CLIENT" = octomind ]; then
@@ -303,9 +306,9 @@ if [ "$MODE" = longrun ]; then
     # GitHub anonymous rate limit: when tripped, every setup.sh dies in ~0.3s
     # with "could not read Username" and the whole list burns as setup-fails
     # in seconds (2026-09-02). Pause until anonymous fetch works again.
-    # With GITHUB_TOKEN set the harness fetches authenticated (no anonymous
-    # limit), so probing anonymously would only false-pause the run.
-    until [ -n "${GITHUB_TOKEN:-}" ] || timeout 20 git ls-remote --heads https://github.com/CLIUtils/CLI11 >/dev/null 2>&1; do
+    # With mirrors or GITHUB_TOKEN the harness avoids the anonymous limit,
+    # so probing anonymously would only false-pause the run.
+    until [ -n "${OCTOBENCH_GIT_MIRRORS:-}" ] || [ -n "${GITHUB_TOKEN:-}" ] || timeout 20 git ls-remote --heads https://github.com/CLIUtils/CLI11 >/dev/null 2>&1; do
       echo "PAUSE github anonymous fetch unavailable before $sid; retry in 300s $(date -u +%FT%TZ)"
       sleep 300
     done

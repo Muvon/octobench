@@ -1,0 +1,54 @@
+id: rust_wasmtime_component_exceptions
+name: Contain uncaught Wasm exceptions at component boundaries
+category: dev
+difficulty: expert
+timeout_minutes: 90
+meta:
+  repo: https://github.com/bytecodealliance/wasmtime
+  pr_url: https://github.com/bytecodealliance/wasmtime/pull/14549
+  pr: 14549
+  task_type: bug-fix
+  failure_modes: [wrong-result]
+  prompt_source: composite
+  prompt_style: outcome-request
+  spec_level: behavioral
+  test_visibility: mixed
+  capability_tags: [debugging, cross-file, concurrency, lifecycle, compatibility]
+  target_branch: main
+  merged_at: 2026-10-05T22:46:59Z
+  provenance_note: >-
+    Squash merge by human author alexcrichton, per supplied harvest metadata.
+    The cached PR body links the AI policy in its template without declaring
+    AI authorship. Review history and commit co-authorship are not cached.
+  base_sha: b138f65f222f44b926369704ed7aac8ac4d51300
+  gold_sha: 894553615544793e912f79ac954baf358eab3b8b
+  verified: true # fail-to-pass proven 3x 2026-10-15 (scripts/verify_case.sh, VERIFY_REPEAT=3)
+  validation_note: >-
+    Complete cached component tests and both unchanged core-Wasm regressions
+    were audited. Selection covers component boundaries, local catching,
+    multi-value returns, and catching through a tail call with stack arguments.
+    Uncaught core-Wasm propagation to the host is not directly tested.
+    Fail-at-base/pass-with-gold-source proof, determinism, and calibration
+    remain unverified. Existing base tests are visible; gold additions and
+    changed expectations are restored only for validation.
+  test_paths:
+    - tests/misc_testsuite/component-model/async/exceptions.wast
+    - tests/misc_testsuite/component-model/exceptions.wast
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Please make uncaught Wasm exceptions leaving a component trap with
+  "uncaught exception propagated out of component", so they cannot be caught
+  in another component or escape to the host as Wasm exceptions.
+  Cover direct component exports and cross-component calls with every
+  combination of synchronous and asynchronous lifts and lowers.
+  The same applies to allocation exceptions during argument/result transfer,
+  including `task.return` string results, host-supplied string arguments, and
+  asynchronous stream string data; another component's catch-all must not
+  intercept them.
+  Exceptions escaping post-return functions, resource destructors, or
+  asynchronous callbacks must also trap, on the initial call or after a yield.
+  Keep locally caught exceptions working and preserve ordinary core-Wasm
+  argument/result values, exception handling through tail calls, and existing
+  exception propagation to the host.

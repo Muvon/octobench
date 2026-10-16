@@ -1,0 +1,45 @@
+id: rust_nushell_finally_unwind
+name: Preserve cleanup and control flow through nested try blocks
+category: dev
+difficulty: complex
+timeout_minutes: 90
+meta:
+  repo: https://github.com/nushell/nushell
+  pr_url: https://github.com/nushell/nushell/pull/19052
+  issue_url: https://github.com/nushell/nushell/issues/19051
+  pr: 19052
+  task_type: bug-fix
+  failure_modes: [wrong-result]
+  prompt_source: composite
+  prompt_style: outcome-request
+  spec_level: behavioral
+  test_visibility: hidden
+  capability_tags: [debugging, cross-file, lifecycle, state-management]
+  target_branch: main
+  merged_at: 2026-09-21T01:52:22Z
+  provenance_note: >-
+    Non-bot PR author; cached PR metadata and description showed no declared AI
+    use or AI co-author marker; substantive review remains unverified.
+  base_sha: 394a9ec849e07f32d40f2f368573f59552c16e8f
+  gold_sha: 9fc5f8d10e0f86e328021023ffc9a989e890578e
+  verified: true # fail-to-pass proven 3x 2026-10-15 (scripts/verify_case.sh, VERIFY_REPEAT=3)
+  test_paths:
+    - crates/nu-command/tests/commands/try_.rs
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Please fix nested `try` cleanup so every intervening `finally` runs exactly
+  once, innermost first, when leaving `try` or `catch`, including across
+  custom-command calls and nested `try` expressions inside cleanup.
+  After cleanup, propagate the pending error or complete `return`, `exit`,
+  `break`, or `continue` without executing skipped statements; non-error
+  transfers must bypass `catch`, preserving return values (including streams)
+  and process exit codes.
+  An error or control-flow transfer escaping cleanup supersedes the pending
+  outcome, but an error handled entirely inside cleanup does not.
+  Ordinary cleanup values must not replace a successful `try` result.
+  A `finally` parameter receives the pending error record on an error path
+  and `nothing` on a return path.
+  Loop exits must preserve surrounding handlers and leave no exited cleanup
+  handler that fires again on an unrelated error.

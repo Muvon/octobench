@@ -1,0 +1,90 @@
+id: python_pydantic_deque_schema
+name: Support deque validation and serialization in core schemas
+category: dev
+difficulty: complex
+timeout_minutes: 90
+meta:
+  repo: https://github.com/pydantic/pydantic
+  pr_url: https://github.com/pydantic/pydantic/pull/13757
+  issue_url: https://github.com/pydantic/pydantic/issues/13704
+  pr: 13757
+  task_type: feature
+  failure_modes: []
+  prompt_source: composite
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [api-design, cross-file, serialization, compatibility]
+  target_branch: main
+  merged_at: 2026-09-08T19:35:28Z
+  provenance_note: >-
+    Non-bot PR author; cached PR metadata and description showed no declared AI
+    use or AI co-author marker; substantive review remains unverified.
+  base_sha: 2261ae19e2e09f792f06613360c83fc829238111
+  gold_sha: 1c8a330acc3077e77da64e3672c7c875fb4c6eaa
+  verified: true # fail-to-pass proven 3x 2026-10-15 (scripts/verify_case.sh, VERIFY_REPEAT=3)
+  test_paths:
+    - pydantic-core/tests/validators/test_deque.py
+    - pydantic-core/tests/serializers/test_deque.py
+    - pydantic-core/tests/serializers/test_any.py
+    - pydantic-core/tests/test_errors.py
+    - pydantic-core/tests/test_schema_functions.py
+    - tests/test_validators.py
+    - tests/types/test_deque.py
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Deque constraints do not behave consistently with other supported
+  containers, and generic serialization does not reliably recognize deque
+  values.
+
+  P1. Add the public `pydantic_core.core_schema.deque_schema` constructor and
+  support the core-schema discriminator `type='deque'` in `SchemaValidator`
+  and `SchemaSerializer`, including optional `items_schema`, `strict`,
+  `min_length`, `max_length`, `fail_fast`, and `serialization` options.
+
+  P2. Lax validation accepts iterables other than strings, bytes, and mappings,
+  including dictionary views and generators, preserves iteration order and
+  duplicates, and applies the item schema's existing validation rules; strict
+  Python validation accepts deque instances and subclasses only, while strict
+  JSON validation accepts arrays. A union of deque and list schemas should
+  prefer the branch matching the input's existing container type.
+
+  P3. Validation returns a fresh plain `collections.deque`, including for deque
+  subclasses, preserves an input deque's `maxlen`, and leaves `maxlen=None` for
+  other inputs; length constraints must not change capacity.
+
+  P4. Invalid container inputs use error type `deque_type`, with
+  `Input should be a valid deque` for Python and
+  `Input should be a valid array` for JSON; typed deque diagnostics identify
+  the container as `deque[int]` and preserve existing item error codes,
+  messages, inputs, and index locations.
+
+  P5. Enforce minimum and maximum validated lengths, stop at the first item
+  error only when `fail_fast=True`, and terminate bounded validation of an
+  infinite iterable; length diagnostics use
+  `Deque should have at least N item[s] after validation, not M` or
+  `Deque should have at most N item[s] after validation, not M`, using `more`
+  when the excess iterator length is unknown.
+
+  P6. Iterator failures retain the existing `iteration_error` diagnostic,
+  `Error iterating over object, error: <ExceptionType>: <message>` for the
+  underlying exception, and invalid dictionary values must still be reported
+  when the key schema is a deque.
+
+  P7. Deque serialization returns a fresh plain deque with preserved capacity
+  in Python mode and arrays in JSON mode, supports existing indentation,
+  nesting, positive/negative index include/exclude behavior and
+  `filter_seq_schema`, and preserves ordinary mismatch fallback behavior with
+  `UserWarning` containing `Expected ` followed by the backticked expected
+  type and ` - serialized value may not be as expected`.
+
+  P8. Generic `Any` serialization and `to_jsonable_python` must recognize
+  deques and subclasses, including nested model values, with the same
+  container, capacity, filtering, and JSON behavior.
+
+  P9. Integrate the schema with Pydantic's deque annotations and `TypeAdapter`,
+  including `Field(min_length=..., max_length=..., fail_fast=...)`; the JSON
+  Schema of a deque contains only `type: array`, the item schema, and the
+  applicable `minItems`/`maxItems` keywords.

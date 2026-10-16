@@ -91,6 +91,30 @@ def _build_turn_prompt(system_prompt: str, instruction: str, is_first_turn: bool
     return f"{instruction}\n"
 
 
+def _unscored_turn_errors(turns: List[Dict[str, Any]]) -> List[str]:
+    errors: List[str] = []
+    unscored = 0
+    for idx, turn in enumerate(turns):
+        if "unscored" in turn and not isinstance(turn["unscored"], bool):
+            errors.append(f"turn {idx + 1}: unscored must be true or false")
+            continue
+        if turn.get("unscored") is not True:
+            continue
+        unscored += 1
+        reason = turn.get("unscored_reason")
+        if not isinstance(reason, str) or not reason.strip():
+            errors.append(f"turn {idx + 1}: unscored_reason is required when unscored")
+
+    if unscored > 2:
+        errors.append(f"has {unscored} unscored turns (maximum 2)")
+    ratio_limit = len(turns) // 5
+    if unscored > ratio_limit:
+        errors.append(
+            f"has {unscored} unscored turns (maximum floor({len(turns)}/5)={ratio_limit})"
+        )
+    return errors
+
+
 def _validate_turn(
     executor: Executor,
     repo_url: str,
@@ -364,6 +388,50 @@ def _synthetic_turn_result(
     }
 
 
+def _unscored_turn_result(
+    turn_number: int,
+    turn: Dict[str, Any],
+    session_mode: str,
+) -> Dict[str, Any]:
+    unknown_tokens = {
+        "semantics": TOKEN_SEMANTICS,
+        "input": None,
+        "cached_input": None,
+        "output": None,
+        "reasoning": None,
+        "aux_input": None,
+        "aux_output": None,
+        "total": None,
+    }
+    return {
+        "turn": turn_number,
+        "name": turn.get("name", f"turn_{turn_number}"),
+        "instruction": turn.get("instruction", ""),
+        "status": "unscored",
+        "unscored_reason": turn["unscored_reason"],
+        "restored_dependencies": [],
+        "restore_failed_dependencies": [],
+        "session_mode": session_mode,
+        "client_learning": None,
+        "provider": {
+            "exit_code": None,
+            "elapsed_ms": None,
+            "session_id": None,
+            "stdout": "",
+        },
+        "tokens": unknown_tokens,
+        "cost_usd": None,
+        "validation": {"exit_code": None, "passed": None},
+        "judge": None,
+        "scoring": {
+            "efficiency_score": None,
+            "raw_final_score": None,
+            "final_score": None,
+            "validation_failed": None,
+        },
+    }
+
+
 def _run_sequence(
     sequence: Dict[str, Any],
     sequence_dir: Path,
@@ -383,6 +451,9 @@ def _run_sequence(
     seq_id = sequence.get("id", sequence_dir.name)
     system_prompt = sequence.get("system_prompt", "")
     turns = sequence.get("turns", [])
+    unscored_errors = _unscored_turn_errors(turns)
+    if unscored_errors:
+        raise ValueError(f"{seq_id}: invalid unscored turns: {'; '.join(unscored_errors)}")
     max_turns = getattr(args, "max_turns", None)
     if max_turns:
         turns = turns[:max_turns]
@@ -405,6 +476,7 @@ def _run_sequence(
     turn_results: List[Dict[str, Any]] = []
     restored_dependency_turns = set()
     session_id: Optional[str] = None
+    has_run_agent = False
     fresh_sessions = os.environ.get("OCTOBENCH_FRESH_SESSIONS") == "1"
     session_mode = "fresh" if fresh_sessions else "resumed"
     setup_log: Optional[Dict[str, Any]] = None
@@ -452,8 +524,6 @@ def _run_sequence(
             gold_sha = turn.get("gold_sha", "")
             test_paths = turn.get("test_paths", [])
             test_command = turn.get("test_command", "")
-            is_first = idx == 0
-
             log(
                 f"[longrun] turn {idx + 1}/{len(turns)}: {turn_name}",
                 verbosity,
@@ -484,9 +554,31 @@ def _run_sequence(
                 else:
                     restore_failed_dependencies.append(dependency_turn)
 
+            if turn.get("unscored") is True:
+                if not _restore_dependency(
+                    executor,
+                    repo_url,
+                    gold_sha,
+                    test_paths,
+                    idx + 1,
+                    verbosity,
+                ):
+                    raise RuntimeError(
+                        f"cannot apply gold source for unscored turn {idx + 1}: {turn_name}"
+                    )
+                restored_dependency_turns.add(idx + 1)
+                turn_results.append(_unscored_turn_result(idx + 1, turn, session_mode))
+                in_flight_turn = None
+                log(
+                    f"[longrun] turn {idx + 1} unscored: {turn['unscored_reason']}",
+                    verbosity,
+                    "normal",
+                )
+                continue
+
             # A fresh session has not seen the sequence's system prompt yet.
             prompt = _build_turn_prompt(
-                system_prompt, instruction, is_first or fresh_sessions
+                system_prompt, instruction, not has_run_agent or fresh_sessions
             )
             install_guardrails(executor)
             sealed = os.environ.get("OCTOBENCH_SEAL_NETWORK") == "1"
@@ -517,6 +609,7 @@ def _run_sequence(
                 if sealed:
                     unseal_network(executor)
             provider_result = in_flight_provider_result
+            has_run_agent = True
             session_id = provider_result.session_id or session_id
 
             # Written before the cap check: a killed turn's partial trace is the
@@ -719,40 +812,47 @@ def _run_sequence(
 
     if sequence_timed_out:
         for idx in range(len(turn_results), len(turns)):
-            turn_results.append(
-                _synthetic_turn_result(
-                    idx + 1,
-                    turns[idx],
-                    "not_run",
-                    session_mode,
-                    0,
-                    None,
-                    pricing,
-                    efficiency_cfg,
-                    scoring_cfg,
+            if turns[idx].get("unscored") is True:
+                turn_results.append(
+                    _unscored_turn_result(idx + 1, turns[idx], session_mode)
                 )
-            )
+            else:
+                turn_results.append(
+                    _synthetic_turn_result(
+                        idx + 1,
+                        turns[idx],
+                        "not_run",
+                        session_mode,
+                        0,
+                        None,
+                        pricing,
+                        efficiency_cfg,
+                        scoring_cfg,
+                    )
+                )
 
     # Aggregate sequence-level metrics.
-    total_turns = len(turns)
+    scored_results = [turn for turn in turn_results if turn["status"] != "unscored"]
+    total_turns = len(scored_results)
+    unscored = len(turn_results) - total_turns
     passed = sum(
         1
-        for turn in turn_results
+        for turn in scored_results
         if turn["status"] == "completed" and turn["validation"]["passed"]
     )
     total_cost = sum(
         turn["cost_usd"]
-        for turn in turn_results
+        for turn in scored_results
         if turn["cost_usd"] is not None
     )
     total_tokens = sum(
         turn["tokens"]["total"]
-        for turn in turn_results
+        for turn in scored_results
         if turn["tokens"]["total"] is not None
     )
     # Each turn is valued separately; the sequence's score is the SUM of its
     # turn scores (avg kept for cross-length comparability).
-    sum_score = sum(t["scoring"]["final_score"] for t in turn_results)
+    sum_score = sum(t["scoring"]["final_score"] for t in scored_results)
     avg_score = sum_score / total_turns if total_turns else 0
 
     result = {
@@ -766,6 +866,7 @@ def _run_sequence(
         "turns": turn_results,
         "aggregate": {
             "total_turns": total_turns,
+            "unscored": unscored,
             "passed": passed,
             "pass_rate": round(passed / total_turns, 4) if total_turns else 0,
             "sum_final_score": round(sum_score, 2),
@@ -860,6 +961,8 @@ def _cmd_validate(args: argparse.Namespace) -> None:
             tc = t.get("test_command", "")
             if not str(tc).strip():
                 case_errs.append(f"turn {i + 1}: test_command empty")
+
+        case_errs.extend(_unscored_turn_errors(turns))
 
         if case_errs:
             for e in case_errs:

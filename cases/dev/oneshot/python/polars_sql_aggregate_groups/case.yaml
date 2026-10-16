@@ -1,0 +1,84 @@
+id: python_polars_sql_aggregate_groups
+name: Correct SQL aggregate and grouped-expression semantics
+category: dev
+difficulty: complex
+timeout_minutes: 90
+meta:
+  repo: https://github.com/pola-rs/polars
+  pr_url: https://github.com/pola-rs/polars/pull/29754
+  pr: 29754
+  task_type: bug-fix
+  failure_modes: [wrong-result, rejected-valid-input, accepted-invalid-input]
+  prompt_source: composite
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [debugging, cross-file, parser, compatibility]
+  target_branch: main
+  merged_at: 2026-10-07T10:34:23Z
+  provenance_note: >-
+    Owner checked human provenance and absence of AI disclosure. Local snapshots
+    match the supplied base and gold identities. Implementation is Rust with
+    Python API validation; this is not Python implementation coverage.
+  base_sha: f9452aa4fb28e834a092169787acabead8a9a6de
+  gold_sha: 3def0ce97303a737bd8a2aedd01043c1aef13fca
+  # Proof box log: /home/box/gold-prove/build13/python__polars_sql_aggregate_groups.log
+  verified: true # fail-to-pass proven 3x 2026-10-15 (scripts/verify_case.sh, VERIFY_REPEAT=3)
+  test_paths:
+    - crates/polars-sql/tests/functions_meta.rs
+    - py-polars/tests/unit/functions/test_when_then.py
+    - py-polars/tests/unit/operations/test_gather.py
+    - py-polars/tests/unit/operations/test_group_by.py
+    - py-polars/tests/unit/operations/test_row_encoding.py
+    - py-polars/tests/unit/operations/test_statistics.py
+    - py-polars/tests/unit/sql/test_agg_semantics.py
+    - py-polars/tests/unit/sql/test_array.py
+    - py-polars/tests/unit/sql/test_filter_clause.py
+    - py-polars/tests/unit/sql/test_group_by.py
+    - py-polars/tests/unit/sql/test_subqueries.py
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  SQL aggregates can treat a constant or scalar subquery as one value per
+  group instead of one value per input row. This produces incorrect empty-input
+  results, counts, sums and string aggregation. Grouped expressions also have
+  inconsistent bounds, scalar-shape and covariance behavior.
+
+  P1. Aggregate value arguments must follow per-row SQL semantics for constants,
+  expressions and scalar subqueries, including correlated subqueries, grouped
+  and ungrouped queries, empty inputs, NULL, DISTINCT and FILTER. Scalar
+  parameters such as STRING_AGG's separator and QUANTILE_CONT's quantile remain
+  single values, unaffected by filtering the input rows. Preserve agreement
+  between in-memory and streaming execution, and between inferred and collected
+  schemas, including column names and result order where ORDER BY is specified.
+
+  P2. Preserve aggregate result types: integer-literal SUM uses Int64, including
+  signed values and FILTER; TOTAL produces floating-point results. Summing
+  SMALLINT constants produces Int64, SUM(DISTINCT TRUE) uses the index-count
+  type, and REAL sums remain Float32. Standard deviation or variance of repeated
+  non-finite constants produces NaN. Unsupported string sums raise
+  InvalidOperationError containing "`sum` operation not supported".
+
+  P3. FILTER predicates referencing columns must be Boolean; otherwise raise
+  InvalidOperationError containing "must be of type `Boolean`". Constant TRUE,
+  FALSE and NULL predicates must count the appropriate rows.
+
+  P4. HAVING may reference group keys, key aliases and aggregates together.
+  Without GROUP BY, reject selected columns outside aggregates after applying
+  wildcard EXCLUDE and REPLACE. Raise SQLSyntaxError identifying the column with
+  the fragment "'<column>' should participate in the GROUP BY". Excluding every
+  input column while selecting an aggregate remains valid.
+
+  P5. Grouped gather with null_on_oob=True must return null for invalid positive
+  or negative indices, including integers outside the index type or Int64
+  range; valid indices retain their values and order. Without that option,
+  invalid indices raise OutOfBoundsError. Preserve the same bounds behavior
+  outside groups.
+
+  P6. Sample covariance of a singleton is null; population covariance is zero,
+  with ordinary multirow covariance unchanged. Empty grouped aggregation of
+  repeated integer literals retains its Int32 output type. Scalar conditional
+  expressions built from shared scalar aggregates remain one row on empty and
+  nonempty input; when the condition is false and there is no otherwise value,
+  return a null of the result type, including the index-count type for counts.

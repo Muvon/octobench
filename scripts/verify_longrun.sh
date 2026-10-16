@@ -64,6 +64,8 @@ print(json.dumps({
     "gold": t["gold_sha"],
     "paths": t["test_paths"],
     "cmd": t["test_command"],
+    "unscored": t.get("unscored", False),
+    "unscored_reason": t.get("unscored_reason", ""),
 }))
 PYEOF
 )"
@@ -71,6 +73,8 @@ PYEOF
   GOLD_SHA="$(echo "${TURN_JSON}" | "${PYTHON_BIN}" -c "import json,sys; print(json.load(sys.stdin)['gold'])")"
   TEST_PATHS="$(echo "${TURN_JSON}" | "${PYTHON_BIN}" -c "import json,sys; print('\n'.join(json.load(sys.stdin)['paths']))")"
   TEST_CMD="$(echo "${TURN_JSON}" | "${PYTHON_BIN}" -c "import json,sys; print(json.load(sys.stdin)['cmd'])")"
+  UNSCORED="$(echo "${TURN_JSON}" | "${PYTHON_BIN}" -c "import json,sys; print('true' if json.load(sys.stdin)['unscored'] else 'false')")"
+  UNSCORED_REASON="$(echo "${TURN_JSON}" | "${PYTHON_BIN}" -c "import json,sys; print(json.load(sys.stdin)['unscored_reason'])")"
 
   echo ""
   echo "--- turn $((i+1))/${NUM_TURNS}: ${TURN_NAME} (gold ${GOLD_SHA:0:12}) ---"
@@ -79,6 +83,7 @@ PYEOF
 set -euo pipefail
 git remote add origin '${REPO_URL}' 2>/dev/null || true
 git fetch -q --depth 2 origin '${GOLD_SHA}'
+if [[ '${UNSCORED}' = true ]]; then exit 0; fi
 while IFS= read -r t; do
   [[ -n "\$t" ]] && git checkout -q '${GOLD_SHA}' -- "\$t"
 done <<< '${TEST_PATHS}'
@@ -94,12 +99,17 @@ EOS
     BAD=$((BAD+1)); continue
   fi
 
-  if step -c "cd /workspace && ${TEST_CMD}" > "${WS}/.t$((i+1)).pre.log" 2>&1; then
-    echo "  BAD: tests already PASS before the fix"
-    tail -5 "${WS}/.t$((i+1)).pre.log"
-    BAD=$((BAD+1))
-  else
-    echo "  fail-at-pre OK"
+  if [[ "${UNSCORED}" != true ]]; then
+    # VERIFY_REPEAT=N (default 1): each leg runs N times; GOLD determinism needs N/N.
+    pre_ok=1
+    for ((rep = 1; rep <= ${VERIFY_REPEAT:-1}; rep++)); do
+      if step -c "cd /workspace && ${TEST_CMD}" > "${WS}/.t$((i+1)).pre.log" 2>&1; then
+        echo "  BAD: tests already PASS before the fix (run ${rep})"
+        tail -5 "${WS}/.t$((i+1)).pre.log"
+        pre_ok=0; break
+      fi
+    done
+    if [[ ${pre_ok} -eq 1 ]]; then echo "  fail-at-pre OK"; else BAD=$((BAD+1)); fi
   fi
 
   # Apply with --index so a follow-up commit captures exactly the patch
@@ -129,13 +139,21 @@ EOS
     BAD=$((BAD+1)); continue
   fi
 
-  if ! step -c "cd /workspace && ${TEST_CMD}" > "${WS}/.t$((i+1)).post.log" 2>&1; then
-    echo "  BAD: tests still FAIL with gold source applied"
-    tail -20 "${WS}/.t$((i+1)).post.log"
-    BAD=$((BAD+1))
-  else
-    echo "  pass-after-gold OK"
+  if [[ "${UNSCORED}" = true ]]; then
+    echo "  unscored (${UNSCORED_REASON})"
+    step -c "git remote remove origin 2>/dev/null || true" >/dev/null 2>&1 || true
+    continue
   fi
+
+  post_ok=1
+  for ((rep = 1; rep <= ${VERIFY_REPEAT:-1}; rep++)); do
+    if ! step -c "cd /workspace && ${TEST_CMD}" > "${WS}/.t$((i+1)).post.log" 2>&1; then
+      echo "  BAD: tests still FAIL with gold source applied (run ${rep})"
+      tail -20 "${WS}/.t$((i+1)).post.log"
+      post_ok=0; break
+    fi
+  done
+  if [[ ${post_ok} -eq 1 ]]; then echo "  pass-after-gold OK"; else BAD=$((BAD+1)); fi
 
   # Restore test files to HEAD (base); keep the applied source fix.
   RESTORE="$(cat <<EOS

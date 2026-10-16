@@ -1,0 +1,100 @@
+id: cpp_duckdb_parquet_bound_schema
+name: Preserve declared Parquet schemas across split scans
+category: dev
+difficulty: complex
+timeout_minutes: 90
+meta:
+  repo: https://github.com/duckdb/duckdb
+  pr_url: https://github.com/duckdb/duckdb/pull/26827
+  pr: 26827
+  task_type: feature
+  failure_modes: []
+  prompt_source: composite
+  prompt_style: acceptance-spec
+  spec_level: full-spec
+  test_visibility: hidden
+  capability_tags: [cross-file, api-design, serialization, compatibility]
+  target_branch: v2.0-cyanoptera
+  merged_at: 2026-10-12T15:12:33Z
+  provenance_note: >-
+    Non-bot PR author; cached PR metadata and description showed no declared AI
+    use or AI co-author marker; substantive review remains unverified.
+  base_sha: 6a1e9af005f66c5739e223fd237331ab3bae5c59
+  gold_sha: 87ef6e10b6f7b1325e9c66154feb54b06c2445ba
+  verified: true # fail-to-pass proven 3x 2026-10-15 (scripts/verify_case.sh, VERIFY_REPEAT=3)
+  test_paths:
+    - test/parquet/parquet_bound_schema.test
+    - test/parquet/parquet_bound_schema_filter_mapping.test
+    - test/parquet/parquet_bound_schema_nested_roles.test
+    - test/parquet/parquet_bound_schema_plans.test
+    - test/parquet/parquet_bound_schema_roles.test
+    - test/parquet/parquet_bound_schema_roundtrip.test
+    - test/parquet/parquet_bound_schema_statistics.test
+    - test/parquet/parquet_bound_schema_validation.test
+system_prompt: |
+  You are an autonomous software engineer working in an existing repository at the current directory.
+  Resolve the requested task completely, as the project's maintainers would. When done, stop.
+instruction: |
+  Splitting a Parquet scan can change its inferred schema: a group starting
+  with an INTEGER file can turn a later DOUBLE value of 1.4 into 1 before
+  an outer cast sees it.
+
+  D1. Add an opt-in `bound_schema` argument to `read_parquet` and
+  `parquet_scan`: a non-NULL STRUCT whose keys are the original reader column
+  names, in the requested output order, and whose values are non-NULL VARCHAR
+  type declarations; this complete declared schema governs output independently
+  of file order.
+
+  D2. Values used by projection, filters, and joins must have the declared
+  types, including widening and narrowing conversions; a split scan must agree
+  with an equivalent unsplit scan, and existing `schema=` default/rename
+  behavior and calls without `bound_schema` must retain their semantics.
+
+  D3. Resolve nested fields by their names and preserve container, element, and
+  parent NULL distinctions; missing nested children become NULL, while a
+  missing physical root fails only when demanded, including by `count(root)`,
+  and its diagnostic names that root.
+
+  D4. Preserve native child-projection behavior: with optimization enabled,
+  selecting a valid child must succeed despite an unused sibling's invalid
+  conversion; reading the whole STRUCT, or disabling that projection
+  optimization, must report `Could not convert` for the invalid conversion;
+  disjoint STRUCT casts inside LIST/MAP values retain
+  `STRUCT to STRUCT cast must have at least one matching member`.
+
+  D5. Materialized filename, file-row-number, and Hive columns occupy their
+  declared positions and retain their generated roles despite case-insensitive
+  physical name shadows, custom filename names, file reordering, filters, and
+  prepared-statement reuse; filename has type VARCHAR, file-row-number has type
+  BIGINT, and Hive types must be explicit and agree with the declaration.
+
+  D6. Declaration validation must be independent of option order, require
+  explicit `hive_partitioning`, reject conflicting generated/Hive roles before
+  file access or unsupported empty-input handling, and reject combination with
+  `schema=`, `union_by_name=true`, or `allow_empty=true`. When `schema` is also
+  supplied, report that incompatibility even if `hive_partitioning` is omitted.
+
+  D7. Physical statistics and expression shortcuts must not change results
+  when declared types, column positions, nested fields, or generated roles
+  differ; caller-supplied `column_statistics` describe the declared target
+  domain.
+
+  D8. Preserve the explicit declaration and its types through `EXPLAIN (SQL)`
+  reconstruction, logical-plan serialization, repeated prepared execution,
+  empty physical files, and scans whose files are all pruned.
+
+  D9. Keep these diagnostic fragments for the corresponding declaration
+  errors:
+
+  - Non-STRUCT/NULL declaration: `expects a non-NULL STRUCT`.
+  - NULL/non-string type value: `types must be non-NULL VARCHAR`.
+  - Missing explicit Hive setting: `requires explicit hive_partitioning`.
+  - Missing Hive type declarations:
+    `requires hive_types for every Hive partition column`.
+  - Missing required role column: `must include column "<name>"`.
+  - Wrong role-column type: `must include column "<name>" with type <TYPE>`.
+  - Generated/Hive role collision: `cannot assign generated and Hive roles`.
+  - Unsupported combinations: `does not support union_by_name`,
+    `does not support allow_empty`, and `cannot be combined with 'schema'`.
+  - Invalid `ANY` type:
+    `Value "ANY" can not be converted to a DuckDB Type.`

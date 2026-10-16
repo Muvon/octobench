@@ -144,7 +144,8 @@ def rejudge_file(
 
     for sequence in data.get("results", []):
         for turn in sequence.get("turns") or []:
-            if not _needs_rejudge(turn):
+            # Unscored turns never ran an agent, so there is nothing to judge.
+            if turn.get("status") == "unscored" or not _needs_rejudge(turn):
                 continue
             logs_dir = _logs_dir(results_path, sequence, int(turn["turn"]))
             prompts = sorted(logs_dir.glob("_prompt_*.txt"))

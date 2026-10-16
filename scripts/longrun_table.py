@@ -40,16 +40,20 @@ def load(pattern: str) -> dict:
 
 
 def cell(seq: dict) -> str:
-    agg = seq.get("aggregate") or {}
     turns = seq.get("turns") or []
     if not turns:
         return "setup-fail" if seq.get("error") else "—"
-    minutes = round(sum(t["provider"]["elapsed_ms"] or 0 for t in turns) / 60000)
+    scored = [turn for turn in turns if turn.get("status") != "unscored"]
+    unscored = len(turns) - len(scored)
+    passed = sum(bool(turn["validation"]["passed"]) for turn in scored)
+    minutes = round(sum(t["provider"]["elapsed_ms"] or 0 for t in scored) / 60000)
+    unscored_text = f" unscored:{unscored}" if unscored else ""
     return (
-        f"{agg.get('passed', 0)}/{agg.get('total_turns', len(turns))} "
-        f"Σ{agg.get('sum_final_score', 0):.1f} "
-        f"${agg.get('total_cost_usd', 0):.2f} "
-        f"{(agg.get('total_tokens') or 0) / 1e6:.1f}M {minutes}m"
+        f"{passed}/{len(scored)} "
+        f"Σ{sum(t['scoring']['final_score'] for t in scored):.1f} "
+        f"${sum(t['cost_usd'] or 0 for t in scored):.2f} "
+        f"{sum(t['tokens']['total'] or 0 for t in scored) / 1e6:.1f}M {minutes}m"
+        f"{unscored_text}"
     )
 
 
@@ -76,7 +80,15 @@ def main() -> None:
     rows = []
     for p in sorted(Path("cases/dev/longrun").rglob("sequence.yaml")):
         spec = yaml.safe_load(p.read_text())
-        rows.append((f"{p.parent.parent.name}/{p.parent.name}", spec["id"], len(spec["turns"])))
+        unscored = sum(turn.get("unscored") is True for turn in spec["turns"])
+        rows.append(
+            (
+                f"{p.parent.parent.name}/{p.parent.name}",
+                spec["id"],
+                len(spec["turns"]) - unscored,
+                unscored,
+            )
+        )
     if suite:
         listing = Path("configs/suites") / f"{suite}.txt"
         if not listing.exists():
@@ -93,24 +105,31 @@ def main() -> None:
         f"_Updated {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC. "
         "Cell = passed/turns · Σ sum of turn final scores · cost · total tokens "
         "(incl. cache reads) · agent wall time (sum of agent invocations; "
-        "excludes setup/validation/judging)._",
+        "excludes setup/validation/judging). Unscored turns are shown separately "
+        "and excluded from every metric._",
         "",
         "| sequence (turns) | " + " | ".join(c[0] for c in columns) + " |",
         "|---" * (len(columns) + 1) + "|",
     ]
-    for path_label, sid, n_turns in rows:
+    for path_label, sid, n_turns, unscored in rows:
         cells = [cell(c[1][sid]) if sid in c[1] else "—" for c in columns]
-        lines.append(f"| {path_label} ({n_turns}) | " + " | ".join(cells) + " |")
+        turn_label = f"{n_turns} scored"
+        if unscored:
+            turn_label += f", {unscored} unscored"
+        lines.append(f"| {path_label} ({turn_label}) | " + " | ".join(cells) + " |")
 
     lines.append("")
     for label, seqs in columns:
         if not seqs:
             continue
-        turns = [t for s in seqs.values() for t in (s.get("turns") or [])]
+        all_turns = [t for s in seqs.values() for t in (s.get("turns") or [])]
+        turns = [t for t in all_turns if t.get("status") != "unscored"]
+        unscored = len(all_turns) - len(turns)
         passed = sum(1 for t in turns if t["validation"]["passed"])
         lines.append(
             f"- **{label}**: {len(seqs)}/{len(rows)} sequences · "
             f"{passed}/{len(turns)} turns passed · "
+            f"unscored: {unscored} · "
             f"ΣΣ {sum(t['scoring']['final_score'] for t in turns):.1f} · "
             f"${sum(t['cost_usd'] or 0 for t in turns):.2f} · "
             f"{sum(t['tokens']['total'] or 0 for t in turns) / 1e6:.0f}M tokens · "
