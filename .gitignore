@@ -1,4 +1,5 @@
 **/__pycache__
+/.venv/
 /cases/_specs/
 /results-*/**
 /octobench.egg-info/
@@ -8,3 +9,7 @@
 
 # Local octomind HEAD build copied into the head agent image (docker/Dockerfile.agent.head).
 /docker/octomind-head
+
+# Local-only: GOLD case-building audit notes and bench.sh per-run suite copies.
+/docs/gold/audit/
+/.suite-*/
