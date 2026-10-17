@@ -55,7 +55,7 @@ def _reasoning(items: List[Item]) -> Optional[int]:
 
 
 def _breakdown(items: List[Item]) -> List[str]:
-    """fresh, cache read, output, reasoning, total, cost, agent time."""
+    """fresh, cache read, output, reasoning, total, cost, agent time, efficiency score."""
     return [
         _count(sum(item.fresh_input for item in items)),
         _count(sum(item.cache_read for item in items)),
@@ -64,10 +64,18 @@ def _breakdown(items: List[Item]) -> List[str]:
         _count(sum(item.total_tokens for item in items)),
         _cost(items),
         _minutes(sum(item.elapsed_ms for item in items)),
+        _efficiency(items),
     ]
 
 
-BREAKDOWN_HEADER = "Fresh input | Cache read | Output | Reasoning | Total tokens | Cost | Agent time"
+BREAKDOWN_HEADER = (
+    "Fresh input | Cache read | Output | Reasoning | Total tokens | Cost | Agent time | Eff. score"
+)
+
+
+def _efficiency(items: List[Item]) -> str:
+    scores = [item.efficiency_score for item in items if item.efficiency_score is not None]
+    return f"{statistics.mean(scores):.1f}" if scores else "UNKNOWN"
 
 
 def _round_key(round_id: str) -> int:
@@ -151,12 +159,14 @@ def render(label: str, rounds: Dict[str, Dict[str, Item]], links: Optional[Dict[
         "Total tokens = fresh input + cache read + output (+ reasoning only where a client",
         "reports it separately; Codex output already includes reasoning). Agent time excludes",
         "setup, validation and judging. Unscored long-run turns are excluded from every sum.",
+        "Eff. score is the mean harness efficiency score (0-100, compute_efficiency_score:",
+        "exponential decay of agent time and cost); it is diagnostic and absolute.",
         "Missing evidence is UNKNOWN, never zero.",
         "",
         "## Per round",
         "",
         f"| Round | One-shots passed | Sequence turns passed | Unscored turns | {BREAKDOWN_HEADER} |",
-        "|---" * 11 + "|",
+        "|---" * 12 + "|",
     ]
     for round_id in order:
         items = list(rounds[round_id].values())
@@ -173,10 +183,10 @@ def render(label: str, rounds: Dict[str, Dict[str, Item]], links: Optional[Dict[
         "## Across rounds",
         "",
         "Per item: rounds passed (sequences: scored turns passed over all rounds) and the",
-        "median over rounds of total tokens, cost and agent time.",
+        "median over rounds of total tokens, cost and agent time, and the mean efficiency score.",
         "",
-        "| Item | Passed | Median total tokens | Median cost | Median agent time |",
-        "|---|---|---|---|---|",
+        "| Item | Passed | Median total tokens | Median cost | Median agent time | Mean eff. score |",
+        "|---|---|---|---|---|---|",
     ]
     for name, per_round in rows.items():
         samples = [
@@ -201,7 +211,8 @@ def render(label: str, rounds: Dict[str, Dict[str, Item]], links: Optional[Dict[
             f"| {_linked(name, links)} | {passed} "
             f"| {_count(statistics.median(sum(i.total_tokens for i in s) for s in samples))} "
             f"| {'$%.2f' % statistics.median(costs) if costs else 'UNKNOWN'} "
-            f"| {_minutes(statistics.median(sum(i.elapsed_ms for i in s) for s in samples))} |"
+            f"| {_minutes(statistics.median(sum(i.elapsed_ms for i in s) for s in samples))} "
+            f"| {_efficiency([i for s in samples for i in s])} |"
         )
 
     for round_id in order:
@@ -210,7 +221,7 @@ def render(label: str, rounds: Dict[str, Dict[str, Item]], links: Optional[Dict[
             f"## Round {round_id} — per item",
             "",
             f"| Item | Verdict | {BREAKDOWN_HEADER} |",
-            "|---" * 9 + "|",
+            "|---" * 10 + "|",
         ]
         for name, per_round in rows.items():
             items = per_round.get(round_id)
@@ -229,11 +240,11 @@ def render(label: str, rounds: Dict[str, Dict[str, Item]], links: Optional[Dict[
                 f"### Round {round_id} — `{name}` turns",
                 "",
                 f"| Turn | Status | {BREAKDOWN_HEADER} |",
-                "|---" * 9 + "|",
+                "|---" * 10 + "|",
             ]
             for item in sorted(items, key=_turn_no):
                 if item.kind == "unscored":
-                    lines.append(f"| {_turn_no(item)} | unscored (gold applied) |" + " — |" * 7)
+                    lines.append(f"| {_turn_no(item)} | unscored (gold applied) |" + " — |" * 8)
                     continue
                 status = "PASS" if item.passed else "FAIL"
                 lines.append(

@@ -65,6 +65,8 @@ class Item:
     # Codex reports reasoning as a subset of output tokens; other clients report it separately.
     reasoning_in_output: bool = False
     assisted: bool = False
+    # Harness 0-100 time/cost score from scoring.compute_efficiency_score.
+    efficiency_score: Optional[float] = None
 
     @property
     def total_tokens(self) -> int:
@@ -98,6 +100,7 @@ class RoundStats:
     assisted_turns_passed: int
     assisted_turns_total: int
     judge_mean: Optional[float]
+    efficiency_score_mean: Optional[float]
     totals: Totals
 
 
@@ -225,6 +228,7 @@ def _oneshot_item(record: dict, suite: Optional[Suite], results_path: Path) -> O
             ),
         ),
         reasoning_in_output=reasoning_in_output,
+        efficiency_score=scoring.get("efficiency_score"),
     )
 
 
@@ -346,6 +350,7 @@ def _longrun_items(
             elapsed_ms=elapsed_ms,
             efficiency=efficiency,
             reasoning_in_output=reasoning_in_output,
+            efficiency_score=(turn.get("scoring") or {}).get("efficiency_score"),
             assisted=(
                 status != "not_run"
                 and (gold_restored or bool(turn.get("restored_dependencies")))
@@ -405,6 +410,9 @@ def _round_stats(items: Iterable[Item]) -> RoundStats:
     # Long-run judge prompts carried only changed file paths, not the diff, until
     # cli/longrun.py switched to build_evidence (2026-10-17); one-shots only.
     judges = [item.judge for item in oneshot if item.judge is not None]
+    efficiency_scores = [
+        item.efficiency_score for item in oneshot + longrun if item.efficiency_score is not None
+    ]
     return RoundStats(
         oneshot_rate=(sum(item.passed for item in oneshot) / len(oneshot) if oneshot else None),
         oneshot_passed=sum(item.passed for item in oneshot),
@@ -417,6 +425,9 @@ def _round_stats(items: Iterable[Item]) -> RoundStats:
         assisted_turns_passed=sum(item.passed for item in longrun if item.assisted),
         assisted_turns_total=sum(item.assisted for item in longrun),
         judge_mean=statistics.mean(judges) if judges else None,
+        efficiency_score_mean=(
+            statistics.mean(efficiency_scores) if efficiency_scores else None
+        ),
         totals=_totals(oneshot + longrun),
     )
 
@@ -892,6 +903,16 @@ def _metric_rows(
         ],
     ))
     rows.append((
+        "diagnostic only — harness efficiency score (0–100)",
+        [
+            _optional_summary(
+                (stat.efficiency_score_mean for stat in all_stats[label]),
+                _number,
+            )
+            for label, _rounds in columns
+        ],
+    ))
+    rows.append((
         "efficiency-only headline — matched work cost/time index",
         [
             _optional_summary(
@@ -1063,7 +1084,10 @@ def render(columns: List[Tuple[str, Dict[str, Dict[str, Item]]]]) -> str:
         "separately; Codex output already includes its reasoning tokens. Missing client "
         "evidence is UNKNOWN, "
         "never zero. Judge mean is diagnostic only and covers one-shots: long-run judge "
-        "prompts before 2026-10-17 listed changed paths without the diff. GOLD never merges "
+        "prompts before 2026-10-17 listed changed paths without the diff. The harness "
+        "efficiency score is the mean over scored runs of compute_efficiency_score (0–100; "
+        "exponential decay of agent time and cost against the scoring config references); "
+        "it is diagnostic and absolute, not a comparison. GOLD never merges "
         "solve and efficiency._",
     ])
     return "\n".join(lines)
