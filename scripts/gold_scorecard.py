@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import glob
 import json
+import math
+import random
 import re
 import statistics
 import sys
@@ -35,6 +37,7 @@ from scoring.efficiency import (  # noqa: E402
     EfficiencyMetrics,
     extract_efficiency,
     geometric_mean,
+    relative_index_ratios,
     relative_indexes,
 )
 
@@ -56,9 +59,17 @@ class Item:
     fresh_input: int
     cache_read: int
     output: int
-    reasoning: int
+    reasoning: Optional[int]
     elapsed_ms: int
     efficiency: Optional[EfficiencyMetrics]
+    # Codex reports reasoning as a subset of output tokens; other clients report it separately.
+    reasoning_in_output: bool = False
+    assisted: bool = False
+
+    @property
+    def total_tokens(self) -> int:
+        extra = 0 if self.reasoning_in_output or self.reasoning is None else self.reasoning
+        return self.fresh_input + self.cache_read + self.output + extra
 
 
 @dataclass(frozen=True)
@@ -69,8 +80,9 @@ class Totals:
     fresh_input: int
     cache_read: int
     output: int
-    reasoning: int
+    reasoning: Optional[int]
     elapsed_ms: int
+    total_tokens: int
 
 
 @dataclass(frozen=True)
@@ -83,6 +95,8 @@ class RoundStats:
     longrun_turns_passed: int
     longrun_turns_total: int
     longrun_turns_unscored: int
+    assisted_turns_passed: int
+    assisted_turns_total: int
     judge_mean: Optional[float]
     totals: Totals
 
@@ -181,9 +195,15 @@ def _oneshot_item(record: dict, suite: Optional[Suite], results_path: Path) -> O
     validate = (record.get("scripts") or {}).get("validate") or {}
     passed = not scoring.get("validation_failed", validate.get("exit_code", 1) != 0)
     fresh, cache, output, reasoning = _tokens(record.get("tokens"))
+    record_dir = results_path.parent / case_id / str(record["setup"])
+    reasoning_in_output = False
+    if (record.get("tokens") or {}).get("reasoning") is None:
+        reasoning = None
+        if str(record["provider"]) == "codex":
+            reasoning = _codex_reasoning_total(record_dir / "logs")
+            reasoning_in_output = True
     cost = record.get("cost_usd")
     elapsed_ms = _elapsed_ms((record.get("result") or {}).get("elapsed_ms"), case_id)
-    record_dir = results_path.parent / case_id / str(record["setup"])
     return Item(
         key=f"oneshot:{case_id}",
         kind="oneshot",
@@ -204,7 +224,26 @@ def _oneshot_item(record: dict, suite: Optional[Suite], results_path: Path) -> O
                 "killed_by_case_cap" if record.get("timed_out") is True else None
             ),
         ),
+        reasoning_in_output=reasoning_in_output,
     )
+
+
+def _codex_reasoning_total(log_dir: Path) -> Optional[int]:
+    """Last cumulative ``reasoning_output_tokens`` codex reported for its thread."""
+    raw = log_dir / "provider.raw.jsonl"
+    if not raw.is_file():
+        return None
+    value: Optional[int] = None
+    for line in raw.read_text(errors="replace").splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("type") == "turn.completed":
+            usage = event.get("usage")
+            if isinstance(usage, dict) and isinstance(usage.get("reasoning_output_tokens"), int):
+                value = usage["reasoning_output_tokens"]
+    return value
 
 
 def _safe_id(value: str) -> str:
@@ -227,12 +266,16 @@ def _longrun_items(
         if len(matches) > 1:
             raise ValueError(f"sequence matches multiple suite entries: {sequence_id}")
         limit = matches[0]
+    # Codex usage counters are cumulative per thread; per-turn values are deltas.
+    codex_reasoning_seen: Dict[str, int] = {}
+    gold_restored = False
     for turn in record.get("turns") or []:
         turn_no = int(turn["turn"])
         if limit is not None and turn_no > limit:
             continue
         status = turn.get("status")
         if status == "unscored":
+            gold_restored = True
             yield Item(
                 key=f"unscored:{sequence_id}:{turn_no}",
                 kind="unscored",
@@ -249,6 +292,7 @@ def _longrun_items(
             )
             continue
         fresh, cache, output, reasoning = _tokens(turn.get("tokens"))
+        reasoning_in_output = False
         cost = turn.get("cost_usd")
         provider_block = turn.get("provider") or {}
         elapsed_ms = _elapsed_ms(
@@ -265,6 +309,15 @@ def _longrun_items(
             / "turns"
             / f"turn_{turn_no}"
         )
+        if (turn.get("tokens") or {}).get("reasoning") is None:
+            reasoning = None
+            if str(record["provider"]) == "codex" and status != "not_run":
+                reasoning_in_output = True
+                cumulative = _codex_reasoning_total(record_dir / "logs")
+                if cumulative is not None:
+                    thread = str(provider_block.get("session_id") or "")
+                    reasoning = max(cumulative - codex_reasoning_seen.get(thread, 0), 0)
+                    codex_reasoning_seen[thread] = cumulative
         efficiency = None
         if status != "not_run":
             efficiency = extract_efficiency(
@@ -292,6 +345,11 @@ def _longrun_items(
             reasoning=reasoning,
             elapsed_ms=elapsed_ms,
             efficiency=efficiency,
+            reasoning_in_output=reasoning_in_output,
+            assisted=(
+                status != "not_run"
+                and (gold_restored or bool(turn.get("restored_dependencies")))
+            ),
         )
 
 
@@ -321,8 +379,13 @@ def _totals(items: Iterable[Item]) -> Totals:
         fresh_input=sum(item.fresh_input for item in materialized),
         cache_read=sum(item.cache_read for item in materialized),
         output=sum(item.output for item in materialized),
-        reasoning=sum(item.reasoning for item in materialized),
+        reasoning=(
+            None
+            if any(item.reasoning is None for item in materialized)
+            else sum(item.reasoning or 0 for item in materialized)
+        ),
         elapsed_ms=sum(item.elapsed_ms for item in materialized),
+        total_tokens=sum(item.total_tokens for item in materialized),
     )
 
 
@@ -339,7 +402,9 @@ def _round_stats(items: Iterable[Item]) -> RoundStats:
     sequence_rates = [
         sum(item.passed for item in turns) / len(turns) for turns in by_sequence.values()
     ]
-    judges = [item.judge for item in materialized if item.judge is not None]
+    # Long-run judge prompts carried only changed file paths, not the diff, until
+    # cli/longrun.py switched to build_evidence (2026-10-17); one-shots only.
+    judges = [item.judge for item in oneshot if item.judge is not None]
     return RoundStats(
         oneshot_rate=(sum(item.passed for item in oneshot) / len(oneshot) if oneshot else None),
         oneshot_passed=sum(item.passed for item in oneshot),
@@ -349,6 +414,8 @@ def _round_stats(items: Iterable[Item]) -> RoundStats:
         longrun_turns_passed=sum(item.passed for item in longrun),
         longrun_turns_total=len(longrun),
         longrun_turns_unscored=len(unscored),
+        assisted_turns_passed=sum(item.passed for item in longrun if item.assisted),
+        assisted_turns_total=sum(item.assisted for item in longrun),
         judge_mean=statistics.mean(judges) if judges else None,
         totals=_totals(oneshot + longrun),
     )
@@ -404,6 +471,56 @@ def _index(value: float) -> str:
     return f"{value:.2f}"
 
 
+def _wilson_95(passed: int, total: int) -> Tuple[float, float]:
+    if total <= 0:
+        raise ValueError("Wilson interval requires a positive total")
+    z = 1.959963984540054
+    rate = passed / total
+    denominator = 1 + z * z / total
+    center = (rate + z * z / (2 * total)) / denominator
+    margin = z * math.sqrt(
+        rate * (1 - rate) / total + z * z / (4 * total * total)
+    ) / denominator
+    return center - margin, center + margin
+
+
+_BOOTSTRAP_SAMPLES = 10_000
+_BOOTSTRAP_SEED = 20261017
+
+
+def _percentile(values: List[float], probability: float) -> float:
+    position = (len(values) - 1) * probability
+    lower = math.floor(position)
+    upper = math.ceil(position)
+    if lower == upper:
+        return values[lower]
+    return values[lower] + (values[upper] - values[lower]) * (position - lower)
+
+
+def _bootstrap_geometric_ci(ratios: List[float]) -> Tuple[float, float]:
+    if not ratios:
+        raise ValueError("bootstrap interval requires at least one ratio")
+    generator = random.Random(_BOOTSTRAP_SEED)
+    estimates = sorted(
+        math.exp(
+            sum(math.log(ratios[generator.randrange(len(ratios))]) for _ in ratios)
+            / len(ratios)
+        )
+        for _sample in range(_BOOTSTRAP_SAMPLES)
+    )
+    return _percentile(estimates, 0.025), _percentile(estimates, 0.975)
+
+
+def _relative_index_ci(ratios: Optional[List[float]]) -> str:
+    if ratios is None or not ratios:
+        return "**UNKNOWN**"
+    index = geometric_mean(ratios)
+    if index is None:
+        return "**UNKNOWN**"
+    low, high = _bootstrap_geometric_ci(ratios)
+    return f"{_index(index)} (95% CI {_index(low)}–{_index(high)})"
+
+
 def _optional_summary(values: Iterable[Optional[float]], formatter) -> str:
     materialized = list(values)
     if not materialized:
@@ -434,6 +551,10 @@ def _cost_per_solve(items: List[Item]) -> Optional[float]:
 def _wall_time_per_solve(items: List[Item]) -> Optional[float]:
     solved = sum(item.passed for item in items)
     return sum(item.elapsed_ms for item in items) / solved if solved else None
+
+def _tokens_per_solve(items: List[Item]) -> Optional[float]:
+    solved = sum(item.passed for item in items)
+    return sum(item.total_tokens for item in items) / solved if solved else None
 
 
 def _burn_rate(items: List[Item]) -> Optional[float]:
@@ -566,21 +687,20 @@ def _turn_summary(stats: Iterable[RoundStats]) -> str:
     materialized = [stat for stat in stats if stat.longrun_turns_total]
     if not materialized:
         return "-"
-    mean_passed = statistics.mean(stat.longrun_turns_passed for stat in materialized)
-    mean_total = statistics.mean(stat.longrun_turns_total for stat in materialized)
-    ratios = sorted(
-        (
-            stat.longrun_turns_passed / stat.longrun_turns_total,
-            stat.longrun_turns_passed,
-            stat.longrun_turns_total,
-        )
-        for stat in materialized
-    )
-    low, high = ratios[0], ratios[-1]
+    passed = sum(stat.longrun_turns_passed for stat in materialized)
+    total = sum(stat.longrun_turns_total for stat in materialized)
+    low, high = _wilson_95(passed, total)
     return (
-        f"{mean_passed:.1f}/{mean_total:.1f} mean "
-        f"({low[1]}/{low[2]}–{high[1]}/{high[2]})"
+        f"{_percent(passed / total)} (95% CI {_percent(low)}–{_percent(high)}) "
+        f"· {passed}/{total} pooled"
     )
+
+
+def _assisted_summary(stats: Iterable[RoundStats]) -> str:
+    materialized = list(stats)
+    passed = sum(stat.assisted_turns_passed for stat in materialized)
+    total = sum(stat.assisted_turns_total for stat in materialized)
+    return f"{passed}/{total} pooled" if total else "-"
 
 
 def _unscored_summary(stats: Iterable[RoundStats]) -> str:
@@ -601,10 +721,13 @@ def _oneshot_summary(stats: Iterable[RoundStats]) -> str:
     materialized = [stat for stat in stats if stat.oneshot_total]
     if not materialized:
         return "-"
-    rates = _mean_range((stat.oneshot_rate for stat in materialized), _percent)
-    passed = statistics.mean(stat.oneshot_passed for stat in materialized)
-    total = statistics.mean(stat.oneshot_total for stat in materialized)
-    return f"{rates} · {passed:.1f}/{total:.1f} mean"
+    passed = sum(stat.oneshot_passed for stat in materialized)
+    total = sum(stat.oneshot_total for stat in materialized)
+    low, high = _wilson_95(passed, total)
+    return (
+        f"{_percent(passed / total)} (95% CI {_percent(low)}–{_percent(high)}) "
+        f"· {passed}/{total} pooled"
+    )
 
 
 def _longrun_summary(stats: Iterable[RoundStats]) -> str:
@@ -669,6 +792,12 @@ def _metric_rows(
     relative_time_excluded: Dict[str, List[int]] = {
         label: [] for label, _rounds in columns
     }
+    relative_tokens: Dict[str, List[Optional[float]]] = {
+        label: [] for label, _rounds in columns
+    }
+    relative_tokens_excluded: Dict[str, List[int]] = {
+        label: [] for label, _rounds in columns
+    }
     for round_id, keys in sorted(matched.items()):
         cost_indexes, cost_excluded = relative_indexes(
             {
@@ -684,11 +813,52 @@ def _metric_rows(
                 for label, rounds in columns
             }
         )
+        token_indexes, token_excluded = relative_indexes(
+            {
+                label: {
+                    key: float(rounds[round_id][key].total_tokens) for key in keys
+                }
+                for label, rounds in columns
+            }
+        )
         for label, _rounds in columns:
             relative_cost[label].append(cost_indexes[label])
             relative_time[label].append(time_indexes[label])
             relative_cost_excluded[label].append(cost_excluded)
             relative_time_excluded[label].append(time_excluded)
+            relative_tokens[label].append(token_indexes[label])
+            relative_tokens_excluded[label].append(token_excluded)
+
+    pooled_cost_ratios, _cost_excluded = relative_index_ratios(
+        {
+            label: {
+                f"{round_id}:{key}": rounds[round_id][key].cost
+                for round_id, keys in sorted(matched.items())
+                for key in keys
+            }
+            for label, rounds in columns
+        }
+    )
+    pooled_time_ratios, _time_excluded = relative_index_ratios(
+        {
+            label: {
+                f"{round_id}:{key}": float(rounds[round_id][key].elapsed_ms)
+                for round_id, keys in sorted(matched.items())
+                for key in keys
+            }
+            for label, rounds in columns
+        }
+    )
+    pooled_token_ratios, _token_excluded = relative_index_ratios(
+        {
+            label: {
+                f"{round_id}:{key}": float(rounds[round_id][key].total_tokens)
+                for round_id, keys in sorted(matched.items())
+                for key in keys
+            }
+            for label, rounds in columns
+        }
+    )
 
     rows.append(("rounds", [str(len(rounds)) if rounds else "-" for _label, rounds in columns]))
     rows.append((
@@ -704,11 +874,15 @@ def _metric_rows(
         [_turn_summary(all_stats[label]) for label, _rounds in columns],
     ))
     rows.append((
+        "solve — assisted long-run turns passed/total",
+        [_assisted_summary(all_stats[label]) for label, _rounds in columns],
+    ))
+    rows.append((
         "not scored — long-run turns",
         [_unscored_summary(all_stats[label]) for label, _rounds in columns],
     ))
     rows.append((
-        "diagnostic only — judge mean",
+        "diagnostic only — judge mean (one-shots)",
         [
             _mean_range(
                 (stat.judge_mean for stat in all_stats[label] if stat.judge_mean is not None),
@@ -735,6 +909,7 @@ def _metric_rows(
     all_attempt_metrics = [
         ("cost per solve", _cost_per_solve, _dollars),
         ("wall time per solve", _wall_time_per_solve, _precise_hours),
+        ("tokens per solve", _tokens_per_solve, _tokens_count),
         ("burn rate", _burn_rate, _dollars_per_hour),
         ("active share", _active_share, _percent),
         ("idle time", _idle_ms, _hours),
@@ -766,7 +941,12 @@ def _metric_rows(
         ("fresh input tokens", "fresh_input", lambda values: _mean_range(values, _tokens_count)),
         ("cache read tokens", "cache_read", lambda values: _mean_range(values, _tokens_count)),
         ("output tokens", "output", lambda values: _mean_range(values, _tokens_count)),
-        ("reasoning tokens", "reasoning", lambda values: _mean_range(values, _tokens_count)),
+        (
+            "reasoning tokens (codex: subset of output)",
+            "reasoning",
+            lambda values: _optional_summary(values, _tokens_count),
+        ),
+        ("total tokens", "total_tokens", lambda values: _mean_range(values, _tokens_count)),
         ("agent time", "elapsed_ms", lambda values: _mean_range(values, _hours)),
     ]
     for scope, by_label in (
@@ -800,7 +980,7 @@ def _metric_rows(
     rows.append((
         "efficiency — matched work — relative cost index",
         [
-            _optional_summary(relative_cost[label], _index)
+            _relative_index_ci(pooled_cost_ratios[label])
             for label, _rounds in columns
         ],
     ))
@@ -814,7 +994,7 @@ def _metric_rows(
     rows.append((
         "efficiency — matched work — relative time index",
         [
-            _optional_summary(relative_time[label], _index)
+            _relative_index_ci(pooled_time_ratios[label])
             for label, _rounds in columns
         ],
     ))
@@ -822,6 +1002,20 @@ def _metric_rows(
         "efficiency — matched work — zero-time items excluded from relative index",
         [
             _mean_range(relative_time_excluded[label], lambda value: f"{value:.0f}")
+            for label, _rounds in columns
+        ],
+    ))
+    rows.append((
+        "efficiency — matched work — relative token index",
+        [
+            _relative_index_ci(pooled_token_ratios[label])
+            for label, _rounds in columns
+        ],
+    ))
+    rows.append((
+        "efficiency — matched work — zero-token items excluded from relative index",
+        [
+            _mean_range(relative_tokens_excluded[label], lambda value: f"{value:.0f}")
             for label, _rounds in columns
         ],
     ))
@@ -839,24 +1033,38 @@ def render(columns: List[Tuple[str, Dict[str, Dict[str, Item]]]]) -> str:
         lines.append(f"| {metric} | " + " | ".join(cells) + " |")
     lines.extend([
         "",
-        "_Values are per-round means (min–max). Long-run solve rate gives every sequence "
-        "equal weight; turn counts are shown separately. Matched work contains only one-shot "
+        "_Most totals and all-attempt metrics are per-round means (min–max); pooled rates and "
+        "confidence intervals are labeled. Long-run solve rate gives every sequence equal "
+        "weight; turn counts are shown separately. Matched work contains only one-shot "
         "cases and long-run turns solved by every reported column in the same round. Agent "
         "time excludes setup, validation, and judging. Cost, wall time per solve, and burn rate "
         "include all attempts. Active share is the union of model, tool, and completed own-job "
         "intervals divided by wall time; idle time is the remainder. Own-job wait counts only "
         "delivered jobs; stuck-job wait reports launched jobs without a completion. Longest "
         "silent gap is the largest contiguous idle interval and includes the count of records "
-        "at or above five minutes. Waste counts repeat plus filler calls over all tool calls. "
+        "at or above five minutes. Codex model intervals run from task start, turn context, or "
+        "completed tool output through the response's token-usage record; tool intervals pair "
+        "function/custom-tool calls with outputs by call ID. Waste counts repeat plus filler "
+        "calls over all tool calls. "
         "Tail is provider exit minus the final assistant message. Relative indexes divide each "
         "matched item by its across-column median, then take the per-column geometric mean "
-        "(1.00 is typical); zero-valued items are excluded because log(0) is undefined, with "
-        "exclusion counts reported in the table. The efficiency-only headline is the geometric "
+        "(1.00 is typical); their 95% confidence intervals use 10,000 fixed-seed bootstrap "
+        "resamples of paired matched item-round observations. With one column, every relative "
+        "index is 1.00 by definition and becomes meaningful only when another column is added. "
+        "Zero-valued items are excluded because log(0) is undefined, with exclusion counts "
+        "reported in the table. Solve-rate confidence intervals are pooled Wilson 95% intervals. "
+        "The efficiency-only headline is the geometric "
         "mean of matched-work relative cost and wall-time indexes; lower is better, and wall "
-        "time already carries all waiting. Unscored long-run turns are listed separately and "
-        "excluded from solve, judge, efficiency, and matched-work metrics. Missing client "
+        "time already carries all waiting. Assisted turns remain in the scored totals; the "
+        "protocol excludes only unscored turns, which ‘count toward neither solve rate nor "
+        "efficiency.’ Unscored long-run turns are listed separately and excluded from solve, "
+        "judge, efficiency, and matched-work metrics. Total tokens are "
+        "fresh input + cache read + output, plus reasoning only where a client reports it "
+        "separately; Codex output already includes its reasoning tokens. Missing client "
         "evidence is UNKNOWN, "
-        "never zero. Judge mean is diagnostic only; GOLD never merges solve and efficiency._",
+        "never zero. Judge mean is diagnostic only and covers one-shots: long-run judge "
+        "prompts before 2026-10-17 listed changed paths without the diff. GOLD never merges "
+        "solve and efficiency._",
     ])
     return "\n".join(lines)
 

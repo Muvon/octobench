@@ -193,7 +193,8 @@ def rejudge_file(
             )
             changed += 1
 
-        turns = sequence.get("turns") or []
+        # Unscored turns carry no score and stay out of the aggregate, as in cli/longrun.py.
+        turns = [turn for turn in sequence.get("turns") or [] if turn.get("status") != "unscored"]
         if turns:
             passed = sum(bool(turn["validation"]["passed"]) for turn in turns)
             score_sum = sum(float(turn["scoring"]["final_score"]) for turn in turns)

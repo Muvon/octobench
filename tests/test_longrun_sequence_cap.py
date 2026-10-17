@@ -270,7 +270,7 @@ class LongrunSequenceCapTest(unittest.TestCase):
             self.assertEqual(stats.longrun_turns_total, 4)
             self.assertEqual(stats.totals.unknown_costs, 0)
             report = gold_scorecard.render([("recovered", rounds)])
-            self.assertIn("0.0/4.0 mean", report)
+            self.assertIn("0.0% (95% CI 0.0%–49.0%) · 0/4 pooled", report)
             self.assertNotIn("UNKNOWN cost", report)
 
     def test_unhealthy_probe_keeps_completed_results_and_writes_sidecar(self) -> None:

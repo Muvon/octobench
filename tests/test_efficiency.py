@@ -514,6 +514,11 @@ time.sleep(10)
             _write_jsonl(
                 record_dir / "logs" / "codex.rollout.jsonl",
                 [
+                    {
+                        "timestamp": "2026-01-01T00:00:00Z",
+                        "type": "event_msg",
+                        "payload": {"type": "task_started"},
+                    },
                     {"timestamp": "2026-01-01T00:00:00Z", "type": "turn_context", "payload": {}},
                     {
                         "timestamp": "2026-01-01T00:00:02Z",
@@ -525,6 +530,7 @@ time.sleep(10)
                             "arguments": json.dumps({"cmd": ":"}),
                         },
                     },
+                    {"timestamp": "2026-01-01T00:00:02Z", "type": "token_usage_record"},
                     {
                         "timestamp": "2026-01-01T00:00:05Z",
                         "type": "response_item",
@@ -534,6 +540,8 @@ time.sleep(10)
                             "output": "ok",
                         },
                     },
+                    {"timestamp": "2026-01-01T00:00:06Z", "type": "compacted"},
+                    {"timestamp": "2026-01-01T00:00:06Z", "type": "turn_context"},
                     {
                         "timestamp": "2026-01-01T00:00:08Z",
                         "type": "response_item",
@@ -543,6 +551,7 @@ time.sleep(10)
                             "phase": "final_answer",
                         },
                     },
+                    {"timestamp": "2026-01-01T00:00:08Z", "type": "token_usage_record"},
                     {
                         "timestamp": "2026-01-01T00:00:09Z",
                         "type": "event_msg",
@@ -561,18 +570,108 @@ time.sleep(10)
                 ],
             )
 
-            metrics = extract_codex(record_dir, 10_000)
+            metrics = extract_codex(record_dir, 9000)
 
             self.assertEqual(metrics.model_ms, 5000)
             self.assertEqual(metrics.tool_ms, 3000)
             self.assertEqual(metrics.own_job_ms, 0)
             self.assertEqual(metrics.busy_ms, 8000)
-            self.assertEqual(metrics.idle_ms, 2000)
+            self.assertEqual(metrics.idle_ms, 1000)
             self.assertEqual(metrics.longest_silent_gap_ms, 1000)
+            self.assertLessEqual(metrics.longest_silent_gap_ms, 3000)
             self.assertEqual(metrics.tail_ms, 1000)
             self.assertEqual(metrics.tool_calls, 1)
             self.assertEqual(metrics.repeat_calls, 0)
             self.assertEqual(metrics.filler_calls, 1)
+
+    def test_codex_uses_retained_thread_rollout_when_turn_copy_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            run_dir = Path(raw_tmp) / "run"
+            record_dir = run_dir / "turns" / "turn_2"
+            _write_jsonl(
+                run_dir
+                / "state"
+                / "codex"
+                / "2026"
+                / "01"
+                / "01"
+                / "rollout-session.jsonl",
+                [
+                    {
+                        "timestamp": "2026-01-01T00:00:00Z",
+                        "type": "event_msg",
+                        "payload": {"type": "task_started"},
+                    },
+                    {"timestamp": "2026-01-01T00:00:00Z", "type": "turn_context"},
+                    {
+                        "timestamp": "2026-01-01T00:00:02Z",
+                        "payload": {
+                            "type": "message",
+                            "role": "assistant",
+                            "phase": "final_answer",
+                        },
+                    },
+                    {"timestamp": "2026-01-01T00:00:02Z", "type": "token_usage_record"},
+                    {
+                        "timestamp": "2026-01-01T00:00:10Z",
+                        "type": "event_msg",
+                        "payload": {"type": "task_started"},
+                    },
+                    {"timestamp": "2026-01-01T00:00:10Z", "type": "turn_context"},
+                    {
+                        "timestamp": "2026-01-01T00:00:12Z",
+                        "payload": {
+                            "type": "function_call",
+                            "call_id": "call-2",
+                            "name": "exec_command",
+                            "arguments": json.dumps({"cmd": "make test"}),
+                        },
+                    },
+                    {"timestamp": "2026-01-01T00:00:12Z", "type": "token_usage_record"},
+                    {
+                        "timestamp": "2026-01-01T00:00:15Z",
+                        "payload": {
+                            "type": "function_call_output",
+                            "call_id": "call-2",
+                            "output": "ok",
+                        },
+                    },
+                    {
+                        "timestamp": "2026-01-01T00:00:18Z",
+                        "payload": {
+                            "type": "message",
+                            "role": "assistant",
+                            "phase": "final_answer",
+                        },
+                    },
+                    {"timestamp": "2026-01-01T00:00:18Z", "type": "token_usage_record"},
+                    {
+                        "timestamp": "2026-01-01T00:00:30Z",
+                        "type": "event_msg",
+                        "payload": {"type": "task_started"},
+                    },
+                    {"timestamp": "2026-01-01T00:00:30Z", "type": "turn_context"},
+                ],
+            )
+            _write_jsonl(
+                record_dir / "logs" / "provider.raw.jsonl",
+                [
+                    {
+                        "type": "octobench_process_timing",
+                        "started_at_ms": 1767225610000,
+                        "ended_at_ms": 1767225619000,
+                    }
+                ],
+            )
+
+            metrics = extract_codex(record_dir, 9000, "session")
+
+            self.assertEqual(metrics.model_ms, 5000)
+            self.assertEqual(metrics.tool_ms, 3000)
+            self.assertEqual(metrics.busy_ms, 8000)
+            self.assertEqual(metrics.idle_ms, 1000)
+            self.assertEqual(metrics.longest_silent_gap_ms, 1000)
+            self.assertEqual(metrics.tail_ms, 1000)
 
     def test_codex_killed_mid_tool_keeps_busy_and_proven_repeats(self) -> None:
         def call(ts: str, call_id: str, cmd: str) -> dict[str, object]:
@@ -595,12 +694,20 @@ time.sleep(10)
             }
 
         rollout = [
+            {
+                "timestamp": "2026-01-01T00:00:00Z",
+                "type": "event_msg",
+                "payload": {"type": "task_started"},
+            },
             {"timestamp": "2026-01-01T00:00:00Z", "type": "turn_context", "payload": {}},
             call("2026-01-01T00:00:02Z", "call-1", ":"),
+            {"timestamp": "2026-01-01T00:00:02Z", "type": "token_usage_record"},
             output("2026-01-01T00:00:05Z", "call-1"),
             call("2026-01-01T00:00:06Z", "call-2", ":"),
+            {"timestamp": "2026-01-01T00:00:06Z", "type": "token_usage_record"},
             output("2026-01-01T00:00:07Z", "call-2"),
             call("2026-01-01T00:00:08Z", "call-3", "make test"),
+            {"timestamp": "2026-01-01T00:00:08Z", "type": "token_usage_record"},
         ]
         timing = {
             "type": "octobench_process_timing",
@@ -1014,6 +1121,9 @@ time.sleep(10)
 
             self.assertEqual(metrics.tool_calls, 2)
             self.assertEqual(metrics.repeat_calls, 0)
+            self.assertIsNone(metrics.busy_ms)
+            self.assertIsNone(metrics.idle_ms)
+            self.assertIsNone(metrics.longest_silent_gap_ms)
 
     def test_filler_echo_and_printf_require_pure_literals(self) -> None:
         for command in (
@@ -1143,6 +1253,15 @@ class EfficiencyMathTest(unittest.TestCase):
             "**UNKNOWN**",
         )
 
+    def test_wilson_and_fixed_seed_bootstrap_confidence_intervals(self) -> None:
+        low, high = gold_scorecard._wilson_95(8, 13)
+        self.assertAlmostEqual(low, 0.355, places=3)
+        self.assertAlmostEqual(high, 0.823, places=3)
+        self.assertEqual(
+            gold_scorecard._bootstrap_geometric_ci([1.0, 1.0, 1.0]),
+            (1.0, 1.0),
+        )
+
     def test_zero_values_are_known_and_excluded_from_relative_indexes(self) -> None:
         indexes, excluded = relative_indexes(
             {
@@ -1212,6 +1331,10 @@ class EfficiencyMathTest(unittest.TestCase):
             ["0.40 (0.40–0.40)", "1.60 (1.60–1.60)"],
         )
         rows_by_name = dict(rows)
+        self.assertEqual(
+            rows_by_name["efficiency — matched work — relative cost index"],
+            ["0.40 (95% CI 0.40–0.40)", "1.60 (95% CI 1.60–1.60)"],
+        )
         self.assertEqual(
             rows_by_name[
                 "efficiency — matched work — zero-cost items excluded from relative index"

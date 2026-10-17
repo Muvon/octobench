@@ -35,6 +35,7 @@ from cli.main import (
     clean_workspace,
     compute_provider_result_cost,
     default_judge_cfg,
+    build_evidence,
     diff_snapshots,
     enforce_clean_bench,
     ensure_workspace,
@@ -688,7 +689,9 @@ def _run_sequence(
                     + provider_evidence.strip()
                     + "\n</provider_evidence>"
                 )
-            diff_text = _diff_text(diff)
+            # Same evidence as one-shots: the judge must see the unified diff, not
+            # only the list of changed paths.
+            diff_text = build_evidence(before, after, diff).strip()
             if diff_text:
                 evidence_parts.append(
                     "<evidence_diff>\n" + diff_text + "\n</evidence_diff>"
@@ -878,17 +881,6 @@ def _run_sequence(
     if sequence_timed_out:
         result["error"] = "sequence_timeout"
     return result
-
-
-def _diff_text(diff: Dict) -> str:
-    lines: List[str] = []
-    for f in sorted(diff.get("added", [])):
-        lines.append(f"+ {f}")
-    for f in sorted(diff.get("deleted", [])):
-        lines.append(f"- {f}")
-    for f in sorted(diff.get("modified", [])):
-        lines.append(f"~ {f}")
-    return "\n".join(lines)
 
 
 def _find_sequence_files(args) -> List[Path]:

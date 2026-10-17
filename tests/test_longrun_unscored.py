@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from typing import List, Optional
 from unittest.mock import Mock, patch
 
 from cli import longrun
@@ -147,7 +148,11 @@ class LongrunUnscoredRunTest(unittest.TestCase):
                 ),
                 patch.object(longrun, "install_guardrails"),
                 patch.object(longrun, "snapshot_files", return_value={}),
-                patch.object(longrun, "diff_snapshots", return_value={}),
+                patch.object(
+                    longrun,
+                    "diff_snapshots",
+                    return_value={"added": [], "deleted": [], "modified": []},
+                ),
                 patch.object(longrun, "_restore_dependency", return_value=True) as restore,
                 patch.object(
                     longrun,
@@ -215,6 +220,67 @@ class LongrunUnscoredRunTest(unittest.TestCase):
 
 
 class LongrunUnscoredReportingTest(unittest.TestCase):
+    def test_scorecard_marks_restored_and_post_unscored_turns_assisted(self) -> None:
+        def scored(
+            number: int, *, passed: bool = True, restored: Optional[List[int]] = None
+        ) -> dict:
+            return {
+                "turn": number,
+                "status": "completed",
+                "restored_dependencies": restored or [],
+                "session_mode": "resumed",
+                "provider": {"elapsed_ms": 1000, "session_id": "session"},
+                "tokens": {
+                    "input": 1,
+                    "cached_input": 0,
+                    "output": 1,
+                    "reasoning": 0,
+                },
+                "cost_usd": 0.1,
+                "validation": {"passed": passed},
+            }
+
+        unscored = longrun._unscored_turn_result(
+            3,
+            {
+                "name": "unscored",
+                "instruction": "hidden from agent",
+                "unscored_reason": "not fairly testable",
+            },
+            "resumed",
+        )
+        record = {
+            "sequence_id": "longrun_python_example",
+            "provider": "codex",
+            "benchmark_model": "model",
+            "turns": [
+                scored(1),
+                scored(2, restored=[1]),
+                unscored,
+                scored(4),
+                scored(5, passed=False),
+            ],
+        }
+
+        with patch.object(gold_scorecard, "extract_efficiency", return_value=None):
+            items = list(
+                gold_scorecard._longrun_items(
+                    record, None, Path("results-r1/results.json")
+                )
+            )
+
+        scored_items = [item for item in items if item.kind == "longrun"]
+        self.assertEqual(
+            [item.assisted for item in scored_items], [False, True, True, True]
+        )
+        stats = gold_scorecard._round_stats(items)
+        self.assertEqual(stats.assisted_turns_passed, 2)
+        self.assertEqual(stats.assisted_turns_total, 3)
+        report = gold_scorecard.render(
+            [("client", {"r1": {item.key: item for item in items}})]
+        )
+        self.assertIn("solve — assisted long-run turns passed/total | 2/3 pooled", report)
+
     def test_reporters_exclude_unscored_metrics_and_show_count(self) -> None:
         completed = {
             "turn": 1,

@@ -128,6 +128,20 @@ def relative_indexes(
     values_by_column: Mapping[str, Mapping[str, Optional[float]]],
 ) -> tuple[dict[str, Optional[float]], int]:
     """Return per-column geometric indexes against each item's median."""
+    ratios, excluded = relative_index_ratios(values_by_column)
+    return (
+        {
+            label: None if column_ratios is None else geometric_mean(column_ratios)
+            for label, column_ratios in ratios.items()
+        },
+        excluded,
+    )
+
+
+def relative_index_ratios(
+    values_by_column: Mapping[str, Mapping[str, Optional[float]]],
+) -> tuple[dict[str, Optional[list[float]]], int]:
+    """Return paired item ratios used by ``relative_indexes``."""
     item_keys = sorted(
         {key for values in values_by_column.values() for key in values}
     )
@@ -159,13 +173,10 @@ def relative_indexes(
                 unknown.add(label)
             else:
                 ratios[label].append(value / median)
-    return (
-        {
-            label: None if label in unknown else geometric_mean(column_ratios)
-            for label, column_ratios in ratios.items()
-        },
-        excluded,
-    )
+    return {
+        label: None if label in unknown else column_ratios
+        for label, column_ratios in ratios.items()
+    }, excluded
 
 
 def _parse_timestamp(value: object, label: str) -> int:
@@ -1144,16 +1155,39 @@ def _codex_raw_calls(
     )
 
 
-def extract_codex(
-    record_dir: Path, wall_ms: int, incomplete: bool = False
-) -> EfficiencyMetrics:
+def _codex_rollout_paths(record_dir: Path, session_id: Optional[str]) -> list[Path]:
     rollout_path = record_dir / "logs" / "codex.rollout.jsonl"
+    has_local_rollout = rollout_path.is_file()
+    run_root, _turn_number = _record_root(record_dir)
+    candidates = sorted((run_root / "state" / "codex").glob("**/rollout-*.jsonl"))
+    if session_id is not None:
+        candidates = [path for path in candidates if session_id in path.name]
+    if len(candidates) > 1 and not has_local_rollout:
+        raise ValueError(
+            f"expected one Codex rollout under {run_root / 'state' / 'codex'}, "
+            f"found {len(candidates)}"
+        )
+    paths = [rollout_path] if has_local_rollout else []
+    if len(candidates) > 1:
+        candidates = []
+    if candidates and candidates[0] not in paths:
+        paths.append(candidates[0])
+    return paths
+
+
+def extract_codex(
+    record_dir: Path,
+    wall_ms: int,
+    session_id: Optional[str] = None,
+    incomplete: bool = False,
+) -> EfficiencyMetrics:
     raw_calls, process_timing = _codex_raw_calls(
         record_dir / "logs" / "provider.raw.jsonl"
     )
-    # Codex stdout events have no timestamps. August 2026 one-shots therefore
+    # Codex provider stdout events have no timestamps. August 2026 one-shots therefore
     # keep call counts but timing is UNKNOWN; current runs retain this rollout.
-    if not rollout_path.is_file():
+    rollout_paths = _codex_rollout_paths(record_dir, session_id)
+    if not rollout_paths:
         return _metrics(
             wall_ms,
             incomplete=incomplete,
@@ -1167,65 +1201,47 @@ def extract_codex(
             tail_ms=None,
             calls=raw_calls,
         )
-    rows = _jsonl(rollout_path)
-    segment_start = max(
-        (index for index, row in enumerate(rows) if row.get("type") == "turn_context"),
-        default=0,
-    )
-    rows = rows[segment_start:]
-    if not rows:
-        raise ValueError(f"Codex rollout is empty: {rollout_path}")
-    record_start = _parse_timestamp(rows[0].get("timestamp"), "Codex turn start")
-    run_window = _run_window(process_timing, record_start, wall_ms)
-    pending: dict[str, tuple[str, object, int]] = {}
-    ordered: list[str] = []
-    outputs: dict[str, tuple[object, int]] = {}
-    final_assistant_ms: Optional[int] = None
-    model_intervals: list[Interval] = []
-    model_start: Optional[int] = record_start
-    active: set[str] = set()
-    for row in rows:
-        timestamp = _parse_timestamp(row.get("timestamp"), "Codex rollout row")
-        payload = row.get("payload")
-        if not isinstance(payload, dict):
-            continue
-        typ = payload.get("type")
-        if typ in {"function_call", "custom_tool_call"}:
-            call_id = payload.get("call_id")
-            name = payload.get("name")
-            if not isinstance(call_id, str) or not isinstance(name, str):
-                raise ValueError("Codex tool call lacks string call_id/name")
-            if not active and model_start is not None:
-                model_intervals.append((model_start, timestamp))
-                model_start = None
-            active.add(call_id)
-            arguments = payload.get("arguments", payload.get("input"))
-            pending[call_id] = (name, arguments, timestamp)
-            ordered.append(call_id)
-        elif typ in {"function_call_output", "custom_tool_call_output"}:
-            call_id = payload.get("call_id")
-            if isinstance(call_id, str) and call_id in pending:
-                outputs[call_id] = (payload.get("output"), timestamp)
-                active.discard(call_id)
-                if not active:
-                    model_start = timestamp
-        elif typ == "message" and payload.get("role") == "assistant":
-            phase = payload.get("phase")
-            if phase in {None, "final_answer"}:
-                final_assistant_ms = timestamp
-    if active and incomplete:
-        # Killed mid-tool: the call ran until the cap ended the process.
-        for call_id in active:
-            outputs[call_id] = (_MISSING, run_window[1])
-    elif active:
-        calls = [
-            _Call(
-                pending[call_id][0],
-                pending[call_id][1],
-                outputs.get(call_id, (_MISSING, None))[0],
-            )
-            for call_id in ordered
+    if process_timing is None:
+        rows = _jsonl(rollout_paths[0])
+        task_starts = [
+            _parse_timestamp(row.get("timestamp"), "Codex task start")
+            for row in rows
+            if row.get("type") == "event_msg"
+            and isinstance(row.get("payload"), dict)
+            and row["payload"].get("type") == "task_started"
         ]
+        if len(task_starts) != 1:
+            return _metrics(
+                wall_ms,
+                incomplete=incomplete,
+                model_ms=None,
+                tool_ms=None,
+                intervals=None,
+                own_job_intervals=[],
+                stuck_job_intervals=[],
+                run_window=None,
+                sum_fallback=False,
+                tail_ms=None,
+                calls=raw_calls,
+            )
+        run_window = _run_window(None, task_starts[0], wall_ms)
+    else:
+        run_window = process_timing
+
+    rows = []
+    for rollout_path in rollout_paths:
+        candidate_rows = [
+            row
+            for row in _jsonl(rollout_path)
+            if row.get("timestamp") is not None
+            and run_window[0]
+            <= _parse_timestamp(row["timestamp"], "Codex rollout row")
+            <= run_window[1]
+        ]
+        if candidate_rows:
+            rows = candidate_rows
+            break
+    if not rows:
         return _metrics(
             wall_ms,
             incomplete=incomplete,
@@ -1237,10 +1253,67 @@ def extract_codex(
             run_window=run_window,
             sum_fallback=False,
             tail_ms=None,
-            calls=calls,
+            calls=raw_calls,
         )
-    if final_assistant_ms is not None and model_start is not None:
-        model_intervals.append((model_start, final_assistant_ms))
+    pending: dict[str, tuple[str, object, int]] = {}
+    ordered: list[str] = []
+    outputs: dict[str, tuple[object, int]] = {}
+    final_assistant_ms: Optional[int] = None
+    model_intervals: list[Interval] = []
+    model_start: Optional[int] = None
+    complete_model_timing = True
+    active: set[str] = set()
+    for row in rows:
+        timestamp = _parse_timestamp(row.get("timestamp"), "Codex rollout row")
+        payload = row.get("payload")
+        typ = payload.get("type") if isinstance(payload, dict) else None
+        if row.get("type") == "event_msg" and typ == "task_started":
+            if model_start is not None:
+                complete_model_timing = False
+            model_start = timestamp
+        elif row.get("type") == "turn_context" and model_start is None and not active:
+            model_start = timestamp
+        elif row.get("type") == "token_usage_record":
+            if model_start is None:
+                complete_model_timing = False
+            else:
+                model_intervals.append((model_start, timestamp))
+                model_start = None
+        elif not isinstance(payload, dict):
+            continue
+        if typ in {"function_call", "custom_tool_call"}:
+            call_id = payload.get("call_id")
+            name = payload.get("name")
+            if not isinstance(call_id, str) or not isinstance(name, str):
+                raise ValueError("Codex tool call lacks string call_id/name")
+            active.add(call_id)
+            arguments = payload.get("arguments", payload.get("input"))
+            pending[call_id] = (name, arguments, timestamp)
+            ordered.append(call_id)
+        elif typ in {"function_call_output", "custom_tool_call_output"}:
+            call_id = payload.get("call_id")
+            if isinstance(call_id, str) and call_id in pending:
+                outputs[call_id] = (payload.get("output"), timestamp)
+                active.discard(call_id)
+                if not active:
+                    if model_start is not None:
+                        complete_model_timing = False
+                    model_start = timestamp
+        elif typ == "message" and payload.get("role") == "assistant":
+            phase = payload.get("phase")
+            if phase in {None, "final_answer"}:
+                final_assistant_ms = timestamp
+    complete_tool_timing = not active
+    if active and incomplete:
+        # Killed mid-tool: the call ran until the cap ended the process.
+        for call_id in active:
+            outputs[call_id] = (_MISSING, run_window[1])
+        complete_tool_timing = True
+    if model_start is not None:
+        if incomplete:
+            model_intervals.append((model_start, run_window[1]))
+        else:
+            complete_model_timing = False
     model_intervals = _clamp_intervals(model_intervals, run_window)
     tool_intervals = _clamp_intervals([
         (pending[call_id][2], outputs[call_id][1])
@@ -1251,18 +1324,30 @@ def extract_codex(
         _Call(
             pending[call_id][0],
             pending[call_id][1],
-            outputs[call_id][0],
+            outputs.get(call_id, (_MISSING, None))[0],
             pending[call_id][2],
-            outputs[call_id][1],
+            outputs.get(call_id, (_MISSING, None))[1],
         )
         for call_id in ordered
     ]
     return _metrics(
         wall_ms,
         incomplete=incomplete,
-        model_ms=sum(end - start for start, end in model_intervals),
-        tool_ms=sum(end - start for start, end in tool_intervals),
-        intervals=[*model_intervals, *tool_intervals],
+        model_ms=(
+            sum(end - start for start, end in model_intervals)
+            if complete_model_timing
+            else None
+        ),
+        tool_ms=(
+            sum(end - start for start, end in tool_intervals)
+            if complete_tool_timing
+            else None
+        ),
+        intervals=(
+            [*model_intervals, *tool_intervals]
+            if complete_model_timing and complete_tool_timing
+            else None
+        ),
         own_job_intervals=[],
         stuck_job_intervals=[],
         run_window=run_window,
@@ -1303,4 +1388,6 @@ def extract_efficiency(
         return extract_octomind(
             record_dir, wall_ms, session_id, artifact_turn_number, incomplete
         )
+    if provider == "codex":
+        return extract_codex(record_dir, wall_ms, session_id, incomplete)
     return extractor(record_dir, wall_ms, incomplete)
