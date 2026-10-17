@@ -136,9 +136,10 @@ contribute calibration outcomes or efficiency.
 
 - Frozen versions (image, client binaries, configs) recorded with results.
 - Rounds per column: one-shots enough to reach SE(log cost ratio) ≤ 0.05 using
-  the calibration variance, minimum 5; sequences minimum 3. Clients alternate
-  round by round (one ChatGPT login is never shared by two running clients);
-  item order within a round is the harness's fixed sorted order.
+  the calibration variance, minimum 5; sequences minimum 3. Clients never run
+  concurrently (one ChatGPT login is never shared by two running clients); a
+  column's rounds may run back to back, and each column records its run dates.
+  Item order within a round is the harness's fixed sorted order.
 - Reported separately, never merged: solve rate with confidence interval;
   paired geometric-mean cost, token and time ratios with confidence intervals
   on items solved by every compared column; all-attempt cost and time per
@@ -161,4 +162,6 @@ contribute calibration outcomes or efficiency.
   published judge mean covers one-shots. Each column also publishes a per-round
   record (`scripts/gold_rounds_report.py`) under `docs/gold/results/`. The DuckDB
   sequence setup also removes `AI_POLICY.md` (re-proven); the Codex column ran it
-  with the file present and never opened it.
+  with the file present and never opened it. Round scheduling: the requirement is
+  that clients never run at the same time, not strict round-by-round alternation;
+  columns may run their rounds back to back and record their run dates.
