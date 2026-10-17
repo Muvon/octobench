@@ -12,4 +12,9 @@ git checkout -q "${BASE_SHA}"
 git checkout -q -B main
 git remote remove origin
 
+# The upstream AI contribution policy governs issues and pull requests, not this
+# local task; GOLD removes it so no client declines the work because of it.
+git rm -q AI_POLICY.md
+git -c user.name=octobench -c user.email=octobench@localhost commit -q -m "Remove upstream AI contribution policy"
+
 GEN=ninja make reldebug -j"$(nproc)" > /dev/null

@@ -159,4 +159,6 @@ contribute calibration outcomes or efficiency.
 - **2026-10-17:** Long-run judges now receive the unified diff (`build_evidence`, as
   one-shots); earlier long-run judge prompts listed changed paths only, so the
   published judge mean covers one-shots. Each column also publishes a per-round
-  record (`scripts/gold_rounds_report.py`) under `docs/gold/results/`.
+  record (`scripts/gold_rounds_report.py`) under `docs/gold/results/`. The DuckDB
+  sequence setup also removes `AI_POLICY.md` (re-proven); the Codex column ran it
+  with the file present and never opened it.

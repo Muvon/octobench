@@ -35,7 +35,9 @@ Run notes for the published column:
   `duckdb_sql_export_sources`, and `duckdb_parquet_bound_schema` removes the
   upstream `AI_POLICY.md` (rules for upstream issues and pull requests), after
   one Codex run declined the task because of it. No test reads that file;
-  polars was re-proven 3x afterwards.
+  polars was re-proven 3x afterwards. From 2026-10-17 the DuckDB sequence setup
+  removes it too, for later columns; the published Codex column ran that
+  sequence with the file present, and in 70 turns Codex never opened it.
 
 ## Selection and admission
 
