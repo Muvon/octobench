@@ -13,6 +13,7 @@ replaces an earlier result for the same item).
 """
 from __future__ import annotations
 
+import os
 import statistics
 import sys
 from collections import OrderedDict
@@ -104,7 +105,39 @@ def _turn_no(item: Item) -> int:
     return int(item.key.rsplit(":", 1)[1])
 
 
-def render(label: str, rounds: Dict[str, Dict[str, Item]]) -> str:
+def _case_links(suite_name: Optional[str], out: Path) -> Dict[str, str]:
+    """Map one-shot case ids and sequence ids to their manifests, relative to ``out``."""
+    if not suite_name:
+        return {}
+    repo = Path(__file__).resolve().parent.parent
+    suite = repo / "configs" / "suites" / f"{suite_name}.txt"
+    links: Dict[str, str] = {}
+    for raw in suite.read_text().splitlines():
+        entry = raw.strip().split(":", 1)[0]
+        if not entry or entry.startswith("#"):
+            continue
+        kind, lang, name = entry.split("/")
+        manifest = repo / "cases" / "dev" / entry / ("case.yaml" if kind == "oneshot" else "sequence.yaml")
+        target = os.path.relpath(manifest, out.resolve().parent)
+        links[f"{kind}:{lang}:{name}"] = target
+    return links
+
+
+def _linked(name: str, links: Dict[str, str]) -> str:
+    for key, target in links.items():
+        kind, lang, entry = key.split(":")
+        matched = (
+            f"_{name}".endswith(f"_{entry}")
+            if kind == "oneshot"
+            else name.startswith(f"longrun_{lang}_{entry}")
+        )
+        if matched:
+            return f"[`{name}`]({target})"
+    return f"`{name}`"
+
+
+def render(label: str, rounds: Dict[str, Dict[str, Item]], links: Optional[Dict[str, str]] = None) -> str:
+    links = links or {}
     order = sorted(rounds, key=_round_key)
     rows = _item_rows(rounds)
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%MZ")
@@ -165,7 +198,7 @@ def render(label: str, rounds: Dict[str, Dict[str, Item]]) -> str:
             if all(item.cost is not None for item in sample)
         ]
         lines.append(
-            f"| `{name}` | {passed} "
+            f"| {_linked(name, links)} | {passed} "
             f"| {_count(statistics.median(sum(i.total_tokens for i in s) for s in samples))} "
             f"| {'$%.2f' % statistics.median(costs) if costs else 'UNKNOWN'} "
             f"| {_minutes(statistics.median(sum(i.elapsed_ms for i in s) for s in samples))} |"
@@ -185,7 +218,7 @@ def render(label: str, rounds: Dict[str, Dict[str, Item]]) -> str:
                 continue
             scored = [item for item in items if item.kind != "unscored"]
             lines.append(
-                f"| `{name}` | {_verdict(items)} | " + " | ".join(_breakdown(scored)) + " |"
+                f"| {_linked(name, links)} | {_verdict(items)} | " + " | ".join(_breakdown(scored)) + " |"
             )
         for name, per_round in rows.items():
             items = per_round.get(round_id)
@@ -228,7 +261,7 @@ def main() -> None:
         raise SystemExit(__doc__)
     suite = _load_suite(suite_name) if suite_name else None
     label, pattern = columns[0]
-    report = render(label, load_column(pattern, suite))
+    report = render(label, load_column(pattern, suite), _case_links(suite_name, out))
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(report)
     print(report)

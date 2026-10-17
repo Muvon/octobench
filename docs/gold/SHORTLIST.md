@@ -1,6 +1,7 @@
 # GOLD frozen suite
 
-**Frozen 2026-10-15. Baseline pending.** The manifest is
+**Frozen 2026-10-15. Codex gpt-6.1-sol baseline published 2026-10-17** (results:
+[docs/GOLD.md](../GOLD.md#results)). The manifest is
 [`configs/suites/gold.txt`](../../configs/suites/gold.txt): 13 one-shots and two
 15-turn sequences.
 

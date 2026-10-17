@@ -151,3 +151,12 @@ contribute calibration outcomes or efficiency.
   per run with valid Codex and Octomind samples pooled, or a legitimate miss of
   a stated rule. Removed tool-call counts because client tool granularity is
   not comparable, and recorded the post-failure instruction rule.
+- **2026-10-16:** Infrastructure failures (provider capacity/5xx errors, refusals
+  caused by repository contribution policies) are rerun inside the same round
+  directory; the newer run directory replaces the void record. Setup of the polars
+  and both DuckDB one-shots removes the upstream `AI_POLICY.md`. Short judge panels
+  are rejudged before publication (`scripts/rejudge_longrun.py`).
+- **2026-10-17:** Long-run judges now receive the unified diff (`build_evidence`, as
+  one-shots); earlier long-run judge prompts listed changed paths only, so the
+  published judge mean covers one-shots. Each column also publishes a per-round
+  record (`scripts/gold_rounds_report.py`) under `docs/gold/results/`.

@@ -18,7 +18,7 @@ This file is the entrypoint for contributors and agents.
 - `providers/`: provider implementations (`claude`, `codex`, `octomind`) with shared interface; each runs its framework at its out-of-the-box default
 - `runners/`: `executor.py` (Host/Docker execution), `cli_runner.py` (judge invocation)
 - `docker/`: `Dockerfile.agent` (agent image for `--executor docker`), `Dockerfile.swebench` (per-instance derived image), `Dockerfile.tau2` + `tau2_bridge.py` (tau2-bench solo image + shell bridge)
-- `cli/`: `main.py` (local-case runner), `swebench.py` (SWE-bench-Live runner), `bench.py` (unified multi-domain benchmark runner)
+- `cli/`: `main.py` (local-case runner), `longrun.py` (multi-turn sequences), `swebench.py` (SWE-bench-Live runner), `bench.py` (unified multi-domain benchmark runner)
 - `benchmarks/`: config-driven benchmark adapters (`qa`, `docker_task`, `swebench_live`) + matchers/constraint engine (`verify.py`); `ifbench_vendor/` (vendored allenai IFBench checkers); configs in `configs/benchmarks/*.yaml`
 - `judges/`: judge prompt + parsing
 - `scoring/`: metrics + aggregation; `scripts/summary.py`: comparison table
@@ -78,6 +78,35 @@ Non-negotiable invariants:
   from legitimate model failures.
 - After any harness repair, repeat proof and rerun the same requested
   client/model; finalize only a trustworthy pass or legitimate model failure.
+
+## GOLD Benchmark
+
+GOLD is the frozen client-comparison suite (`configs/suites/gold.txt`: 13
+one-shots + 2 sequences). Read `docs/GOLD.md` (items, results, run notes) and
+`docs/gold/PROTOCOL.md` (admission, rounds, what must be reported) before running
+or publishing anything for it.
+
+- Run only through `scripts/bench.sh`, one round per output directory named
+  `results-gold-<model>-<client>-r<N>` (`--suite gold`, one-shot then long-run).
+  Protocol minimum: 5 one-shot rounds, 3 sequence rounds per column.
+- Classify every failure: a legitimate miss of a stated rule stays; provider
+  infrastructure failures are rerun into the same round directory; an instruction
+  changes only when a tested requirement was genuinely unstated.
+- Before publishing, both audits must be clean: `scripts/audit_tools.py` and
+  `scripts/audit_judges.py`. Rejudge short panels with `scripts/rejudge_longrun.py`
+  (export `OCTOBENCH_JUDGE_MODELS`, the OpenRouter key and `OCTOMIND_BIN` first).
+- Publish each column with both reports and tick every PROTOCOL.md reporting item:
+
+```bash
+COL='<client> <model>=results-gold-<model>-<client>-r*/*/results.json'
+# The GOLD block is regenerated whole: pass EVERY published column in one call.
+python3 scripts/gold_scorecard.py --suite=gold --markers=GOLD "$COL" ['<other column>=...']
+python3 scripts/gold_rounds_report.py --suite=gold \
+  --out=docs/gold/results/<client>-<model>.md "$COL"                     # per-round record
+```
+
+  Then add the column's row (rounds, image, client and model versions, dates) to
+  the frozen-versions table above the GOLD block in `BENCHMARK.md`.
 
 ## Add a Tool
 - Add `providers/<name>.py` implementing `Provider.run_task(...)`.
