@@ -289,8 +289,12 @@ models:
       input: 1.40
       cached_input: 0.26
       output: 4.40
+    # No reasoning_effort key: octomind runs its bench config default (medium),
+    # which octolib floors to "low" for ollama glm-5.3 (accepted: low|high|max);
+    # configs/opencode/opencode.json pins the same "low" for opencode.
     providers:
       octomind: ollama:glm-5.3
+      opencode: ollama/glm-5.3
   glm-5.3-flash:                 # z.ai list price; a launch promo halves it to
     pricing:                     # 0.075/0.015/0.25 until 2026-09-09 (not used here)
       input: 0.15

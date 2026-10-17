@@ -66,6 +66,24 @@
           "limit": {"context": 200000, "output": 32000}
         }
       }
+    },
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama Cloud",
+      "options": {
+        "baseURL": "https://ollama.com/v1",
+        "apiKey": "{env:OLLAMA_API_KEY}"
+      },
+      "models": {
+        "glm-5.3": {
+          "name": "GLM 5.3",
+          "limit": {"context": 200000, "output": 32000},
+          "reasoning": true,
+          "options": {
+            "reasoningEffort": "low"
+          }
+        }
+      }
     }
   },
   "permission": {
