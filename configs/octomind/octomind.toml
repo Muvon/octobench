@@ -666,9 +666,7 @@ wait_weight = 0.25
 switch_cost_dhe = 0.05
 
 [supervisor.learning]
-# Enable the learning system (lessons + orientation memory, distill + recall)
-# (v12: file backend is the only storage; the backend/model knobs are gone).
-enabled = true
+enabled = false
 
 [supervisor.learning.evolution]
 # Compile grounded memories into scoped skills and guardrail candidates.
