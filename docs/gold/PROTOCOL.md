@@ -136,15 +136,40 @@ contribute calibration outcomes or efficiency.
 
 - Frozen versions (image, client binaries, configs) recorded with results.
 - Rounds per column: one-shots enough to reach SE(log cost ratio) ≤ 0.05 using
-  the calibration variance, minimum 5; sequences minimum 3. Clients never run
-  concurrently (one ChatGPT login is never shared by two running clients); a
-  column's rounds may run back to back, and each column records its run dates.
-  Item order within a round is the harness's fixed sorted order.
+  the calibration variance, minimum 5; sequences minimum 3.
+- Compared columns run paired: within a round, every client starts the same
+  item at the same moment, the next item starts when all clients have finished,
+  and one-shots run before sequences. Item order is the suite file's order.
+  Each client's container is pinned to its own equal share of CPU cores, and
+  the core sets swap between clients every round. Each client uses its own
+  ChatGPT login session. Pairing removes provider latency drift between
+  columns; time ratios are reported only for paired records.
+- An infrastructure failure is rerun for the failed client only, into the same
+  round directory; that item's time is then unpaired and reported separately.
+  Each column records its image, versions and run dates.
 - Reported separately, never merged: solve rate with confidence interval;
   paired geometric-mean cost, token and time ratios with confidence intervals
   on items solved by every compared column; all-attempt cost and time per
   solve; matched-item coverage. Long-run turns after a gold restoration are
   reported as assisted.
+
+## Result history
+
+- A run set is one campaign of compared columns under one image and one
+  scheduling mode, named `<start date>-<mode>` (for example
+  `2026-10-23-paired`). Its per-round records and a scorecard snapshot live in
+  `docs/gold/results/<run set>/`.
+- The newest complete run set is the default: the GOLD block and the
+  frozen-versions table in `BENCHMARK.md` show only that set. Before a new set
+  replaces it, the outgoing GOLD block is saved as
+  `docs/gold/results/<old run set>/scorecard.md`, and `docs/GOLD.md` lists every
+  earlier set with its dates, image and link.
+- Nothing is deleted. Raw result directories keep distinct names per run set
+  (`results-gold-*` for the sequential set, `results-gold-paired-*` for paired
+  sets), and abandoned runs keep an `abandoned-<date>-` prefix.
+- Time ratios are compared only within one paired run set. Solve rate, tokens
+  and cost from an earlier set may be shown next to the current one only as
+  labeled context, never as a column of the current comparison.
 
 ## Amendments
 
@@ -165,3 +190,13 @@ contribute calibration outcomes or efficiency.
   with the file present and never opened it. Round scheduling: the requirement is
   that clients never run at the same time, not strict round-by-round alternation;
   columns may run their rounds back to back and record their run dates.
+- **2026-10-23:** Paired publication rounds replace sequential columns. A
+  sequential octomind gpt-6.1-sol run on 2026-10-23 recorded about 11.9 s per
+  model call against 7.2 s for Codex at the same hour one week earlier, with the
+  same or fewer output tokens, so wall-time ratios between columns run on
+  different days measured provider drift, not the clients. Clients now run the
+  same item at the same moment on disjoint, equal CPU core sets
+  (`OCTOBENCH_DOCKER_CPUSET`; driver `gold_paired.sh`), and the Codex column is
+  re-run beside Octomind on the current image. Paired round directories are
+  `results-gold-paired-<model>-<client>-r<N>`; the earlier sequential columns
+  stay published as they are.

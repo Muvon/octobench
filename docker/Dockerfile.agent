@@ -98,9 +98,10 @@ RUN set -eux; \
     chmod +x /usr/local/bin/claude; \
     (claude --version || echo "WARN: claude --version failed")
 
-# codex: npm ships a per-arch prebuilt binary as an optional dependency.
+# codex: npm ships a per-arch prebuilt binary as an optional dependency. A fresh
+# release can land before its platform package, so a missing binary fails the build.
 RUN npm install -g "@openai/codex@${CODEX_VERSION}" \
-    && (codex --version || echo "WARN: codex --version failed")
+    && codex --version
 
 # Tools print their versions for build-log traceability.
 RUN echo "=== installed agents ===" \
