@@ -98,3 +98,7 @@ instruction: |
     `does not support allow_empty`, and `cannot be combined with 'schema'`.
   - Invalid `ANY` type:
     `Value "ANY" can not be converted to a DuckDB Type.`
+
+  D10. Keep existing C++ constructors and functions source-compatible: their
+  current callers, including the unit tests under `test/`, must build
+  unchanged.

@@ -200,3 +200,16 @@ contribute calibration outcomes or efficiency.
   re-run beside Octomind on the current image. Paired round directories are
   `results-gold-paired-<model>-<client>-r<N>`; the earlier sequential columns
   stay published as they are.
+- **2026-10-23 (V3 repair):** `duckdb_parquet_bound_schema` gained instruction
+  sentence D10 (keep existing C++ constructors and functions source-compatible;
+  their callers, including the unit tests under `test/`, must build unchanged).
+  Validation rebuilds the full upstream `test/` tree, and the unchanged upstream
+  `test/api/test_multi_file_column_mapper.cpp` calls the existing
+  `MultiFileColumnMapper` constructor, so an agent that extended that
+  constructor and updated its caller failed on a compile error before any
+  protected test ran — a requirement no sentence stated. Re-proven with
+  `VERIFY_REPEAT=3` on `octobench-agent:gold10`
+  (`/home/box/gold-prove/duckdb_parquet_D10_20261023.log`). Earlier samples of
+  this item are void, including the 2026-10-16 sequential Codex column's; the
+  paired round-1 records moved to `void-20261023-pre-D10-duckdb_parquet/` and
+  the item is rerun paired.
