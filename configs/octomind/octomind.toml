@@ -612,9 +612,16 @@ enabled = true
 # reasoning left 19/43 verdicts incomplete and took up to 104s. `:nitro` routes
 # by throughput: OpenRouter's default price-first routing picked 4-16 tok/s
 # providers and condense calls outlived their 60s deadline.
+# 2026-10-25 replay of resolve's conditions checklist (the gate's forcing
+# structure) on the vue_transition / duckdb_parquet / polars GOLD specs, scored on
+# 24 requirements their hidden tests check: gemini-3.1-flash-lite collapsed them
+# into 5-11 vague conditions (7/24 kept; e.g. "in-out reopen", KeepAlive and a
+# validation-order rule merged away) and the gate then passed 65/65 paired runs,
+# all 23 failures included. inception/mercury-3 kept 23-24/24 at 1.5-1.8s max
+# latency (qwen3.8-flash 24/24 but 7.8s; deepseek-v4.1-flash 24/24, 5.4s).
 # Transport must stay openrouter: it honours schema enforcement.
 [supervisor.model]
-name = "openrouter:google/gemini-3.1-flash-lite:nitro"
+name = "openrouter:inception/mercury-3"
 # Pinned: an unset effort inherits [model], so a high-effort agent ran every
 # verify-gate verdict at high reasoning too — minutes per `done` after the
 # final answer, before the run could exit. Measured above without reasoning.

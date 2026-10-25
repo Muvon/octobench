@@ -455,6 +455,10 @@ class DockerExecutor(Executor):
         for k in AUTH_ENV_KEYS:
             if os.environ.get(k) is not None:
                 env_args += ["-e", k]  # pass-through by name; value from host env
+        # Diagnostics only: octomind's `--format=jsonl` mode suppresses its debug
+        # log unless a tracing filter is set, which then writes it to stderr.
+        if os.environ.get("RUST_LOG"):
+            env_args += ["-e", "RUST_LOG"]
         for k, v in {
             "OCTOMIND_CONFIG_PATH": self.CFG,
             "CASE_DIR": self.CASE,
