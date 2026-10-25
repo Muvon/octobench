@@ -558,7 +558,13 @@ verify_hash = true
 # makes octomind log "compression failed, continuing session" and skip
 # compaction, so context overgrows past the model's window and the provider
 # rejects with 400 "prompt too long".
-name = "openrouter:deepseek/deepseek-v4.1-flash"
+# 2026-10-25 replay of 9 real fold points from failed paired GOLD runs, octomind's
+# own fold prompt, 76 working facts (edited files, failing tests, counts, targets)
+# scored for survival plus a blind faithfulness judge: deepseek-v4.1-flash wrote
+# no fold units at all (0%; 82 of 133 real paired folds held only the "Evidence
+# not folded" placeholder). mimo-v2.6-flash kept 43% with the best faithfulness
+# (8.1/10) at 9.2s p50; mercury-3 30% at 3.7s; minimax-m3.1-flash 43%, 7.7.
+name = "openrouter:xiaomi/mimo-v2.6-flash"
 # A fold is a summary: no reasoning. Left on the model's default, deepseek-v4
 # reasoned its whole 16k budget away and returned nothing (finish_reason=length)
 # on every fold over ~70k tokens — 30% of turns in the Sept-2026 campaigns.
