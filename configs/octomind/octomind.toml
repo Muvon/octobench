@@ -7,7 +7,7 @@
 #   • Validate config: octomind config --validate
 
 # Configuration version (DO NOT MODIFY - used for automatic upgrades)
-version = 22
+version = 24
 # Requires an octomind built with `reasoning_effort = "none"` support (octolib
 # 0.40 / octomind > 0.54.1): the fold model and the judge role below use it, and
 # older binaries reject the value at config load ("unknown variant `none`").
@@ -43,6 +43,12 @@ sandbox = false
 # octobench: the container is egress-sealed; telemetry posts would only add
 # blocked-connection noise and retries. Keep off.
 telemetry = false
+
+# Git trailer the agent appends to commits it writes on its own. Empty = no trailer
+# and no instruction in the system prompt.
+# octobench: EMPTY — the bench system prompt is shared across clients, and a
+# non-empty value adds an octomind-only instruction to it.
+commit_attribution = ""
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PERFORMANCE & LIMITS
@@ -595,6 +601,12 @@ supervisor = true
 [supervisor]
 # Master switch for the whole control plane
 enabled = true
+
+# Hard stop for runaway tool loops: when this many tool rounds in a row repeat
+# the same calls and get the same results, the turn ends with a notice instead
+# of another model request. Detector hints below this limit stay advisory.
+# Needs `enabled`. 0 = off.
+max_identical_rounds = 10
 
 # ONE shared profile for gate, resolve, plan, condense, and learning (v12:
 # the per-mechanic model knobs — gate.verifier_model, plan.model,
