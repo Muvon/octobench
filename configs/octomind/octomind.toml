@@ -646,7 +646,7 @@ max_identical_rounds = 10
 # This model makes ~3 calls per run (resolve, gate, the specialist brief):
 # condense rounds and compression decisions run on [evaluate].
 [supervisor.model]
-name = "openrouter:qwen/qwen3.8-flash"
+name = "openrouter:anthropic/claude-haiku-5.5"
 # Pinned: an unset effort inherits [model], so a high-effort agent ran every
 # verify-gate verdict at high reasoning too — minutes per `done` after the
 # final answer, before the run could exit. Measured above without reasoning.
