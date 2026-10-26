@@ -637,9 +637,16 @@ max_identical_rounds = 10
 # validation-order rule merged away) and the gate then passed 65/65 paired runs,
 # all 23 failures included. inception/mercury-3 kept 23-24/24 at 1.5-1.8s max
 # latency (qwen3.8-flash 24/24 but 7.8s; deepseek-v4.1-flash 24/24, 5.4s).
-# Transport must stay openrouter: it honours schema enforcement.
+# 2026-10-25 stability on the real gate request (exact gate prompt, recorded input,
+# strict schema, 25 calls each via OpenRouter): mercury-3 broke the schema in
+# 6/80 calls (["out"], empty, invented keys; 1/71 even direct) and left 2/7 final
+# runs Indeterminate; qwen3.8-flash 25/25 valid, p50 20s, $0.0009/call;
+# gemini-3.1-flash-lite 25/25 but the 7/24 checklist above; mimo 25/25 at 66s;
+# gpt-6-luna 16/25; minimax and glm-5.3-flash rejected the schema (HTTP 400).
+# This model makes ~3 calls per run (resolve, gate, the specialist brief):
+# condense rounds and compression decisions run on [evaluate].
 [supervisor.model]
-name = "openrouter:inception/mercury-3"
+name = "openrouter:qwen/qwen3.8-flash"
 # Pinned: an unset effort inherits [model], so a high-effort agent ran every
 # verify-gate verdict at high reasoning too — minutes per `done` after the
 # final answer, before the run could exit. Measured above without reasoning.
