@@ -238,6 +238,10 @@ class Executor(ABC):
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(matches[0], destination)
 
+    def oom_kills(self) -> Optional[int]:
+        """Processes the kernel OOM-killed under the run's memory cap; None when uncapped."""
+        return None
+
     def close(self) -> None:
         pass
 
@@ -441,6 +445,7 @@ class DockerExecutor(Executor):
         self._mount_workspace = mount_workspace
         self._mount_case = mount_case
         self._started = False
+        self._memory = os.environ.get("OCTOBENCH_DOCKER_MEMORY")
         self._mirror_urls: Dict[str, str] = {}
 
     def _ensure(self) -> None:
@@ -593,13 +598,19 @@ class DockerExecutor(Executor):
         # reports the pinned count, so build tools size their job pools to it.
         cpuset = os.environ.get("OCTOBENCH_DOCKER_CPUSET")
         cpu_args = ["--cpuset-cpus", cpuset] if cpuset else []
+        # Every container gets the same memory cap with swap off (memory-swap ==
+        # memory): an overrun is an OOM kill the record shows (oom_kills), not swap
+        # thrashing that silently stretches one client's time.
+        memory_args = (
+            ["--memory", self._memory, "--memory-swap", self._memory] if self._memory else []
+        )
         cmd = [
             # --init: PID 1 here is `sleep infinity`, which never reaps. A test
             # that orphans a child (cpython's test_asyncio.test_subprocess does)
             # leaves it a zombie, and the suite blocks forever waiting for a
             # reap that cannot come — an agent-independent hang that reads as a
             # failed turn. tini reaps, so the suite behaves as it does on a host.
-            "docker", "run", "-d", "--init", *platform_args, *net_args, *cpu_args,
+            "docker", "run", "-d", "--init", *platform_args, *net_args, *cpu_args, *memory_args,
             "--name", self.name, "-w", self._workdir,
             *mounts, *env_args, self.image, "sleep", "infinity",
         ]
@@ -685,6 +696,16 @@ class DockerExecutor(Executor):
 
     def octomind_config_path(self) -> str:
         return self.CFG
+
+    def oom_kills(self) -> Optional[int]:
+        if not self._memory or not self._started:
+            return None
+        events = subprocess.run(
+            ["docker", "exec", self.name, "cat", "/sys/fs/cgroup/memory.events"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        return next(int(line.split()[1]) for line in events.splitlines()
+                    if line.startswith("oom_kill "))
 
     def close(self) -> None:
         if self._started:

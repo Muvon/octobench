@@ -80,6 +80,10 @@ export OCTOBENCH_SYSTEM_PROMPT=configs/common/system_prompt.md
 export OCTOBENCH_SEAL_NETWORK=1
 export OCTOBENCH_CLEAN_WORKSPACE=1
 export OCTOBENCH_CONTEXT_WINDOW=200000
+# Same memory cap for every container, swap off (runners/executor.py): paired
+# clients share one host, and an uncapped build can push it into swap and slow
+# the other client's run.
+export OCTOBENCH_DOCKER_MEMORY=16g
 export OCTOBENCH_JUDGE_MODELS="${OCTOBENCH_JUDGE_MODELS:-openrouter:thinkingmachines/inkling-small,openrouter:minimax/minimax-m3,openrouter:deepseek/deepseek-v4-flash-0731}"
 # octomind: the bench role from configs/octomind/octomind.toml (core+octofs+octocode).
 # Anything else resolves to the tap agent developer:general, whose capabilities

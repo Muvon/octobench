@@ -140,8 +140,9 @@ contribute calibration outcomes or efficiency.
 - Compared columns run paired: within a round, every client starts the same
   item at the same moment, the next item starts when all clients have finished,
   and one-shots run before sequences. Item order is the suite file's order.
-  Each client's container is pinned to its own equal share of CPU cores, and
-  the core sets swap between clients every round. Each client uses its own
+  Each client's container is pinned to its own equal share of CPU cores under
+  the same memory cap with swap off, and the core sets swap between clients
+  every round. Each client uses its own
   ChatGPT login session. Pairing removes provider latency drift between
   columns; time ratios are reported only for paired records.
 - An infrastructure failure is rerun for the failed client only, into the same
@@ -213,3 +214,12 @@ contribute calibration outcomes or efficiency.
   this item are void, including the 2026-10-16 sequential Codex column's; the
   paired round-1 records moved to `void-20261023-pre-D10-duckdb_parquet/` and
   the item is rerun paired.
+- **2026-10-27:** Every container also runs under the same memory cap, 16 GB
+  with swap off (`OCTOBENCH_DOCKER_MEMORY`, exported by `scripts/bench.sh`;
+  `cli.main` refuses to run without it). Before, paired containers shared the
+  host's 62 GB: a DuckDB debug link at `-j 6` measured 5.9 GB of process memory
+  beside 24 GB of page cache while other services had pushed the host 16 GB into
+  swap, so one client's build could slow the other's. Each record stores
+  `container_oom_kills`; an item whose container recorded an OOM kill is an
+  infrastructure failure and is rerun. Uncapped runs are not mixed with capped
+  runs in one run set.

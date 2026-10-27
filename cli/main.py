@@ -704,6 +704,9 @@ def enforce_clean_bench(providers: list, verbosity: str) -> None:
         missing.append(
             "OCTOBENCH_CONTEXT_WINDOW=200000 (shared client context window)"
         )
+    if not os.environ.get("OCTOBENCH_DOCKER_MEMORY"):
+        missing.append(
+            "OCTOBENCH_DOCKER_MEMORY=16g (same memory cap for every container)")
     if "octomind" in providers and os.environ.get("OCTOMIND_AGENT") != "developer":
         missing.append(
             "OCTOMIND_AGENT=developer (without it providers/octomind.py falls back "
@@ -1207,6 +1210,7 @@ def main() -> None:
                     "provider_model": provider_model,
                     "runner": "provider",
                     "executor": args.executor,
+                    "container_oom_kills": executor.oom_kills(),
                     "result": {
                         "stdout": provider_result.stdout,
                         "stderr": provider_result.stderr,

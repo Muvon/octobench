@@ -810,6 +810,7 @@ def _run_sequence(
         # dropped here. Rust/C++ build trees reach tens of GB each; without this
         # a 20-sequence campaign needs more disk than the box has. Turn logs,
         # diffs and scores live under run_dir/turns and are unaffected.
+        container_oom_kills = executor.oom_kills()
         clean_workspace(executor, workdir_abs, seq_id, verbosity)
         executor.close()
 
@@ -866,6 +867,7 @@ def _run_sequence(
         "setup": {
             "exit_code": setup_log["exit_code"] if setup_log is not None else None,
         },
+        "container_oom_kills": container_oom_kills,
         "turns": turn_results,
         "aggregate": {
             "total_turns": total_turns,
