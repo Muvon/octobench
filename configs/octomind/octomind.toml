@@ -7,7 +7,7 @@
 #   • Validate config: octomind config --validate
 
 # Configuration version (DO NOT MODIFY - used for automatic upgrades)
-version = 24
+version = 25
 # Requires an octomind built with `reasoning_effort = "none"` support (octolib
 # 0.40 / octomind > 0.54.1): the fold model and the judge role below use it, and
 # older binaries reject the value at config load ("unknown variant `none`").
@@ -728,6 +728,10 @@ max_trial_uses = 40
 # thresholds are fixed constants.
 [supervisor.gate]
 enabled = true
+# Offer one nonblocking evidence advisory per genuine user turn, then re-gate.
+unsettled_advisory = true
+# Confidence that a condition is NOT demonstrated (0..1), not that work is wrong.
+unsettled_confidence_threshold = 0.8
 
 # Adaptive external plan manager.
 [supervisor.plan]
