@@ -7,7 +7,7 @@
 #   • Validate config: octomind config --validate
 
 # Configuration version (DO NOT MODIFY - used for automatic upgrades)
-version = 25
+version = 27
 # Requires an octomind built with `reasoning_effort = "none"` support (octolib
 # 0.40 / octomind > 0.54.1): the fold model and the judge role below use it, and
 # older binaries reject the value at config load ("unknown variant `none`").
@@ -62,22 +62,22 @@ mcp_response_tokens_threshold = 8000
 # Maximum tokens per session before truncation kicks in (0 = disabled, >0 = enabled)
 max_session_tokens_threshold = 200000
 
-# Keep the prompt cache warm with periodic pings while the session idles.
-# When you walk away after the AI replies, Octomind sends a minimal request
-# (max_tokens = 1) just before the cache TTL would expire, so the next turn
-# still hits the cache. Each ping costs cache-read tokens, so this is opt-in.
+# Keep the prompt cache warm with periodic pings while the session waits: for
+# your reply, for background work (tap runs, shell or agent jobs) or for a long
+# tool run. Each ping is a cache pre-warm (max_tokens = 0: cache read only, no
+# output), sent at 0.9 x the TTL of the newest cache marker (270s for the 5m
+# conversation cache). How many pings a wait gets is priced, never capped by
+# time: a ping is worth it only while the chance that the wait ends in the next
+# interval beats ping cost / rewrite saved, learned from this session's own
+# waits. The bound is (cache_write - cache_read) / cache_read x the share of the
+# prompt that would expire (tools and system prompt stay warm on their 1h
+# cache). A known scheduled wake is bridged when affordable; no ping is sent
+# when the next request compresses or trims the conversation anyway, or after
+# a ping misses the cache. Each ping costs cache-read tokens, so this is opt-in.
 #
-# Provider-aware: only providers whose API supports refresh-on-read are
-# pinged. Today that's Anthropic (1h TTL, always long cache).
-# Other providers (OpenAI implicit cache, Gemini, DeepSeek) are skipped — no
-# wasted requests.
+# Provider-aware: only providers with a keepalive policy are pinged; others are
+# skipped — no wasted requests.
 cache_keepalive_enabled = false
-
-# Stop pinging this many seconds after the last user activity. Default 1800
-# (30 min). Past this point the cache is left to expire so an abandoned
-# session does not keep billing forever. Set to 0 to ping until the session
-# ends (only sensible in daemon mode under explicit cost monitoring).
-cache_keepalive_max_idle_seconds = 1800
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # USER INTERFACE
@@ -128,8 +128,12 @@ top_p = 0.7
 top_k = 20
 max_retries = 1
 retry_timeout = 10
-# Hard timeout for one provider request. 0 = no timeout.
+# Total deadline for one HTTP or WebSocket request attempt; 0 disables it.
 request_timeout_seconds = 300
+# SSE/WebSocket response inactivity limit; 0 disables it. Does not extend the total deadline.
+stream_timeout_seconds = 0
+# Persistent WebSocket for octohub/chatgpt requests ("http" opts out); other providers ignore it.
+request_transport = "websocket"
 
 [capabilities]
 # octobench: route websearch to Brave (real npm pkg) — the default `tavily`
@@ -771,3 +775,13 @@ enabled = false
 [supervisor.hindsight]
 enabled = false
 model = "muvon/hindsight"
+
+# advise: on a loop or recovery alarm the steer note can carry content. One
+# shared supervisor-model call reads the request, the last tool receipts and
+# any stuck-keyed experience records and answers with a short observation that
+# points at a receipt (`#N`), or skips — never a command, never code. One in
+# four eligible alarms gets the plain note instead (control arm), and every
+# note is logged to advise.jsonl in the data directory with the gate verdict
+# that followed, so the trigger can later be fit on whether advice helped.
+[supervisor.advise]
+enabled = true
