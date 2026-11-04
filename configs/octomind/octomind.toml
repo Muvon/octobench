@@ -60,7 +60,7 @@ commit_attribution = ""
 mcp_response_tokens_threshold = 8000
 
 # Maximum tokens per session before truncation kicks in (0 = disabled, >0 = enabled)
-max_session_tokens_threshold = 200000
+max_session_tokens_threshold = 300000
 
 # Keep the prompt cache warm with periodic pings while the session waits: for
 # your reply, for background work (tap runs, shell or agent jobs) or for a long
@@ -534,7 +534,7 @@ analysis_findings_max_tokens = 6000
 # Single compression trigger in absolute tokens (0 = compression disabled).
 # How deep each compression goes is computed per cycle from the measured session
 # growth rate and the context ceiling.
-threshold = 70000
+threshold = 100000
 
 # NOTE: scalar compression keys must remain ABOVE the nested attention and
 # model tables. A scalar placed after a nested table header is parsed as a
