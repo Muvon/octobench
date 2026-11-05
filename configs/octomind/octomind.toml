@@ -647,10 +647,15 @@ max_identical_rounds = 10
 # runs Indeterminate; qwen3.8-flash 25/25 valid, p50 20s, $0.0009/call;
 # gemini-3.1-flash-lite 25/25 but the 7/24 checklist above; mimo 25/25 at 66s;
 # gpt-6-luna 16/25; minimax and glm-5.3-flash rejected the schema (HTTP 400).
+# 2026-11-05 replay of 4 GOLD gate requests (mypy + pydantic failed, react +
+# wasmtime passed), 3 calls each, reasoning off: deepseek-v4.1-flash 12/12 valid,
+# p50 3.4s / max 16.7s, $0.0028/call, no false alarm on the passes, mypy's missed
+# condition flagged 2/3 (pydantic passed 3/3); haiku-5.5 12/12 at p50 8.3s,
+# $0.0040, blocked pydantic but missed mypy 3/3; gpt-6-luna broke the reply 3/12.
 # This model makes ~3 calls per run (resolve, gate, the specialist brief):
 # condense rounds and compression decisions run on [evaluate].
 [supervisor.model]
-name = "openrouter:anthropic/claude-haiku-5.5"
+name = "openrouter:deepseek/deepseek-v4.1-flash"
 # Pinned: an unset effort inherits [model], so a high-effort agent ran every
 # verify-gate verdict at high reasoning too — minutes per `done` after the
 # final answer, before the run could exit. Measured above without reasoning.
@@ -662,6 +667,10 @@ max_tokens = 24000
 temperature = 0.0
 top_p = 1.0
 top_k = 0
+# The gate is the one call a turn cannot finish well without: 2026-11-04 GOLD r1
+# lost two verifier calls to provider errors (inherited max_retries = 1) and those
+# turns ended unchecked.
+max_retries = 3
 
 # ═══════════════════════════════════════════════════════════════════════
 # HUMAN TIME & ENERGY (/report)
