@@ -383,6 +383,8 @@ SEALED_HOSTS = f"{UPSTREAM_HOSTS} {SEARCH_HOSTS}"
 DEFAULT_ALLOW_HOSTS = (
     "api.deepseek.com token-plan.ap-southeast-1.maas.aliyuncs.com api.z.ai "
     "api.anthropic.com chatgpt.com auth.openai.com api.openai.com openrouter.ai ollama.com "
+    # octomind's [compression.model] (Xiaomi MiMo, direct API).
+    "api.xiaomimimo.com "
     # octomind's [decision] model (TypeSafe Jev).
     "api.typesafe.ai"
 )

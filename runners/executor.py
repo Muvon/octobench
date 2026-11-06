@@ -41,6 +41,8 @@ AUTH_ENV_KEYS = [
     "OLLAMA_API_URL",
     # octomind's [decision] model (typesafe:jev-*).
     "TYPESAFE_API_KEY",
+    # octomind's [compression.model] (xiaomi:mimo-*).
+    "XIAOMI_API_KEY",
     # Not auth: forwarded so an instrumented run can surface the agent's debug
     # tracing in provider.stderr.log. Absent from the host env in normal runs.
     "RUST_LOG",

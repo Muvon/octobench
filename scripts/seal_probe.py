@@ -29,6 +29,8 @@ MODEL_ENDPOINTS = (
     "https://auth.openai.com",
     "https://api.openai.com",
     "https://openrouter.ai",
+    "https://api.deepseek.com",
+    "https://api.xiaomimimo.com",
 )
 
 NON_MODEL_ENDPOINTS = (
