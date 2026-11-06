@@ -572,8 +572,8 @@ name = "xiaomi:mimo-v2.6-flash"
 # A fold is a summary: no reasoning. Left on the model's default, deepseek-v4
 # reasoned its whole 16k budget away and returned nothing (finish_reason=length)
 # on every fold over ~70k tokens — 30% of turns in the Sept-2026 campaigns.
-reasoning_effort = "none"
-max_tokens = 16000  # Enough for decision + summary
+reasoning_effort = "low"
+max_tokens = 32000  # Enough for decision + summary
 temperature = 0.3  # Lower temperature for consistent decisions
 top_p = 1.0
 top_k = 0
@@ -659,11 +659,11 @@ name = "deepseek:deepseek-flash"
 # Pinned: an unset effort inherits [model], so a high-effort agent ran every
 # verify-gate verdict at high reasoning too — minutes per `done` after the
 # final answer, before the run could exit. Measured above without reasoning.
-reasoning_effort = "none"
+reasoning_effort = "low"
 # The gate's checklist + evidence protocol needs room (was gate max_tokens
 # 24000 pre-v12). qwen flash is cheap; the OpenRouter max_tokens-reservation
 # issue only bit the high-volume judge panel.
-max_tokens = 24000
+max_tokens = 32000
 temperature = 0.0
 top_p = 1.0
 top_k = 0
