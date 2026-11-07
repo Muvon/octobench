@@ -385,6 +385,8 @@ DEFAULT_ALLOW_HOSTS = (
     "api.anthropic.com chatgpt.com auth.openai.com api.openai.com openrouter.ai ollama.com "
     # octomind's [compression.model] (Xiaomi MiMo, direct API).
     "api.xiaomimimo.com "
+    # Candidate supervisor/compression/judge models (Isoquant, Reflection AI).
+    "api.isoquant.ai api.reflection.ai "
     # octomind's [decision] model (TypeSafe Jev).
     "api.typesafe.ai"
 )

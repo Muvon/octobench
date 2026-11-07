@@ -131,7 +131,9 @@ retry_timeout = 10
 # Total deadline for one HTTP or WebSocket request attempt; 0 disables it.
 request_timeout_seconds = 300
 # SSE/WebSocket response inactivity limit; 0 disables it. Does not extend the total deadline.
-stream_timeout_seconds = 0
+# 120 s: 4 of 1,894 main calls (gold21 + gap6 runs, 11-07) hung silently until the 300 s
+# deadline; every other call finished within 77 s (codex: 105 s max over 9,556 calls).
+stream_timeout_seconds = 120
 # Persistent WebSocket for octohub/chatgpt requests ("http" opts out); other providers ignore it.
 request_transport = "websocket"
 
@@ -579,6 +581,11 @@ top_p = 1.0
 top_k = 0
 max_retries = 1
 retry_timeout = 10
+# Inherited [model] deadlines (300 s total, no stream inactivity limit) let one stalled
+# provider stream hold a fold for minutes. Folds measured 9.2 s p50 (2026-10-25 replay); a
+# silent stream is retried after 30 s, and 180 s still covers a full-length summary.
+request_timeout_seconds = 180
+stream_timeout_seconds = 30
 
 # ═══════════════════════════════════════════════════════════════════════
 # SUPERVISOR - out-of-band control plane: learning, orientation, detectors, gate
@@ -659,7 +666,9 @@ name = "deepseek:deepseek-flash"
 # Pinned: an unset effort inherits [model], so a high-effort agent ran every
 # verify-gate verdict at high reasoning too — minutes per `done` after the
 # final answer, before the run could exit. Measured above without reasoning.
-reasoning_effort = "low"
+# At "low" (gold21, 2026-11-06) each gate call took ~46 s and ~6.3k reasoning
+# tokens, and in 26 one-shot runs no gate verdict changed an outcome.
+reasoning_effort = "none"
 # The gate's checklist + evidence protocol needs room (was gate max_tokens
 # 24000 pre-v12). qwen flash is cheap; the OpenRouter max_tokens-reservation
 # issue only bit the high-volume judge panel.
@@ -671,6 +680,12 @@ top_k = 0
 # lost two verifier calls to provider errors (inherited max_retries = 1) and those
 # turns ended unchecked.
 max_retries = 3
+# Inherited [model] deadlines (300 s total, no stream inactivity limit) let one stalled
+# DeepSeek stream block a verdict for minutes: gap6-fix1 nushell waited 364 s for two gate
+# calls that produced 1,140 tokens. Gate calls measured 3-28 s at reasoning none and at most
+# 92 s at low (gold21); a silent stream is retried after 30 s.
+request_timeout_seconds = 120
+stream_timeout_seconds = 30
 
 # ═══════════════════════════════════════════════════════════════════════
 # HUMAN TIME & ENERGY (/report)

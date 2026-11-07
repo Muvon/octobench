@@ -151,8 +151,10 @@ contribute calibration outcomes or efficiency.
 - Reported separately, never merged: solve rate with confidence interval;
   paired geometric-mean cost, token and time ratios with confidence intervals
   on items solved by every compared column; all-attempt cost and time per
-  solve; matched-item coverage. Long-run turns after a gold restoration are
-  reported as assisted.
+  solve; matched-item coverage; the per-request ratio between the clients'
+  provider routes with its confidence interval
+  ([route-latency.md](route-latency.md)), next to every time ratio. Long-run
+  turns after a gold restoration are reported as assisted.
 
 ## Result history
 
@@ -223,3 +225,12 @@ contribute calibration outcomes or efficiency.
   `container_oom_kills`; an item whose container recorded an OOM kill is an
   infrastructure failure and is rerun. Uncapped runs are not mixed with capped
   runs in one run set.
+- **2026-11-07:** Time ratios are published with the provider-route baseline.
+  On a ChatGPT plan login Codex uses `chatgpt.com/backend-api/codex`, an endpoint
+  reserved for OpenAI's own client; a third-party client such as Octomind must use
+  `api.openai.com/v1/responses`. Sixty paired single requests (same model,
+  reasoning effort and prompt, 15 shuffled rounds, `octobench-agent:gold24`)
+  measured Octomind's route at 1.11× Codex's per request (95% CI 1.05–1.23),
+  1.15× for prompts of 20K tokens or more. That share of a wall-time ratio is the
+  route, not the client, so it is reported beside every time ratio and remeasured
+  when the image or a client's route changes ([route-latency.md](route-latency.md)).

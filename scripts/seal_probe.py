@@ -31,6 +31,8 @@ MODEL_ENDPOINTS = (
     "https://openrouter.ai",
     "https://api.deepseek.com",
     "https://api.xiaomimimo.com",
+    "https://api.isoquant.ai",
+    "https://api.reflection.ai",
 )
 
 NON_MODEL_ENDPOINTS = (

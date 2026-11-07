@@ -75,6 +75,16 @@ record of each column is in [docs/gold/results/](docs/gold/results/); each item
 there links to its case manifest, and [docs/GOLD.md](docs/GOLD.md#frozen-items)
 lists every item's upstream PR and prompt style.
 
+Wall time includes the provider route, which the client does not choose. On a ChatGPT
+plan login, Codex sends its requests to `chatgpt.com/backend-api/codex`, an endpoint
+OpenAI reserves for its own client. Octomind, as a third-party client, must use the
+documented route, `api.openai.com/v1/responses`. Measured with the same model, reasoning
+effort and prompt, one request through Octomind's route takes 1.11× as long as through
+Codex's (95% CI 1.05–1.23), and 1.15× for prompts of 20K tokens or more (CI 1.05–1.29),
+even though Octomind sends about 5.7K fewer input tokens. Read every Octomind ÷ Codex
+time ratio against that baseline: method and raw samples in
+[docs/gold/route-latency.md](docs/gold/route-latency.md).
+
 Frozen versions per column:
 
 | Column | Per-round record | Rounds | Image | Client | Model | Run dates |
