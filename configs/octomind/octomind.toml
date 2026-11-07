@@ -7,7 +7,7 @@
 #   • Validate config: octomind config --validate
 
 # Configuration version (DO NOT MODIFY - used for automatic upgrades)
-version = 27
+version = 29
 # Requires an octomind built with `reasoning_effort = "none"` support (octolib
 # 0.40 / octomind > 0.54.1): the fold model and the judge role below use it, and
 # older binaries reject the value at config load ("unknown variant `none`").
@@ -538,6 +538,10 @@ analysis_findings_max_tokens = 6000
 # growth rate and the context ceiling.
 threshold = 100000
 
+# Idle compaction (on by default): when you send a message after the provider's
+# prompt cache has expired, compact first if the cost math says it saves money.
+idle = true
+
 # NOTE: scalar compression keys must remain ABOVE the nested attention and
 # model tables. A scalar placed after a nested table header is parsed as a
 # field of that table and silently ignored — knowledge_retention sat there,
@@ -570,7 +574,12 @@ verify_hash = true
 # no fold units at all (0%; 82 of 133 real paired folds held only the "Evidence
 # not folded" placeholder). mimo-v2.6-flash kept 43% with the best faithfulness
 # (8.1/10) at 9.2s p50; mercury-3 30% at 3.7s; minimax-m3.1-flash 43%, 7.7.
-name = "xiaomi:mimo-v2.6-flash"
+# 2026-11-07 rerun of the same 9 folds on octomind 0.69 (gold28): mimo-v2.6-flash now
+# writes no fold units (0% of 76 facts, 100 s p50; 28 of 34 real fix/GOLD folds empty),
+# Reflection Beam 4% at 15 s, glm-5.3-flash 68% at 13 s p50, $0.0030 per fold (judge:
+# continuation 4.1, faithfulness 7.0, ~4 stale-state claims per fold). At reasoning high
+# glm fell to 20% with 3 empty folds, so it stays at low.
+name = "isoquant:glm-5.3-flash"
 # A fold is a summary: no reasoning. Left on the model's default, deepseek-v4
 # reasoned its whole 16k budget away and returned nothing (finish_reason=length)
 # on every fold over ~70k tokens — 30% of turns in the Sept-2026 campaigns.
@@ -662,7 +671,10 @@ max_identical_rounds = 10
 # This model makes ~3 calls per run (resolve, gate, the specialist brief):
 # condense rounds and compression decisions run on [evaluate].
 [supervisor.model]
-name = "deepseek:deepseek-flash"
+# 2026-11-07: the same model family on Isoquant's fixed route (its catalog lists
+# deepseek-v4.1-flash-1017-fast with reasoning none and a decoded json_schema)
+# instead of DeepSeek's own API.
+name = "isoquant:deepseek-v4.1-flash-1017-fast"
 # Pinned: an unset effort inherits [model], so a high-effort agent ran every
 # verify-gate verdict at high reasoning too — minutes per `done` after the
 # final answer, before the run could exit. Measured above without reasoning.
@@ -758,8 +770,6 @@ max_trial_uses = 40
 enabled = true
 # Offer one nonblocking evidence advisory per genuine user turn, then re-gate.
 unsettled_advisory = true
-# Confidence that a condition is NOT demonstrated (0..1), not that work is wrong.
-unsettled_confidence_threshold = 0.8
 
 # Adaptive external plan manager.
 [supervisor.plan]
