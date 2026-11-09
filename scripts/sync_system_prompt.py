@@ -1,6 +1,6 @@
 """Push configs/common/system_prompt.md into every harness config, or verify sync.
 
-The clean bench compares clients, not prompts, so all four agents must receive
+The clean bench compares clients, not prompts, so every agent must receive
 byte-identical instructions. Octomind and opencode need the text embedded in
 their config files; claude and codex receive it as a CLI argument read straight
 from the canonical file at run time, so they cannot drift.

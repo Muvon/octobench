@@ -76,6 +76,7 @@ ARG OCTOFS_VERSION=0.23.3
 ARG OCTOBRAIN_VERSION=0.15.2
 ARG CODEX_VERSION=0.167.0
 ARG CLAUDE_VERSION=2.1.319
+ARG PI_VERSION=1.5.0
 
 # octomind + octofs + octocode + octobrain: static musl binaries from GitHub releases.
 # octofs = file/shell tools, octocode = codesearch, octobrain = memory (all referenced
@@ -103,6 +104,9 @@ RUN set -eux; \
 RUN npm install -g "@openai/codex@${CODEX_VERSION}" \
     && codex --version
 
+RUN npm install -g "@earendil-works/pi-coding-agent@${PI_VERSION}" \
+    && pi --version
+
 # Tools print their versions for build-log traceability.
 RUN echo "=== installed agents ===" \
     && (octomind --version || true) \
@@ -111,6 +115,7 @@ RUN echo "=== installed agents ===" \
     && (octobrain --version || true) \
     && (claude --version || true) \
     && (codex --version || true) \
+    && (pi --version || true) \
     && (rustc --version || true) \
     && (node --version || true)
 

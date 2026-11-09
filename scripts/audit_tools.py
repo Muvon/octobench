@@ -56,6 +56,9 @@ def tools_in(trace: Path) -> Counter:
         part = event.get("part") or {}
         if part.get("tool"):
             found[part["tool"]] += 1
+        # pi
+        if event.get("type") == "tool_execution_start" and event.get("toolName"):
+            found[event["toolName"]] += 1
         # codex: server-side tools are typed items, and its web_search runs on
         # OpenAI's infrastructure — the container network seal never sees it.
         item = event.get("item") or {}

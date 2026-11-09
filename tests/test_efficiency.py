@@ -8,6 +8,7 @@ import sys
 import tempfile
 import time
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 from runners.executor import HostExecutor
@@ -44,6 +45,178 @@ def _insert_opencode_prompt(
             json.dumps({"type": "text", "text": "task"}),
         ),
     )
+
+
+def _iso_utc(epoch_ms: int) -> str:
+    moment = datetime.fromtimestamp(epoch_ms / 1000, tz=timezone.utc)
+    return moment.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _pi_message(entry_ms: int, message: dict[str, object]) -> dict[str, object]:
+    return {"type": "message", "timestamp": _iso_utc(entry_ms), "message": message}
+
+
+class PiEfficiencyTest(unittest.TestCase):
+    BASE_MS = 1_794_000_000_000
+    SESSION = "session-1"
+
+    def _write_run(self, record_dir: Path, run_root: Path, entries: list[dict[str, object]]) -> None:
+        _write_jsonl(
+            record_dir / "logs" / "provider.raw.jsonl",
+            [
+                {
+                    "type": "octobench_process_timing",
+                    "started_at_ms": self.BASE_MS,
+                    "ended_at_ms": self.BASE_MS + 6300,
+                }
+            ],
+        )
+        session_file = run_root / "state" / "pi" / "--workspace--" / f"20261110_{self.SESSION}.jsonl"
+        session_file.parent.mkdir(parents=True)
+        session_file.write_text(
+            "".join(json.dumps(entry, ensure_ascii=False) + "\n" for entry in entries),
+            encoding="utf-8",
+        )
+
+    def test_turn_window_compaction_and_parallel_tools(self) -> None:
+        base = self.BASE_MS
+        make = {"command": "make"}
+        # U+2028 inside a JSON string must not split the record.
+        output = [{"type": "text", "text": "built ok"}]
+        entries: list[dict[str, object]] = [
+            _pi_message(
+                base - 5000,
+                {
+                    "role": "assistant",
+                    "timestamp": base - 6000,
+                    "content": [{"type": "toolCall", "id": "old", "name": "bash", "arguments": make}],
+                },
+            ),
+            _pi_message(base + 100, {"role": "user", "timestamp": base + 100, "content": "task"}),
+            _pi_message(
+                base + 1200,
+                {
+                    "role": "assistant",
+                    "timestamp": base + 200,
+                    "content": [
+                        {"type": "toolCall", "id": "c1", "name": "bash", "arguments": make},
+                        {"type": "toolCall", "id": "c2", "name": "bash", "arguments": make},
+                    ],
+                },
+            ),
+            _pi_message(
+                base + 3210,
+                {
+                    "role": "toolResult",
+                    "toolCallId": "c1",
+                    "timestamp": base + 3200,
+                    "durationMs": 2000,
+                    "content": output,
+                },
+            ),
+            _pi_message(
+                base + 3220,
+                {
+                    "role": "toolResult",
+                    "toolCallId": "c2",
+                    "timestamp": base + 3200,
+                    "durationMs": 500,
+                    "content": output,
+                },
+            ),
+            {"type": "compaction", "timestamp": _iso_utc(base + 4220), "summary": "s"},
+            _pi_message(
+                base + 5300,
+                {
+                    "role": "assistant",
+                    "timestamp": base + 4300,
+                    "content": [{"type": "text", "text": "done"}],
+                },
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            run_root = Path(raw_tmp)
+            record_dir = run_root / "turns" / "turn_2"
+            self._write_run(record_dir, run_root, entries)
+
+            metrics = extract_efficiency("pi", record_dir, 6300, self.SESSION)
+
+        self.assertEqual(metrics.model_ms, 3000)
+        self.assertEqual(metrics.tool_ms, 2000)
+        self.assertEqual(metrics.busy_ms, 5000)
+        self.assertEqual(metrics.idle_ms, 1300)
+        self.assertEqual(metrics.tail_ms, 1000)
+        self.assertEqual(metrics.tool_calls, 2)
+        self.assertEqual(metrics.repeat_calls, 1)
+
+    def test_call_cut_off_by_cap_runs_to_process_exit(self) -> None:
+        base = self.BASE_MS
+        entries = [
+            _pi_message(
+                base + 1000,
+                {
+                    "role": "assistant",
+                    "timestamp": base,
+                    "content": [
+                        {"type": "toolCall", "id": "c1", "name": "bash", "arguments": {"command": "make"}}
+                    ],
+                },
+            )
+        ]
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            record_dir = Path(raw_tmp)
+            self._write_run(record_dir, record_dir, entries)
+
+            metrics = extract_efficiency(
+                "pi", record_dir, 6300, status="killed_by_case_cap"
+            )
+
+        self.assertEqual(metrics.tool_ms, 5300)
+        self.assertEqual(metrics.tool_calls, 1)
+
+    def test_model_request_cut_off_by_cap_runs_to_process_exit(self) -> None:
+        base = self.BASE_MS
+        entries = [
+            _pi_message(base + 1000, {"role": "user", "timestamp": base + 1000, "content": "task"})
+        ]
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            record_dir = Path(raw_tmp)
+            self._write_run(record_dir, record_dir, entries)
+
+            metrics = extract_efficiency(
+                "pi", record_dir, 6300, status="killed_by_case_cap"
+            )
+
+        self.assertEqual(metrics.model_ms, 5300)
+
+    def test_finished_response_before_cap_opens_no_model_interval(self) -> None:
+        base = self.BASE_MS
+        entries = [
+            _pi_message(
+                base + 1000,
+                {
+                    "role": "assistant",
+                    "timestamp": base,
+                    "content": [{"type": "text", "text": "done"}],
+                },
+            )
+        ]
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            record_dir = Path(raw_tmp)
+            self._write_run(record_dir, record_dir, entries)
+
+            metrics = extract_efficiency(
+                "pi", record_dir, 6300, status="killed_by_case_cap"
+            )
+
+        self.assertEqual(metrics.model_ms, 1000)
+
+    def test_run_without_session_file_is_unknown(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            metrics = extract_efficiency("pi", Path(raw_tmp), 6300)
+
+        self.assertIsNone(metrics.model_ms)
+        self.assertIsNone(metrics.tool_calls)
 
 
 class EfficiencyExtractorTest(unittest.TestCase):

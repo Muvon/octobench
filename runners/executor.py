@@ -496,6 +496,7 @@ class DockerExecutor(Executor):
             ("octomind", "/octobench-state/octomind", "OCTOMIND_DATA_DIR"),
             ("opencode", "/root/.local/share/opencode", None),
             ("codex", "/root/.codex/sessions", None),
+            ("pi", "/root/.pi/agent/sessions", None),
         ):
             host_dir = state_root / sub
             host_dir.mkdir(parents=True, exist_ok=True)
@@ -544,6 +545,10 @@ class DockerExecutor(Executor):
         if _occ and Path(_occ).exists():
             mounts += ["-v", f"{Path(_occ).resolve()}:"
                              "/root/.config/opencode/opencode.json:ro"]
+        # octobench: pi is baked into the image; its model endpoints are not.
+        _pm = os.environ.get("PI_MODELS_JSON")
+        if _pm and Path(_pm).exists():
+            mounts += ["-v", f"{Path(_pm).resolve()}:/root/.pi/agent/models.json:ro"]
         # octobench: staged muvon tap mounted over the container tap cache so
         # role edits under test reach fresh containers without publishing.
         # Read-only is safe: octomind's silent `git pull` on it fails and the

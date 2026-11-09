@@ -195,7 +195,9 @@ def _parse_timestamp(value: object, label: str) -> int:
 
 def _jsonl(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for line_no, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    # LF only: str.splitlines() also breaks on U+2028 and U+2029, which are legal
+    # inside JSON strings and would turn one valid record into invalid fragments.
+    for line_no, raw in enumerate(path.read_text(encoding="utf-8").split("\n"), 1):
         stripped = raw.strip()
         if not stripped or not stripped.startswith("{"):
             continue
@@ -1092,6 +1094,120 @@ def extract_claude(
     )
 
 
+def extract_pi(
+    record_dir: Path,
+    wall_ms: int,
+    session_id: Optional[str] = None,
+    incomplete: bool = False,
+) -> EfficiencyMetrics:
+    run_root, _turn_number = _record_root(record_dir)
+    raw_path = record_dir / "logs" / "provider.raw.jsonl"
+    process_timing = _process_timing(_jsonl(raw_path)) if raw_path.is_file() else None
+    pattern = f"*/*_{session_id}.jsonl" if session_id else "*/*.jsonl"
+    session_files = sorted((run_root / "state" / "pi").glob(pattern))
+    # Pi writes no file until the conversation starts, and all turns of a sequence
+    # share one file, so a turn can only be cut out with its process window.
+    if not session_files or process_timing is None:
+        return _metrics(
+            wall_ms,
+            incomplete=incomplete,
+            model_ms=None,
+            tool_ms=None,
+            intervals=None,
+            own_job_intervals=[],
+            stuck_job_intervals=[],
+            run_window=process_timing,
+            sum_fallback=False,
+            tail_ms=None,
+            calls=None,
+        )
+    if len(session_files) != 1:
+        raise ValueError(f"expected one pi session under {run_root}, found {len(session_files)}")
+
+    uses: dict[str, tuple[str, object, int]] = {}
+    results: dict[str, dict[str, Any]] = {}
+    model_intervals: list[Interval] = []
+    previous_ms = process_timing[0]
+    final_assistant_ms: Optional[int] = None
+    awaiting_model = False
+    for entry in _jsonl(session_files[0]):
+        entry_ms = _parse_timestamp(entry["timestamp"], "pi session entry")
+        if not process_timing[0] <= entry_ms <= process_timing[1]:
+            continue
+        if entry["type"] == "compaction":
+            # A summary call on the main model; its entry records only the end.
+            model_intervals.append((previous_ms, entry_ms))
+            awaiting_model = True
+        elif entry["type"] == "message":
+            message = entry["message"]
+            awaiting_model = message["role"] != "assistant"
+            if message["role"] == "assistant":
+                # The message is stamped when the request starts, the entry when
+                # the response has finished.
+                model_intervals.append(
+                    (_parse_timestamp(message["timestamp"], "pi assistant"), entry_ms)
+                )
+                for block in message["content"]:
+                    if block["type"] == "toolCall":
+                        uses[block["id"]] = (block["name"], block["arguments"], entry_ms)
+                    elif block["type"] == "text" and block["text"].strip():
+                        final_assistant_ms = entry_ms
+            elif message["role"] == "toolResult":
+                results[message["toolCallId"]] = message
+        previous_ms = entry_ms
+
+    # Killed mid-request: the response never finished, so no entry records its end.
+    if incomplete and awaiting_model and uses.keys() <= results.keys():
+        model_intervals.append((previous_ms, process_timing[1]))
+    clamped_model = _clamp_intervals(model_intervals, process_timing)
+    calls: list[_Call] = []
+    call_intervals: list[Interval] = []
+    complete_tool_timing = True
+    for call_id, (name, arguments, called_ms) in uses.items():
+        result = results.get(call_id)
+        clamped: Optional[Interval] = None
+        if result is not None:
+            # Parallel results are stamped together when the batch ends, so each
+            # interval ends there; the union still covers the batch. A tool that
+            # never ran has no duration and no interval.
+            duration_ms = result.get("durationMs")
+            if duration_ms is not None:
+                end_ms = _parse_timestamp(result["timestamp"], "pi tool result")
+                clamped = _clamp_interval((end_ms - duration_ms, end_ms), process_timing)
+        elif incomplete:
+            clamped = _clamp_interval((called_ms, process_timing[1]), process_timing)
+        else:
+            complete_tool_timing = False
+        if clamped is not None:
+            call_intervals.append(clamped)
+        calls.append(
+            _Call(
+                name,
+                arguments,
+                result["content"] if result is not None else _MISSING,
+                clamped[0] if clamped is not None else None,
+                clamped[1] if clamped is not None else None,
+            )
+        )
+    return _metrics(
+        wall_ms,
+        incomplete=incomplete,
+        model_ms=union_duration_ms(clamped_model),
+        tool_ms=union_duration_ms(call_intervals) if complete_tool_timing else None,
+        intervals=[*clamped_model, *call_intervals] if complete_tool_timing else None,
+        own_job_intervals=[],
+        stuck_job_intervals=[],
+        run_window=process_timing,
+        sum_fallback=False,
+        tail_ms=(
+            _tail_duration_ms(final_assistant_ms, process_timing)
+            if final_assistant_ms is not None
+            else None
+        ),
+        calls=calls,
+    )
+
+
 _CODEX_NON_TOOL_ITEM_TYPES = {"agent_message", "reasoning"}
 
 
@@ -1374,6 +1490,7 @@ def extract_efficiency(
         "opencode": extract_opencode,
         "claude": extract_claude,
         "codex": extract_codex,
+        "pi": extract_pi,
     }
     try:
         extractor = extractors[provider]
@@ -1390,4 +1507,6 @@ def extract_efficiency(
         )
     if provider == "codex":
         return extract_codex(record_dir, wall_ms, session_id, incomplete)
+    if provider == "pi":
+        return extract_pi(record_dir, wall_ms, session_id, incomplete)
     return extractor(record_dir, wall_ms, incomplete)

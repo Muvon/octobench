@@ -31,7 +31,7 @@ def shared_system_prompt() -> Optional[str]:
     """The prompt every client must receive, or None when unset (stock behaviour).
 
     Octomind and opencode take it through their config files; the CLI-driven
-    clients read it here so all four stay byte-identical to the one file.
+    clients read it here so every client stays byte-identical to the one file.
     """
     path = os.environ.get("OCTOBENCH_SYSTEM_PROMPT")
     if not path:

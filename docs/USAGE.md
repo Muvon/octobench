@@ -102,7 +102,8 @@ including attempts by a root agent with `NET_ADMIN` to undo the seal.
 For comparable GOLD campaigns, use `scripts/bench.sh`; it owns the clean-bench
 switches, including `OCTOBENCH_CONTEXT_WINDOW=300000`. Claude maps the value to
 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, Codex to `model_context_window`, OpenCode to
-`model.limit.context`, and Octomind checks it against
+`model.limit.context`, Pi to `contextWindow` in `configs/pi/models.json`, and
+Octomind checks it against
 `max_session_tokens_threshold`. Direct CLI runs must set the same clean-bench
 environment or explicitly opt out as unsafe.
 

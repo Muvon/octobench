@@ -111,6 +111,30 @@
           }
         }
       }
+    },
+    "isoquant": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Isoquant",
+      "options": {
+        "baseURL": "https://api.isoquant.ai/v1",
+        "apiKey": "{env:ISOQUANT_API_KEY}",
+        "headers": {
+          "Isoquant-ZDR": "required"
+        }
+      },
+      "models": {
+        "deepseek-v4.1-flash-1017-fast": {
+          "name": "DeepSeek V4.1 Flash 1017 Fast",
+          "limit": {
+            "context": 300000,
+            "output": 32000
+          },
+          "reasoning": true,
+          "options": {
+            "reasoningEffort": "low"
+          }
+        }
+      }
     }
   },
   "permission": {

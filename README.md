@@ -216,6 +216,7 @@ Provider implementations live in:
 - `providers/codex.py`
 - `providers/octomind.py`
 - `providers/opencode.py`
+- `providers/pi.py`
 - `providers/base.py`
 - `providers/factory.py`
 

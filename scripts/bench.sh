@@ -13,7 +13,7 @@
 # the identical environment — a retry configured differently from the run it
 # patches is how a column ends up half one thing and half another.
 #
-#   client  octomind | codex | opencode | claude
+#   client  octomind | codex | opencode | claude | pi
 #   model   a key from configs/models.yaml (glm-5.3, claude-opus-5, gpt-5.6-sol, ...)
 #   suite   a list file in configs/suites/ (oneshot default: oneshot-50).
 #           Lines are `oneshot/<lang>/<case>` or `longrun/<lang>/<repo>[:N]`;
@@ -59,7 +59,7 @@ if [ "$MODE" = rerun ] && [ ! -d "$OUT" ]; then
 fi
 
 case "$CLIENT" in
-  octomind|codex|opencode|claude) ;;
+  octomind|codex|opencode|claude|pi) ;;
   *) echo "FATAL: unknown client '$CLIENT'" >&2; exit 2 ;;
 esac
 
@@ -157,6 +157,36 @@ PYEOF
   # override every case dies as "opencode: not found" and records as a run.
   [ -n "${OPENCODE_BIN:-}" ] && [ -x "$OPENCODE_BIN" ] || {
     echo "FATAL: OPENCODE_BIN must point at an executable (opencode is not in $IMAGE)" >&2; exit 2; }
+fi
+if [ "$CLIENT" = pi ]; then
+  [ -f configs/pi/models.json ] || { echo "FATAL: configs/pi/models.json missing (pi would run unconfigured)" >&2; exit 2; }
+  export PI_MODELS_JSON="${PI_MODELS_JSON:-$REPO/configs/pi/models.json}"
+  if ! .venv/bin/python - "$MODEL" "$OCTOBENCH_CONTEXT_WINDOW" "$PI_MODELS_JSON" <<'PYEOF'
+import json
+import sys
+
+import yaml
+
+model, expected_raw, config_path = sys.argv[1:]
+expected = int(expected_raw)
+with open("configs/models.yaml", encoding="utf-8") as models_file:
+    provider_model = yaml.safe_load(models_file)["models"][model]["providers"]["pi"]
+# The optional :<level> suffix selects pi's thinking level, not a model.
+provider, model_name = provider_model.split(":", 1)[0].split("/", 1)
+with open(config_path, encoding="utf-8") as config_file:
+    models = json.load(config_file)["providers"][provider]["models"]
+configured = next(entry["contextWindow"] for entry in models if entry["id"] == model_name)
+if configured != expected:
+    raise SystemExit(
+        f"FATAL: pi context window for {provider_model} is {configured}, expected {expected}"
+    )
+PYEOF
+  then
+    exit 2
+  fi
+  # Older images predate pi; without this every case records as an infra failure.
+  docker run --rm --entrypoint pi "$IMAGE" --version >/dev/null 2>&1 || {
+    echo "FATAL: pi is not installed in $IMAGE" >&2; exit 2; }
 fi
 if [ "$CLIENT" = octomind ]; then
   if ! .venv/bin/python - "$OCTOBENCH_CONTEXT_WINDOW" configs/octomind/octomind.toml <<'PYEOF'

@@ -1,4 +1,4 @@
-"""Audit Codex/OpenCode traces for network and hidden-case access.
+"""Audit Codex/OpenCode/Pi traces for network and hidden-case access.
 
 The seal is the enforcement boundary; this is the post-run evidence check. It
 reports network-capable commands, web tools, hidden `/case` reads, and upstream
@@ -59,6 +59,9 @@ for root in roots:
                     web_tool = tool
                 if tool in {"bash", "shell"}:
                     cmd = str(inputs.get("command") or "")
+            elif typ == "tool_execution_start":
+                if obj.get("toolName") == "bash":
+                    cmd = str((obj.get("args") or {}).get("command") or "")
             else:
                 continue
             total += 1

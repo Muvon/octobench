@@ -55,7 +55,7 @@ def _count_steps(record: dict) -> int:
     for line in traces[0].read_text(errors="replace").splitlines():
         try:
             obj = json.loads(line)
-            if obj.get("type") == "tool_use":
+            if obj.get("type") in {"tool_use", "tool_execution_start"}:
                 steps += 1
             elif record.get("provider") == "codex" and obj.get("type") == "item.started":
                 # Codex JSONL represents tool activity as typed items rather
@@ -256,6 +256,17 @@ def _provider_actions(trace: Path, provider: str) -> list[tuple[str, bool]]:
                     str(inputs.get("command", "")), re.IGNORECASE,
                 ))
             )
+        elif provider == "pi" and event.get("type") == "tool_execution_start":
+            tool = event.get("toolName")
+            inputs = event.get("args") or {}
+            action = json.dumps({
+                "tool": tool,
+                "input": inputs,
+            })
+            network = tool == "bash" and bool(re.search(
+                r"\b(?:git\s+(?:fetch|clone|pull|ls-remote)|curl|wget|ssh|scp|rsync)\b",
+                str(inputs.get("command", "")), re.IGNORECASE,
+            ))
         if action:
             actions.append((action, network))
     return actions

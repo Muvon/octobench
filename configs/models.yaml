@@ -437,6 +437,19 @@ models:
       octomind: alibaba:deepseek-v4-flash-0731
       opencode: alibaba/deepseek-v4-flash-0731
 
+  deepseek-v4.1-flash-1017-fast:  # Isoquant's fixed route; api.isoquant.ai/v1/models 2026-11-10
+    pricing:
+      input: 0.035
+      cached_input: 0.005
+      output: 0.37
+    # No reasoning_effort key: opencode has no wiring for it. All clients run at
+    # "low": octolib floors octomind's bench default (medium) to it, opencode
+    # pins it in configs/opencode/opencode.json, pi takes it from the suffix below.
+    providers:
+      octomind: isoquant:deepseek-v4.1-flash-1017-fast
+      opencode: isoquant/deepseek-v4.1-flash-1017-fast
+      pi: isoquant/deepseek-v4.1-flash-1017-fast:low
+
   deepseek-chat:
     pricing:
       input: 0.14

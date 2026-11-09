@@ -1,0 +1,26 @@
+{
+  "providers": {
+    "isoquant": {
+      "name": "Isoquant",
+      "baseUrl": "https://api.isoquant.ai/v1",
+      "api": "openai-completions",
+      "apiKey": "$ISOQUANT_API_KEY",
+      "headers": {
+        "Isoquant-ZDR": "required"
+      },
+      "compat": {
+        "supportsStore": false,
+        "supportsDeveloperRole": false
+      },
+      "models": [
+        {
+          "id": "deepseek-v4.1-flash-1017-fast",
+          "name": "DeepSeek V4.1 Flash 1017 Fast",
+          "reasoning": true,
+          "contextWindow": 300000,
+          "maxTokens": 32000
+        }
+      ]
+    }
+  }
+}
