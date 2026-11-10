@@ -25,8 +25,12 @@ item linked to its case, is under [docs/gold/results/](gold/results/).
 | octomind gpt-6.1-sol | 5 (2026-11-08 – 2026-11-10) | [octomind-gpt-6.1-sol.md](gold/results/octomind-gpt-6.1-sol.md) |
 ## Selection and admission
 
-Every item comes from real, merged, human-authored upstream work from August
-to October 2026. Changes whose authors disclosed AI-generated implementation or
+Every item comes from real, merged, human-authored upstream work. The 11
+one-shots mined for this suite were merged between 2026-09-08 and 2026-10-12;
+`react_hidden_hydration_hang` (merged 2026-07-28) and both sequences (merged
+2026-07-03 – 2026-08-20) were carried over from earlier cases. All of it was
+merged after the 2026-04-30 knowledge cutoff of `gpt-6.1-sol` and
+`gpt-6-astra`. Changes whose authors disclosed AI-generated implementation or
 tests were excluded. The prompts preserve three realistic levels of detail:
 acceptance specifications, issue reports, and short maintainer requests.
 
