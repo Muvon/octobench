@@ -11,6 +11,8 @@ from judges.prompts import JUDGE_SYSTEM, JUDGE_TEMPLATE
 from runners.cli_runner import run_cli
 
 ANSI_ESCAPE_RE = re.compile(r"\x1B[@-_][0-?]*[ -/]*[@-~]")
+# Characters JSON allows after a backslash inside a string.
+JSON_ESCAPE_CHARS = frozenset('"\\/bfnrtu')
 
 
 def _strip_terminal_noise(text: str) -> str:
@@ -19,10 +21,11 @@ def _strip_terminal_noise(text: str) -> str:
     return "".join(ch for ch in text if ch in ("\n", "\t", "\r") or ord(ch) >= 32)
 
 
-def _escape_control_chars_in_json_strings(s: str) -> str:
-    """
-    Make near-JSON parseable by escaping raw control chars inside quoted strings.
-    This handles LLM outputs that inject literal newlines inside JSON string values.
+def _repair_json_strings(s: str) -> str:
+    r"""
+    Make near-JSON parseable by fixing what LLMs break inside quoted strings: raw
+    control chars (literal newlines in values) become escapes, and a backslash before a
+    char JSON cannot escape (a judge quoting the regex `\$\{`) becomes a literal backslash.
     """
     out = []
     in_str = False
@@ -30,6 +33,8 @@ def _escape_control_chars_in_json_strings(s: str) -> str:
     for ch in s:
         if in_str:
             if escaped:
+                if ch not in JSON_ESCAPE_CHARS:
+                    out.append("\\")
                 out.append(ch)
                 escaped = False
                 continue
@@ -75,7 +80,7 @@ def _extract_json(text: str) -> Dict:
             return json.loads(payload)
         except Exception:
             try:
-                return json.loads(_escape_control_chars_in_json_strings(payload))
+                return json.loads(_repair_json_strings(payload))
             except Exception:
                 continue
 
@@ -90,7 +95,7 @@ def _extract_json(text: str) -> Dict:
                 return obj
         except Exception:
             # Try repaired JSON from this position.
-            repaired = _escape_control_chars_in_json_strings(text[i:])
+            repaired = _repair_json_strings(text[i:])
             try:
                 obj, _ = decoder.raw_decode(repaired)
                 if isinstance(obj, dict):

@@ -273,6 +273,9 @@ def _longrun_items(
     # Codex usage counters are cumulative per thread; per-turn values are deltas.
     codex_reasoning_seen: Dict[str, int] = {}
     gold_restored = False
+    # An unscored turn never reaches the agent, so the client's session numbers its
+    # turns without it: record turn 15 after one unscored turn is session turn 14.
+    session_turn = 0
     for turn in record.get("turns") or []:
         turn_no = int(turn["turn"])
         if limit is not None and turn_no > limit:
@@ -324,12 +327,13 @@ def _longrun_items(
                     codex_reasoning_seen[thread] = cumulative
         efficiency = None
         if status != "not_run":
+            session_turn = 1 if turn.get("session_mode") == "fresh" else session_turn + 1
             efficiency = extract_efficiency(
                 str(record["provider"]),
                 record_dir,
                 elapsed_ms,
                 provider_block.get("session_id"),
-                1 if turn.get("session_mode") == "fresh" else None,
+                session_turn,
                 str(status) if status is not None else None,
             )
         yield Item(

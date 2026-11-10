@@ -420,6 +420,12 @@ def _record_root(record_dir: Path) -> tuple[Path, Optional[int]]:
 
 _JOB_RESOURCE_RE = re.compile(r"octofs://jobs/([^\s\"'`<>]+)")
 _JOB_PROMOTION_RE = re.compile(r"moved to background job [`']?([^\s`']+)")
+# Octomind 0.70+ runs a long tool call as an MCP task: the tool result says
+# "Still running as background task `mcp-task:<id>`" and the result arrives later as
+# `<background_job task="mcp-task:<id>">`.
+_MCP_TASK_RE = re.compile(r"mcp-task:([^\s\"'`<>]+)")
+# Octomind session rows carry whole-second timestamps.
+SESSION_TIMESTAMP_RESOLUTION_MS = 1000
 
 
 def _background_job_id(row: Mapping[str, object]) -> Optional[str]:
@@ -431,6 +437,9 @@ def _background_job_id(row: Mapping[str, object]) -> Optional[str]:
     promotion = _JOB_PROMOTION_RE.search(text)
     if promotion:
         return promotion.group(1)
+    task = _MCP_TASK_RE.search(text)
+    if task:
+        return task.group(1)
     if row.get("source_kind") == "background_job":
         for field in ("source_id", "job_id", "id"):
             value = row.get(field)
@@ -462,11 +471,13 @@ def _octomind_job_intervals(
             continue
         timestamp = _parse_timestamp(row.get("timestamp"), "Octomind background job")
         content = row.get("content")
-        is_launch = (
-            row.get("role") == "tool"
-            and row.get("name") == "shell"
-            and isinstance(content, str)
-            and "moved to background job" in content
+        # The task id is the tool call's own id; other tool rows (a recall) can quote the text.
+        is_launch = row.get("role") == "tool" and isinstance(content, str) and (
+            (row.get("name") == "shell" and "moved to background job" in content)
+            or (
+                row.get("tool_call_id") == job_id
+                and "running as background task `mcp-task:" in content
+            )
         )
         is_delivery = (
             row.get("role") == "user"
@@ -683,7 +694,9 @@ def extract_octomind(
         if index < target_index
         and row["session_info"]["turn_timing"]["completed"] == target_turn - 1
     ]
-    previous_index, previous_row = previous[-1] if previous else (-1, None)
+    # Octomind can write the same completed count several times (one SUMMARY right before the
+    # next one), so the turn starts after the FIRST summary of the previous count.
+    previous_index, previous_row = previous[0] if previous else (-1, None)
 
     def cumulative(row: Optional[dict[str, Any]], field: str) -> int:
         if row is None:
@@ -730,6 +743,18 @@ def extract_octomind(
         process_end = run_window[1]
         model_ms = None
         tool_ms = None
+    if process_timing is not None:
+        # The process window bounds the run. SUMMARY rows can repeat a turn count: the first
+        # one is written when the agent first finishes, and a completion check can send it
+        # back to work, so slicing at that SUMMARY drops the rest of the run.
+        record_rows = [
+            row
+            for row in _chronological_octomind_rows(rows)
+            if row.get("timestamp") is not None
+            and run_window[0] - SESSION_TIMESTAMP_RESOLUTION_MS
+            <= _parse_timestamp(row.get("timestamp"), "Octomind session row")
+            <= run_window[1] + SESSION_TIMESTAMP_RESOLUTION_MS
+        ]
     model_intervals, tool_intervals = _octomind_work_intervals(
         record_rows, run_window
     )

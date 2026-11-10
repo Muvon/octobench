@@ -21,24 +21,8 @@ item linked to its case, is under [docs/gold/results/](gold/results/).
 
 | Column | Rounds | Per-round record |
 |---|---|---|
-| codex gpt-6.1-sol | 5 (2026-10-16 – 2026-10-17) | [codex-gpt-6.1-sol.md](gold/results/codex-gpt-6.1-sol.md) |
-
-Run notes for the published column:
-
-- One infrastructure failure was rerun inside its round: r3
-  `vue_vapor_select_sync` stopped on the provider error "Selected model is at
-  capacity"; the rerun replaced it. Two incomplete judge panels were rejudged.
-- Long-run judge prompts listed changed file paths without the diff until
-  2026-10-17, so the published judge mean covers one-shots only. The judge is
-  diagnostic; solve rate and efficiency do not use it.
-- From 2026-10-16 the setup of `polars_sql_aggregate_groups`,
-  `duckdb_sql_export_sources`, and `duckdb_parquet_bound_schema` removes the
-  upstream `AI_POLICY.md` (rules for upstream issues and pull requests), after
-  one Codex run declined the task because of it. No test reads that file;
-  polars was re-proven 3x afterwards. From 2026-10-17 the DuckDB sequence setup
-  removes it too, for later columns; the published Codex column ran that
-  sequence with the file present, and in 70 turns Codex never opened it.
-
+| codex gpt-6.1-sol | 5 (2026-11-08 – 2026-11-10) | [codex-gpt-6.1-sol.md](gold/results/codex-gpt-6.1-sol.md) |
+| octomind gpt-6.1-sol | 5 (2026-11-08 – 2026-11-10) | [octomind-gpt-6.1-sol.md](gold/results/octomind-gpt-6.1-sol.md) |
 ## Selection and admission
 
 Every item comes from real, merged, human-authored upstream work from August
